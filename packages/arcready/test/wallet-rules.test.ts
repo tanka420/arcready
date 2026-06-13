@@ -35,7 +35,9 @@ describe("wallet rules", () => {
       ruleId: "wallet/ARC_CHAIN_METADATA",
       severity: "critical",
       preset: "wallet",
-      docs: "arc-chain-metadata"
+      docs: "arc-chain-metadata",
+      message: expect.stringContaining("chain ID 5042002"),
+      suggestedFix: expect.stringContaining("Arc RPC/explorer")
     });
   });
 
@@ -66,7 +68,8 @@ describe("wallet rules", () => {
     expect(findings[0]).toMatchObject({
       ruleId: "wallet/WALLET_NATIVE_USDC_DISPLAY",
       severity: "critical",
-      suggestedFix: "Set Arc native currency name/symbol to USDC."
+      message: expect.stringContaining("ETH instead of USDC"),
+      suggestedFix: expect.stringContaining("USDC")
     });
   });
 
@@ -97,7 +100,9 @@ describe("wallet rules", () => {
     expect(findings[0]).toMatchObject({
       ruleId: "wallet/NO_ETH_GAS_LABEL",
       severity: "critical",
-      docs: "arc-usdc-gas"
+      docs: "arc-usdc-gas",
+      message: expect.stringContaining("ETH/gwei"),
+      suggestedFix: expect.stringContaining("user-facing")
     });
   });
 
@@ -128,7 +133,9 @@ describe("wallet rules", () => {
     expect(findings[0]).toMatchObject({
       ruleId: "wallet/ONE_CONFIRMATION_FINAL",
       severity: "critical",
-      docs: "arc-finality"
+      docs: "arc-finality",
+      message: expect.stringContaining("more than one confirmation"),
+      suggestedFix: expect.stringContaining("1 confirmation")
     });
   });
 
@@ -159,7 +166,9 @@ describe("wallet rules", () => {
     expect(findings[0]).toMatchObject({
       ruleId: "wallet/PREVRANDAO_NOT_SUPPORTED",
       severity: "critical",
-      docs: "arc-prevrandao"
+      docs: "arc-prevrandao",
+      message: expect.stringContaining("PREVRANDAO"),
+      suggestedFix: expect.stringContaining("randomness source")
     });
   });
 
@@ -190,7 +199,9 @@ describe("wallet rules", () => {
     expect(findings[0]).toMatchObject({
       ruleId: "wallet/NO_BLOB_TX_ON_ARC",
       severity: "critical",
-      docs: "arc-blob-transactions"
+      docs: "arc-blob-transactions",
+      message: expect.stringContaining("EIP-4844"),
+      suggestedFix: expect.stringContaining("EIP-1559")
     });
   });
 

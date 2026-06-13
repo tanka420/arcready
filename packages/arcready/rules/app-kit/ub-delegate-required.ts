@@ -8,7 +8,7 @@ import {
 } from "./helpers.js";
 
 const SUGGESTED_FIX =
-  "Review Unified Balance provider caveats. Add the documented delegate workflow when the provider cannot sign Unified Balance spends directly.";
+  "Check whether this Unified Balance spend path needs a delegate wallet flow, and add explicit delegate handling when the signer cannot approve spends directly.";
 
 export const ubDelegateRequiredRule: Rule = {
   id: "app-kit/UB_DELEGATE_REQUIRED",
@@ -34,7 +34,7 @@ export const ubDelegateRequiredRule: Rule = {
           createAppKitFinding(
             ubDelegateRequiredRule,
             filePath,
-            "Unified Balance spend flow appears to lack delegate handling language.",
+            "Unified Balance spend flow may be missing delegate wallet handling.",
             SUGGESTED_FIX,
             APP_KIT_DOCS.ubDelegate
           )

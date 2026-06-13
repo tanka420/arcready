@@ -9,7 +9,7 @@ import {
 } from "./helpers.js";
 
 const SUGGESTED_FIX =
-  "Check App Kit supported capabilities for the selected chain and guard unsupported capability paths before calling them.";
+  "Check supported App Kit capabilities for Arc_Testnet and guard send, bridge, swap, or Unified Balance paths before calling them.";
 
 export const appKitCapabilitySupportedRule: Rule = {
   id: "app-kit/APPKIT_CAPABILITY_SUPPORTED",
@@ -32,7 +32,7 @@ export const appKitCapabilitySupportedRule: Rule = {
           createAppKitFinding(
             appKitCapabilitySupportedRule,
             filePath,
-            "App Kit Arc capability usage appears to be unguarded.",
+            "App Kit Arc capability call appears to run without a supported-capability guard.",
             SUGGESTED_FIX,
             APP_KIT_DOCS.capabilities
           )

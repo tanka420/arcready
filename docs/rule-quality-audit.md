@@ -14,6 +14,8 @@ Phase 3C-3 cleanup note: App Kit rule precision has been improved for documentat
 
 Phase 3C-4 cleanup note: cross-preset regression coverage was added to verify preset boundaries, placeholder removal, fixture stability, selected-preset isolation, and report summary consistency.
 
+Phase 3D cleanup note: finding messages and suggestions were improved across wallet, bridge, and App Kit rules while preserving ArcReady's static validation scope.
+
 ArcReady has a useful rule foundation for v0.2.0. The active rules are Arc-specific in intent, have direct unit coverage, and are backed by smoke fixtures for wallet, bridge, and App Kit presets. The main v0.3.0 risk is not missing product breadth; it is rule precision. Most current rules rely on regex and line-level text matching, which is acceptable for an early static CI gate but creates false positive risk in comments, docs, unrelated helper code, split configuration files, and variable-derived values.
 
 The recommended next implementation order is:

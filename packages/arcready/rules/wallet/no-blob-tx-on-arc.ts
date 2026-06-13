@@ -9,7 +9,7 @@ import {
 } from "./helpers.js";
 
 const SUGGESTED_FIX =
-  "Arc does not support EIP-4844 blob transactions. Use normal EIP-1559 transaction flow.";
+  "Remove EIP-4844 blob transaction fields from Arc wallet flows and use a normal EIP-1559 transaction configuration.";
 
 export const noBlobTxOnArcRule: Rule = {
   id: "wallet/NO_BLOB_TX_ON_ARC",
@@ -31,7 +31,7 @@ export const noBlobTxOnArcRule: Rule = {
           createWalletFinding(
             noBlobTxOnArcRule,
             filePath,
-            "Arc-related code appears to assume EIP-4844 blob transaction support.",
+            "Arc wallet code appears to assume EIP-4844 blob transaction support.",
             SUGGESTED_FIX,
             WALLET_DOCS.blobTransactions
           )

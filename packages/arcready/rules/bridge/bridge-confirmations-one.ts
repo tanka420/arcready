@@ -10,7 +10,7 @@ import {
 } from "./helpers.js";
 
 const SUGGESTED_FIX =
-  "Set Arc required confirmations to 1 and treat Arc finality as deterministic.";
+  "Set Arc bridge confirmation or finality settings to 1, and review any relayer release logic that waits for additional confirmations.";
 
 export const bridgeConfirmationsOneRule: Rule = {
   id: "bridge/BRIDGE_CONFIRMATIONS_ONE",
@@ -32,7 +32,7 @@ export const bridgeConfirmationsOneRule: Rule = {
           createBridgeFinding(
             bridgeConfirmationsOneRule,
             filePath,
-            "Arc bridge or relayer flow appears to require more than one confirmation.",
+            "Arc bridge or relayer flow appears to wait for more than one confirmation.",
             SUGGESTED_FIX,
             BRIDGE_DOCS.finality
           )

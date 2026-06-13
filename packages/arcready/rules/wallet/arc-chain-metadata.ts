@@ -8,7 +8,7 @@ import {
 } from "./helpers.js";
 
 const SUGGESTED_FIX =
-  "Use Arc Testnet chain ID 5042002 and Arc Testnet RPC/explorer metadata.";
+  "Verify the Arc wallet chain config uses chain ID 5042002, Arc RPC/explorer metadata, and USDC native asset display.";
 
 export const arcChainMetadataRule: Rule = {
   id: "wallet/ARC_CHAIN_METADATA",
@@ -34,7 +34,7 @@ export const arcChainMetadataRule: Rule = {
           createWalletFinding(
             arcChainMetadataRule,
             filePath,
-            "Arc-related chain config does not include Arc Testnet chain ID 5042002.",
+            "Arc wallet metadata appears to omit Arc Testnet chain ID 5042002.",
             SUGGESTED_FIX,
             WALLET_DOCS.chainMetadata
           )
@@ -47,7 +47,7 @@ export const arcChainMetadataRule: Rule = {
           createWalletFinding(
             arcChainMetadataRule,
             filePath,
-            "Arc-related chain config appears to use non-Arc RPC or explorer metadata.",
+            "Arc wallet metadata appears to mix Arc with non-Arc RPC or explorer settings.",
             SUGGESTED_FIX,
             WALLET_DOCS.chainMetadata
           )

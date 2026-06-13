@@ -10,7 +10,7 @@ import {
 } from "./helpers.js";
 
 const SUGGESTED_FIX =
-  "Arc gas fees are paid in USDC. Replace ETH/gwei fee labels with USDC fee display.";
+  "Update user-facing gas and network fee labels to show USDC, and verify no Arc fee UI still references ETH or gwei.";
 
 export const noEthGasLabelRule: Rule = {
   id: "wallet/NO_ETH_GAS_LABEL",
@@ -41,7 +41,7 @@ export const noEthGasLabelRule: Rule = {
           createWalletFinding(
             noEthGasLabelRule,
             filePath,
-            "Arc fee UI appears to label gas or network fees as ETH/gwei.",
+            "Arc wallet fee UI appears to label gas or network fees as ETH/gwei.",
             SUGGESTED_FIX,
             WALLET_DOCS.usdcGas
           )

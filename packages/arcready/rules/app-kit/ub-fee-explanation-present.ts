@@ -8,7 +8,7 @@ import {
 } from "./helpers.js";
 
 const SUGGESTED_FIX =
-  "Show spend amount, destination received amount, protocol/forwarding fees, and source gas before confirmation.";
+  "Add user-facing confirmation copy for spend amount, destination received amount, forwarding or protocol fees, and source gas before submission.";
 
 export const ubFeeExplanationPresentRule: Rule = {
   id: "app-kit/UB_FEE_EXPLANATION_PRESENT",
@@ -34,7 +34,7 @@ export const ubFeeExplanationPresentRule: Rule = {
           createAppKitFinding(
             ubFeeExplanationPresentRule,
             filePath,
-            "Unified Balance payment confirmation appears to lack fee explanation.",
+            "Unified Balance confirmation UI appears to omit fee or received-amount context.",
             SUGGESTED_FIX,
             APP_KIT_DOCS.ubFees
           )

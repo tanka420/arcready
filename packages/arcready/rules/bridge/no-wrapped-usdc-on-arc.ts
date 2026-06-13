@@ -10,7 +10,7 @@ import {
 } from "./helpers.js";
 
 const SUGGESTED_FIX =
-  "Use canonical Arc USDC / CCTP burn-and-mint flow. Do not introduce wrapped USDC variants on Arc.";
+  "Use canonical Arc USDC through the intended bridge route, and remove Arc-side USDC.e, wUSDC, or bridged-USDC asset mappings.";
 
 export const noWrappedUsdcOnArcRule: Rule = {
   id: "bridge/NO_WRAPPED_USDC_ON_ARC",
@@ -32,7 +32,7 @@ export const noWrappedUsdcOnArcRule: Rule = {
           createBridgeFinding(
             noWrappedUsdcOnArcRule,
             filePath,
-            "Arc bridge route appears to use wrapped or bridged USDC.",
+            "Arc bridge route appears to use wrapped or bridged USDC as the Arc asset.",
             SUGGESTED_FIX,
             BRIDGE_DOCS.canonicalUsdc
           )

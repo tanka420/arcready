@@ -8,7 +8,7 @@ import {
 } from "./helpers.js";
 
 const SUGGESTED_FIX =
-  "Configure a dedicated/custom Arc RPC provider for reliable CI, staging, and production-like behavior.";
+  "Add an explicit Arc RPC setting such as rpcUrl, rpcUrls, transport, provider, client, or ARC_RPC_URL for this App Kit integration.";
 
 export const appKitCustomRpcRecommendedRule: Rule = {
   id: "app-kit/APPKIT_CUSTOM_RPC_RECOMMENDED",
@@ -35,7 +35,7 @@ export const appKitCustomRpcRecommendedRule: Rule = {
           createAppKitFinding(
             appKitCustomRpcRecommendedRule,
             filePath,
-            "App Kit Arc Testnet integration appears to rely on default/shared RPC configuration.",
+            "App Kit Arc Testnet integration appears to rely on implicit or shared RPC configuration.",
             SUGGESTED_FIX,
             APP_KIT_DOCS.customRpc
           )

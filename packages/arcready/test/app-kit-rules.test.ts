@@ -34,7 +34,9 @@ describe("app-kit rules", () => {
       ruleId: "app-kit/APPKIT_CHAIN_IDENTIFIER_VALID",
       severity: "critical",
       docs: "arc-appkit-chain-identifier",
-      preset: "app-kit"
+      preset: "app-kit",
+      message: expect.stringContaining("unsupported spelling"),
+      suggestedFix: expect.stringContaining("Arc_Testnet")
     });
   });
 
@@ -65,7 +67,9 @@ describe("app-kit rules", () => {
     expect(findings[0]).toMatchObject({
       ruleId: "app-kit/APPKIT_CAPABILITY_SUPPORTED",
       severity: "warning",
-      docs: "arc-appkit-capabilities"
+      docs: "arc-appkit-capabilities",
+      message: expect.stringContaining("supported-capability guard"),
+      suggestedFix: expect.stringContaining("guard")
     });
   });
 
@@ -96,7 +100,9 @@ describe("app-kit rules", () => {
     expect(findings[0]).toMatchObject({
       ruleId: "app-kit/APPKIT_CUSTOM_RPC_RECOMMENDED",
       severity: "warning",
-      docs: "arc-appkit-custom-rpc"
+      docs: "arc-appkit-custom-rpc",
+      message: expect.stringContaining("implicit or shared RPC"),
+      suggestedFix: expect.stringContaining("ARC_RPC_URL")
     });
   });
 
@@ -127,7 +133,9 @@ describe("app-kit rules", () => {
     expect(findings[0]).toMatchObject({
       ruleId: "app-kit/UB_DELEGATE_REQUIRED",
       severity: "warning",
-      docs: "arc-unified-balance-delegate"
+      docs: "arc-unified-balance-delegate",
+      message: expect.stringContaining("may be missing"),
+      suggestedFix: expect.stringContaining("delegate")
     });
   });
 
@@ -158,7 +166,9 @@ describe("app-kit rules", () => {
     expect(findings[0]).toMatchObject({
       ruleId: "app-kit/UB_FEE_EXPLANATION_PRESENT",
       severity: "warning",
-      docs: "arc-unified-balance-fees"
+      docs: "arc-unified-balance-fees",
+      message: expect.stringContaining("fee or received-amount"),
+      suggestedFix: expect.stringContaining("user-facing")
     });
   });
 
@@ -189,7 +199,9 @@ describe("app-kit rules", () => {
     expect(findings[0]).toMatchObject({
       ruleId: "app-kit/APPKIT_BRIDGE_MIN_AMOUNT_NOTE",
       severity: "warning",
-      docs: "arc-appkit-bridge-min-amount"
+      docs: "arc-appkit-bridge-min-amount",
+      message: expect.stringContaining("minimum amount"),
+      suggestedFix: expect.stringContaining("minimum amount")
     });
   });
 

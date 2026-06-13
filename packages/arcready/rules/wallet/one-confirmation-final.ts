@@ -8,7 +8,8 @@ import {
   readWalletFiles
 } from "./helpers.js";
 
-const SUGGESTED_FIX = "Treat one Arc confirmation as final.";
+const SUGGESTED_FIX =
+  "Set Arc confirmation waits and release logic to 1 confirmation; avoid Ethereum-style multi-confirmation delays.";
 
 export const oneConfirmationFinalRule: Rule = {
   id: "wallet/ONE_CONFIRMATION_FINAL",
@@ -31,7 +32,7 @@ export const oneConfirmationFinalRule: Rule = {
           createWalletFinding(
             oneConfirmationFinalRule,
             filePath,
-            "Arc transaction flow appears to wait for more than one confirmation.",
+            "Arc wallet transaction flow appears to wait for more than one confirmation.",
             SUGGESTED_FIX,
             WALLET_DOCS.finality
           )

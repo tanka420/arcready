@@ -9,7 +9,7 @@ import {
 } from "./helpers.js";
 
 const SUGGESTED_FIX =
-  "Do not use PREVRANDAO for randomness or selection logic on Arc.";
+  "Replace PREVRANDAO or mixHash assumptions with deterministic logic or another randomness source documented for your Arc integration.";
 
 export const prevrandaoNotSupportedRule: Rule = {
   id: "wallet/PREVRANDAO_NOT_SUPPORTED",
@@ -31,7 +31,7 @@ export const prevrandaoNotSupportedRule: Rule = {
           createWalletFinding(
             prevrandaoNotSupportedRule,
             filePath,
-            "Arc-related code appears to use PREVRANDAO or mixHash.",
+            "Arc wallet code appears to read PREVRANDAO or mixHash.",
             SUGGESTED_FIX,
             WALLET_DOCS.prevrandao
           )

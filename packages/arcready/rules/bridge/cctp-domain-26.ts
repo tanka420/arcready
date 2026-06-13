@@ -9,7 +9,8 @@ import {
   readBridgeFiles
 } from "./helpers.js";
 
-const SUGGESTED_FIX = "Use CCTP domain 26 for Arc.";
+const SUGGESTED_FIX =
+  "Check the CCTP domain map and set the Arc domain value to 26 wherever Arc routes are configured.";
 
 export const cctpDomain26Rule: Rule = {
   id: "bridge/CCTP_DOMAIN_26",
@@ -31,7 +32,7 @@ export const cctpDomain26Rule: Rule = {
           createBridgeFinding(
             cctpDomain26Rule,
             filePath,
-            "Arc CCTP domain appears to be configured with a value other than 26.",
+            "Arc CCTP domain config appears to use a value other than 26.",
             SUGGESTED_FIX,
             BRIDGE_DOCS.cctpDomain
           )

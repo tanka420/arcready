@@ -6,7 +6,8 @@ import {
   readWalletFiles
 } from "./helpers.js";
 
-const SUGGESTED_FIX = "Set Arc native currency name/symbol to USDC.";
+const SUGGESTED_FIX =
+  "Check nativeCurrency, gas token, and fee-token display fields; Arc fees should be shown as USDC.";
 
 export const walletNativeUsdcDisplayRule: Rule = {
   id: "wallet/WALLET_NATIVE_USDC_DISPLAY",
@@ -31,7 +32,7 @@ export const walletNativeUsdcDisplayRule: Rule = {
           createWalletFinding(
             walletNativeUsdcDisplayRule,
             filePath,
-            "Arc native currency appears to be displayed as ETH.",
+            "Arc wallet native asset display appears to show ETH instead of USDC.",
             SUGGESTED_FIX,
             WALLET_DOCS.usdcGas
           )

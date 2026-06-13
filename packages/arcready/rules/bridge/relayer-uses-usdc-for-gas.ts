@@ -8,7 +8,8 @@ import {
   readBridgeFiles
 } from "./helpers.js";
 
-const SUGGESTED_FIX = "Arc relayers need USDC for gas, not ETH.";
+const SUGGESTED_FIX =
+  "Check relayer funding and gas-token config; Arc relayer gas should be modeled as USDC rather than ETH.";
 
 export const relayerUsesUsdcForGasRule: Rule = {
   id: "bridge/RELAYER_USES_USDC_FOR_GAS",
@@ -33,7 +34,7 @@ export const relayerUsesUsdcForGasRule: Rule = {
           createBridgeFinding(
             relayerUsesUsdcForGasRule,
             filePath,
-            "Arc relayer funding appears to assume ETH gas funding.",
+            "Arc relayer funding appears to assume ETH is used for gas.",
             SUGGESTED_FIX,
             BRIDGE_DOCS.usdcGas
           )

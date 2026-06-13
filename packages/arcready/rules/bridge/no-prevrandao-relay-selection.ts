@@ -10,7 +10,7 @@ import {
 } from "./helpers.js";
 
 const SUGGESTED_FIX =
-  "Do not use PREVRANDAO on Arc for relayer selection or randomness. Use deterministic selection, offchain coordination, oracle, or another documented randomness source.";
+  "Replace PREVRANDAO or mixHash-based relay selection with deterministic selection, offchain coordination, or another documented randomness source.";
 
 export const noPrevrandaoRelaySelectionRule: Rule = {
   id: "bridge/NO_PREVRANDAO_RELAY_SELECTION",
@@ -32,7 +32,7 @@ export const noPrevrandaoRelaySelectionRule: Rule = {
           createBridgeFinding(
             noPrevrandaoRelaySelectionRule,
             filePath,
-            "Arc relayer selection appears to use PREVRANDAO or mixHash randomness.",
+            "Arc relay selection appears to use PREVRANDAO or mixHash randomness.",
             SUGGESTED_FIX,
             BRIDGE_DOCS.prevrandao
           )

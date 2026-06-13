@@ -34,7 +34,9 @@ describe("bridge rules", () => {
       ruleId: "bridge/BRIDGE_CONFIRMATIONS_ONE",
       severity: "critical",
       docs: "arc-finality",
-      preset: "bridge"
+      preset: "bridge",
+      message: expect.stringContaining("more than one confirmation"),
+      suggestedFix: expect.stringContaining("1")
     });
   });
 
@@ -65,7 +67,9 @@ describe("bridge rules", () => {
     expect(findings[0]).toMatchObject({
       ruleId: "bridge/CCTP_DOMAIN_26",
       severity: "critical",
-      docs: "arc-cctp-domain"
+      docs: "arc-cctp-domain",
+      message: expect.stringContaining("other than 26"),
+      suggestedFix: expect.stringContaining("26")
     });
   });
 
@@ -96,7 +100,9 @@ describe("bridge rules", () => {
     expect(findings[0]).toMatchObject({
       ruleId: "bridge/NO_WRAPPED_USDC_ON_ARC",
       severity: "critical",
-      docs: "arc-canonical-usdc"
+      docs: "arc-canonical-usdc",
+      message: expect.stringContaining("wrapped or bridged USDC"),
+      suggestedFix: expect.stringContaining("canonical Arc USDC")
     });
   });
 
@@ -127,7 +133,9 @@ describe("bridge rules", () => {
     expect(findings[0]).toMatchObject({
       ruleId: "bridge/RELAYER_USES_USDC_FOR_GAS",
       severity: "critical",
-      docs: "arc-usdc-gas"
+      docs: "arc-usdc-gas",
+      message: expect.stringContaining("ETH is used for gas"),
+      suggestedFix: expect.stringContaining("USDC")
     });
   });
 
@@ -140,7 +148,9 @@ describe("bridge rules", () => {
     expect(findings[0]).toMatchObject({
       ruleId: "bridge/RELAYER_USES_USDC_FOR_GAS",
       severity: "critical",
-      docs: "arc-usdc-gas"
+      docs: "arc-usdc-gas",
+      message: expect.stringContaining("ETH is used for gas"),
+      suggestedFix: expect.stringContaining("gas-token")
     });
   });
 
@@ -171,7 +181,9 @@ describe("bridge rules", () => {
     expect(findings[0]).toMatchObject({
       ruleId: "bridge/ATTESTATION_404_NOT_FATAL",
       severity: "critical",
-      docs: "arc-cctp-attestation"
+      docs: "arc-cctp-attestation",
+      message: expect.stringContaining("HTTP 404"),
+      suggestedFix: expect.stringContaining("retryable pending")
     });
   });
 
@@ -202,7 +214,9 @@ describe("bridge rules", () => {
     expect(findings[0]).toMatchObject({
       ruleId: "bridge/NO_PREVRANDAO_RELAY_SELECTION",
       severity: "critical",
-      docs: "arc-prevrandao"
+      docs: "arc-prevrandao",
+      message: expect.stringContaining("PREVRANDAO"),
+      suggestedFix: expect.stringContaining("relay selection")
     });
   });
 

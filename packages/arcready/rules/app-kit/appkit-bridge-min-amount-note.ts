@@ -8,7 +8,7 @@ import {
 } from "./helpers.js";
 
 const SUGGESTED_FIX =
-  "Add minimum amount and fee guardrails for Arc-origin bridge flows so the user does not attempt a bridge where fees exceed the transfer amount.";
+  "Add user-facing minimum amount and fee guardrails before starting an Arc-origin App Kit bridge flow.";
 
 export const appKitBridgeMinAmountNoteRule: Rule = {
   id: "app-kit/APPKIT_BRIDGE_MIN_AMOUNT_NOTE",
@@ -31,7 +31,7 @@ export const appKitBridgeMinAmountNoteRule: Rule = {
           createAppKitFinding(
             appKitBridgeMinAmountNoteRule,
             filePath,
-            "Arc-origin App Kit bridge flow appears to lack minimum amount or fee guardrails.",
+            "Arc-origin App Kit bridge flow appears to omit minimum amount or fee guardrails.",
             SUGGESTED_FIX,
             APP_KIT_DOCS.bridgeMinAmount
           )

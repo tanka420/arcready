@@ -9,7 +9,7 @@ import {
 } from "./helpers.js";
 
 const SUGGESTED_FIX =
-  "Treat early attestation 404 as an expected pending state before the burn is processed. Retry or model it as pending, not fatal.";
+  "Treat CCTP attestation 404 as a retryable pending state while polling, not as a terminal bridge failure.";
 
 export const attestation404NotFatalRule: Rule = {
   id: "bridge/ATTESTATION_404_NOT_FATAL",
@@ -31,7 +31,7 @@ export const attestation404NotFatalRule: Rule = {
           createBridgeFinding(
             attestation404NotFatalRule,
             filePath,
-            "Attestation polling appears to treat HTTP 404 as a fatal bridge failure.",
+            "Arc bridge attestation polling appears to treat HTTP 404 as a fatal error.",
             SUGGESTED_FIX,
             BRIDGE_DOCS.attestation
           )

@@ -8,7 +8,7 @@ import {
 } from "./helpers.js";
 
 const SUGGESTED_FIX =
-  "Use the case-sensitive App Kit chain identifier Arc_Testnet.";
+  "Use the case-sensitive App Kit chain identifier Arc_Testnet wherever Arc is passed to App Kit configuration or calls.";
 
 export const appKitChainIdentifierValidRule: Rule = {
   id: "app-kit/APPKIT_CHAIN_IDENTIFIER_VALID",
@@ -30,7 +30,7 @@ export const appKitChainIdentifierValidRule: Rule = {
           createAppKitFinding(
             appKitChainIdentifierValidRule,
             filePath,
-            "App Kit Arc chain identifier appears to be invalid.",
+            "App Kit Arc chain identifier appears to use an unsupported spelling.",
             SUGGESTED_FIX,
             APP_KIT_DOCS.chainIdentifier
           )
