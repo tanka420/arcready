@@ -4,7 +4,7 @@ import { runScan } from "../src/index.js";
 
 const repoRoot = join(import.meta.dirname, "..", "..", "..");
 
-describe("demo fixtures", () => {
+describe("validation fixtures", () => {
   it("wallet-good passes without findings", async () => {
     const { report } = await runScan(pathToFixture("wallet-good"));
 

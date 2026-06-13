@@ -1,15 +1,14 @@
 # Rule Catalog
 
-ArcReady currently includes the first wallet rule set. App Kit and bridge rules
-are still placeholders.
+ArcReady currently includes wallet, bridge, and App Kit rule packs.
 
-Planned rule groups:
+Rule groups:
 
 - `rules/wallet`
 - `rules/app-kit`
 - `rules/bridge`
 
-Planned preset groups:
+Preset groups:
 
 - `presets/wallet`
 - `presets/app-kit`
@@ -26,5 +25,27 @@ Planned preset groups:
 | `wallet/PREVRANDAO_NOT_SUPPORTED`   | critical | `arc-prevrandao`        |
 | `wallet/NO_BLOB_TX_ON_ARC`          | critical | `arc-blob-transactions` |
 
-Rules produce structured findings that reporters can later render in terminal,
-Markdown, JSON, and HTML formats.
+## Bridge Rules
+
+| Rule ID                                      | Severity | Docs Slug              |
+| -------------------------------------------- | -------- | ---------------------- |
+| `bridge/BRIDGE_CONFIRMATIONS_ONE`            | critical | `arc-finality`         |
+| `bridge/CCTP_DOMAIN_26`                      | critical | `arc-cctp-domain`      |
+| `bridge/NO_WRAPPED_USDC_ON_ARC`              | critical | `arc-canonical-usdc`   |
+| `bridge/RELAYER_USES_USDC_FOR_GAS`           | critical | `arc-usdc-gas`         |
+| `bridge/ATTESTATION_404_NOT_FATAL`           | critical | `arc-cctp-attestation` |
+| `bridge/NO_PREVRANDAO_RELAY_SELECTION`       | critical | `arc-prevrandao`       |
+
+## App Kit Rules
+
+| Rule ID                                      | Severity | Docs Slug                         |
+| -------------------------------------------- | -------- | --------------------------------- |
+| `app-kit/APPKIT_CHAIN_IDENTIFIER_VALID`      | critical | `arc-appkit-chain-identifier`     |
+| `app-kit/APPKIT_CAPABILITY_SUPPORTED`        | warning  | `arc-appkit-capabilities`         |
+| `app-kit/APPKIT_CUSTOM_RPC_RECOMMENDED`      | warning  | `arc-appkit-custom-rpc`           |
+| `app-kit/UB_DELEGATE_REQUIRED`               | warning  | `arc-unified-balance-delegate`    |
+| `app-kit/UB_FEE_EXPLANATION_PRESENT`         | warning  | `arc-unified-balance-fees`        |
+| `app-kit/APPKIT_BRIDGE_MIN_AMOUNT_NOTE`      | warning  | `arc-appkit-bridge-min-amount`    |
+
+Rules produce structured findings that terminal, JSON, Markdown, and HTML
+reporters can render.

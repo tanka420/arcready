@@ -2,6 +2,7 @@
   "name": "arcready",
   "version": "0.0.0",
   "description": "Arc-specific CI quality gate and integration validator.",
+  "license": "MIT",
   "type": "module",
   "bin": {
     "arcready": "./dist/bin.js"

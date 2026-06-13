@@ -12,13 +12,13 @@ The initial repository foundation provides:
 
 - A pnpm workspace.
 - A TypeScript CLI package at `packages/arcready`.
-- Minimal `arcready init` and `arcready scan` commands.
+- `arcready init` and `arcready scan` commands.
 - A typed config loader for `arcready.config.json`.
 - A typed finding model, scan summary, scan report, and scoring model.
 - A sequential internal rule runner and preset registry.
-- A stub scan report backed by the scoring model.
-- Placeholder directories for future rules, presets, reporters, config,
-  findings, and scoring.
+- Wallet, bridge, and App Kit rule packs.
+- Terminal, JSON, Markdown, and HTML reporters.
+- Validation fixtures for expected passing and failing integrations.
 
 ## Current Non-Goals
 
@@ -27,7 +27,7 @@ The initial repository foundation provides:
 - No auth.
 - No telemetry.
 - No runtime RPC calls.
-- No real Arc rule execution.
+- No hosted dashboard, SaaS workspace, or PR comment bot.
 
 ## Config Shape
 
@@ -52,7 +52,8 @@ Supported fields:
 - `score`: score from 0 to 100.
 - `status`: `pass`, `warn`, or `fail`.
 - `summary`: counts for `critical`, `warning`, and `info` findings.
-- `findings`: an empty array until real rules exist.
+- `findings`: structured rule findings with severity, files, suggested fixes,
+  docs slug, and preset.
 
 Scoring starts at 100, subtracts 25 per critical finding, 10 per warning, and 2
 per info, with a floor of 0.
@@ -64,5 +65,5 @@ docs, and a `run` function. The scan pipeline loads configured files, detects th
 project type, resolves preset rules, runs rules sequentially, and converts rule
 findings into the final scan report.
 
-The current wallet, App Kit, and bridge preset rules are placeholders only and
-return no findings.
+The current wallet, App Kit, and bridge presets use static validation rules only.
+Runtime RPC checks and live bridge simulation remain out of scope.

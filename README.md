@@ -11,6 +11,8 @@ Open-source Arc-specific CI quality gate and integration validator.
 
 ArcReady helps developers catch Arc-specific integration mistakes before release. It is designed for wallets, bridge flows, App Kit integrations, and dApps that want a lightweight local and CI validation step.
 
+> ArcReady is an independent open-source project. It is not an official Circle or Arc product.
+
 ArcReady is local-first and CI-friendly. It does not require a hosted backend, database, authentication system, telemetry, SaaS workspace, or dashboard.
 
 ## Links
@@ -53,8 +55,8 @@ Implemented:
 * Markdown report
 * HTML report
 * Composite GitHub Action
-* Demo fixtures
-* Fixture demo script
+* Validation fixtures
+* Fixture validation script
 
 Not included in v1:
 
@@ -74,7 +76,7 @@ Not included in v1:
 * configurable fail threshold
 * terminal, JSON, Markdown, and HTML reports
 * local composite GitHub Action
-* demo fixtures for wallet, bridge, and App Kit integrations
+* validation fixtures for wallet, bridge, and App Kit integrations
 * no hosted infrastructure required
 
 ## Rule Packs
@@ -181,9 +183,9 @@ corepack pnpm --filter arcready exec arcready scan --format markdown --out ../..
 
 Generated report folders such as `.arcready/` and `reports/` are ignored by git.
 
-## Demo Fixtures
+## Validation Fixtures
 
-ArcReady includes demo fixtures:
+ArcReady includes validation fixtures:
 
 ```text
 fixtures/
@@ -195,22 +197,22 @@ fixtures/
   app-kit-bad/
 ```
 
-Run the fixture demo:
+Run fixture validation:
 
 ```bash
-corepack pnpm demo:fixtures
+corepack pnpm validate:fixtures
 ```
 
 Expected behavior:
 
 * good fixtures pass with zero findings
 * bad fixtures produce findings
-* the demo script exits `0` when all expectations match
+* the fixture validation script exits `0` when all expectations match
 
 Example output:
 
 ```text
-ArcReady Fixture Demo
+ArcReady Fixture Validation
 
 Fixture        Status   Score   Critical   Warning   Info   Findings   Expected   Result
 wallet-good    pass     100     0          0         0      0          pass       OK
@@ -267,7 +269,7 @@ Notes:
 corepack pnpm build
 corepack pnpm test
 corepack pnpm lint
-corepack pnpm demo:fixtures
+corepack pnpm validate:fixtures
 ```
 
 ## Architecture Snapshot
@@ -295,15 +297,15 @@ Guidelines:
 * Prefer conservative detection over noisy findings.
 * Add or update tests for every rule change.
 * Do not add SaaS, dashboard, auth, database, telemetry, or backend features to v1.
-* Run build, test, lint, and fixture demo before submitting changes.
+* Run build, test, lint, and fixture validation before submitting changes.
 
 ```bash
 corepack pnpm build
 corepack pnpm test
 corepack pnpm lint
-corepack pnpm demo:fixtures
+corepack pnpm validate:fixtures
 ```
 
 ## License
 
-TBD
+MIT

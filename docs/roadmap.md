@@ -8,7 +8,7 @@ The MVP proves the core foundation:
 * Arc-specific rule packs
 * terminal, JSON, Markdown, and HTML reports
 * local composite GitHub Action
-* demo fixtures
+* validation fixtures
 * fixture validation script
 * passing test suite
 
@@ -73,7 +73,7 @@ Scope:
 
 Non-goals:
 
-* No full demo dApp
+* No full sample dApp
 * No hosted frontend
 * No backend service
 
@@ -162,7 +162,7 @@ Possible future steps:
 * npm publish
 * GitHub Marketplace publish
 * example integration in a sample repo
-* short demo video
+* short validation walkthrough video
 * Arc ecosystem announcement
 
 ## Explicit Non-goals

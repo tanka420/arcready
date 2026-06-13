@@ -66,26 +66,39 @@ runs:
     - name: Run ArcReady scans
       id: scan
       shell: bash
-      working-directory: ${{ github.action_path }}/../..
       run: |
         set +e
 
-        REPORT_DIR="./.arcready/reports"
-        ARC_READY_CLI="packages/arcready/dist/bin.js"
+        ARC_READY_ROOT="${GITHUB_ACTION_PATH}/../.."
+        WORKING_DIRECTORY="${{ inputs.working-directory }}"
+        REPORT_DIR="${WORKING_DIRECTORY}/.arcready/reports"
+        ARC_READY_BIN="${ARC_READY_ROOT}/node_modules/.bin/arcready"
 
         mkdir -p "${REPORT_DIR}"
 
         # TODO: Pass "${{ inputs.config }}" once the CLI supports --config.
 
-        node "${ARC_READY_CLI}" scan --format "${{ inputs.format }}" --fail-on none
+        (
+          cd "${WORKING_DIRECTORY}" &&
+          "${ARC_READY_BIN}" scan --format "${{ inputs.format }}" --fail-on none
+        )
 
-        node "${ARC_READY_CLI}" scan --format json --out .arcready/reports/arcready.json --fail-on "${{ inputs.fail-on }}"
+        (
+          cd "${WORKING_DIRECTORY}" &&
+          "${ARC_READY_BIN}" scan --format json --out ../../.arcready/reports/arcready.json --fail-on "${{ inputs.fail-on }}"
+        )
         scan_exit_code="$?"
 
-        node "${ARC_READY_CLI}" scan --format markdown --out .arcready/reports/arcready.md --fail-on none
+        (
+          cd "${WORKING_DIRECTORY}" &&
+          "${ARC_READY_BIN}" scan --format markdown --out ../../.arcready/reports/arcready.md --fail-on none
+        )
         markdown_exit_code="$?"
 
-        node "${ARC_READY_CLI}" scan --format html --out .arcready/reports/arcready.html --fail-on none
+        (
+          cd "${WORKING_DIRECTORY}" &&
+          "${ARC_READY_BIN}" scan --format html --out ../../.arcready/reports/arcready.html --fail-on none
+        )
         html_exit_code="$?"
 
         if [ -n "${GITHUB_STEP_SUMMARY:-}" ] && [ -f "${REPORT_DIR}/arcready.md" ]; then
@@ -112,7 +125,7 @@ runs:
       uses: actions/upload-artifact@v4
       with:
         name: ${{ inputs.artifact-name }}
-        path: ./.arcready/reports
+        path: ${{ inputs.working-directory }}/.arcready/reports
         if-no-files-found: error
 
     - name: Fail on ArcReady result

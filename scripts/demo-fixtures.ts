@@ -8,7 +8,7 @@ export interface FixtureExpectation {
   shouldPass: boolean;
 }
 
-export interface FixtureDemoResult {
+export interface FixtureValidationResult {
   fixture: string;
   status: FindingStatus | "error";
   score: number;
@@ -32,8 +32,8 @@ export const FIXTURES: FixtureExpectation[] = [
 
 export async function runFixtureDemo(
   repoRoot = process.cwd()
-): Promise<FixtureDemoResult[]> {
-  const results: FixtureDemoResult[] = [];
+): Promise<FixtureValidationResult[]> {
+  const results: FixtureValidationResult[] = [];
 
   for (const fixture of FIXTURES) {
     results.push(await scanFixture(repoRoot, fixture));
@@ -42,7 +42,9 @@ export async function runFixtureDemo(
   return results;
 }
 
-export function fixtureMatchesExpectation(result: FixtureDemoResult): boolean {
+export function fixtureMatchesExpectation(
+  result: FixtureValidationResult
+): boolean {
   if (result.expected === "pass") {
     return result.status === "pass" && result.findings === 0;
   }
@@ -50,7 +52,7 @@ export function fixtureMatchesExpectation(result: FixtureDemoResult): boolean {
   return result.findings > 0;
 }
 
-export function renderSummary(results: FixtureDemoResult[]): string {
+export function renderSummary(results: FixtureValidationResult[]): string {
   const rows = [
     [
       "Fixture",
@@ -91,12 +93,12 @@ export function renderSummary(results: FixtureDemoResult[]): string {
 async function scanFixture(
   repoRoot: string,
   fixture: FixtureExpectation
-): Promise<FixtureDemoResult> {
+): Promise<FixtureValidationResult> {
   const expected = fixture.shouldPass ? "pass" : "findings";
 
   try {
     const { report } = await runScan(join(repoRoot, "fixtures", fixture.name));
-    const result: FixtureDemoResult = {
+    const result: FixtureValidationResult = {
       fixture: fixture.name,
       status: report.status,
       score: report.score,
@@ -133,7 +135,7 @@ async function main(): Promise<number> {
     const results = await runFixtureDemo();
     const passed = results.every((result) => result.matched);
 
-    console.log("ArcReady Fixture Demo\n");
+    console.log("ArcReady Fixture Validation\n");
     console.log(renderSummary(results));
 
     for (const result of results) {
@@ -146,7 +148,7 @@ async function main(): Promise<number> {
     return passed ? 0 : 1;
   } catch (error) {
     console.error(
-      `ArcReady Fixture Demo setup error: ${error instanceof Error ? error.message : String(error)}`
+      `ArcReady Fixture Validation setup error: ${error instanceof Error ? error.message : String(error)}`
     );
     return 2;
   }
@@ -159,7 +161,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     })
     .catch((error: unknown) => {
       console.error(
-        `ArcReady Fixture Demo setup error: ${error instanceof Error ? error.message : String(error)}`
+        `ArcReady Fixture Validation setup error: ${error instanceof Error ? error.message : String(error)}`
       );
       process.exitCode = 2;
     });

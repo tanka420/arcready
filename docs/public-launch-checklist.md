@@ -41,7 +41,7 @@ developer-tools
 * [ ] README does not claim npm publishing is available yet
 * [ ] README does not claim GitHub Marketplace publishing is available yet
 * [ ] README includes local development commands
-* [ ] README includes demo fixture command
+* [ ] README includes validation fixture command
 * [ ] README includes GitHub Action usage
 * [ ] README includes v1 non-goals
 * [ ] README badges render correctly
@@ -62,7 +62,7 @@ Before sharing publicly, run:
 corepack pnpm build
 corepack pnpm test
 corepack pnpm lint
-corepack pnpm demo:fixtures
+corepack pnpm validate:fixtures
 ```
 
 Expected result:
@@ -70,7 +70,7 @@ Expected result:
 * [ ] Build passes
 * [ ] Test suite passes
 * [ ] Lint passes
-* [ ] Fixture demo passes
+* [ ] Fixture validation passes
 * [ ] Good fixtures pass
 * [ ] Bad fixtures produce expected findings
 
@@ -124,19 +124,17 @@ Recommended current roadmap issues:
 * Prepare npm package publishing
 * Prepare GitHub Marketplace action publishing
 
-## 7. Demo Materials
+## 7. Validation Materials
 
-* [ ] Demo script exists
-* [ ] Demo recording checklist exists
-* [ ] Launch post draft exists
-* [ ] Fixture demo command works
-* [ ] GitHub Action summary is available for screenshot/demo
-* [ ] No private local files are visible in demo materials
+* [ ] Fixture validation script exists
+* [ ] Validation fixture command works
+* [ ] GitHub Action summary is available for review
+* [ ] No private local files are visible in validation materials
 
-Demo command:
+Validation command:
 
 ```bash
-corepack pnpm demo:fixtures
+corepack pnpm validate:fixtures
 ```
 
 Expected final line:

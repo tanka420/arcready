@@ -4,10 +4,10 @@ import {
   fixtureMatchesExpectation,
   renderSummary
 } from "../../../scripts/demo-fixtures.js";
-import type { FixtureDemoResult } from "../../../scripts/demo-fixtures.js";
+import type { FixtureValidationResult } from "../../../scripts/demo-fixtures.js";
 
-describe("demo fixtures script helpers", () => {
-  it("defines fixtures in demo order", () => {
+describe("fixture validation script helpers", () => {
+  it("defines fixtures in validation order", () => {
     expect(FIXTURES.map((fixture) => fixture.name)).toEqual([
       "wallet-good",
       "wallet-bad",
@@ -49,7 +49,7 @@ function createResult(
   fixture: string,
   shouldPass: boolean,
   findings: number
-): FixtureDemoResult {
+): FixtureValidationResult {
   return {
     fixture,
     status: findings === 0 ? "pass" : "fail",
