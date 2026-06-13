@@ -2,6 +2,7 @@ import type { Rule } from "../../core/rules/index.js";
 import {
   APP_KIT_DOCS,
   createAppKitFinding,
+  getActiveContent,
   isAppKitRelated,
   readAppKitFiles
 } from "./helpers.js";
@@ -46,16 +47,23 @@ export const ubDelegateRequiredRule: Rule = {
 };
 
 function hasUnifiedBalanceSpendFlow(content: string): boolean {
+  const activeContent = getActiveContent(
+    content,
+    /\b(unifiedBalance|delegate|delegation)\b/i
+  );
+
   return (
-    /\b(unifiedBalance|spendFromUnifiedBalance)\b/i.test(content) &&
+    /\b(unifiedBalance|spendFromUnifiedBalance)\b/i.test(activeContent) &&
     /\b(spend|Gateway|SCA|server wallet|dev-controlled|Circle Wallets)\b/i.test(
-      content
+      activeContent
     )
   );
 }
 
 function hasDelegateLanguage(content: string): boolean {
+  const activeContent = getActiveContent(content);
+
   return /\b(delegate|delegation|delegateWallet|createDelegate)\b/i.test(
-    content
+    activeContent
   );
 }

@@ -2,6 +2,7 @@ import type { Rule } from "../../core/rules/index.js";
 import {
   APP_KIT_DOCS,
   createAppKitFinding,
+  getActiveContent,
   isAppKitRelated,
   readAppKitFiles
 } from "./helpers.js";
@@ -43,15 +44,22 @@ export const appKitBridgeMinAmountNoteRule: Rule = {
 };
 
 function hasArcOriginBridge(content: string): boolean {
+  const activeContent = getActiveContent(
+    content,
+    /\b(bridge|minimum|minAmount|maxFee|fee)\b/i
+  );
+
   return (
-    /\bbridge\b/i.test(content) &&
+    /\bbridge\b/i.test(activeContent) &&
     /\b(sourceChain|fromChain|originChain)\b[\s\S]{0,120}\bArc_Testnet\b/.test(
-      content
+      activeContent
     ) &&
-    /\bamount\b/i.test(content)
+    /\bamount\b/i.test(activeContent)
   );
 }
 
 function hasAmountOrFeeGuard(content: string): boolean {
-  return /\b(minAmount|minimum|maxFee|fee)\b/i.test(content);
+  const activeContent = getActiveContent(content);
+
+  return /\b(minAmount|minimum|maxFee|fee)\b/i.test(activeContent);
 }

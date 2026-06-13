@@ -49,6 +49,48 @@ export function isArcRelated(content: string): boolean {
   );
 }
 
+export function isCommentOrDocumentationLine(line: string): boolean {
+  const trimmed = line.trim();
+
+  return (
+    trimmed.startsWith("//") ||
+    trimmed.startsWith("/*") ||
+    trimmed.startsWith("*") ||
+    trimmed.startsWith("#") ||
+    trimmed.startsWith(">") ||
+    /^[-*]\s+/.test(trimmed)
+  );
+}
+
+export function isGuidanceAgainstUsage(
+  text: string,
+  termPattern: RegExp
+): boolean {
+  if (!termPattern.test(text)) {
+    return false;
+  }
+
+  return /\b(do not|don't|never|avoid|unsupported|not supported|should not|must not|instead of|rather than|required|recommended)\b/i.test(
+    text
+  );
+}
+
+export function getActiveContent(
+  content: string,
+  termPattern?: RegExp
+): string {
+  return content
+    .split(/\r?\n/)
+    .filter((line) => {
+      if (isCommentOrDocumentationLine(line)) {
+        return false;
+      }
+
+      return termPattern ? !isGuidanceAgainstUsage(line, termPattern) : true;
+    })
+    .join("\n");
+}
+
 export function createAppKitFinding(
   rule: Rule,
   filePath: string,

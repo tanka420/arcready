@@ -47,6 +47,15 @@ describe("app-kit rules", () => {
     ).resolves.toEqual([]);
   });
 
+  it("APPKIT_CHAIN_IDENTIFIER_VALID ignores documentation examples", async () => {
+    await expect(
+      runAppKitRule(
+        appKitChainIdentifierValidRule,
+        "import { AppKit } from '@circle-fin/app-kit';\n// Do not use 'arc-testnet'; use 'Arc_Testnet'."
+      )
+    ).resolves.toEqual([]);
+  });
+
   it("APPKIT_CAPABILITY_SUPPORTED flags unguarded Arc capability calls", async () => {
     const findings = await runAppKitRule(
       appKitCapabilitySupportedRule,
@@ -65,6 +74,15 @@ describe("app-kit rules", () => {
       runAppKitRule(
         appKitCapabilitySupportedRule,
         "import { AppKit } from '@circle-fin/app-kit';\nconst chain = 'Arc_Testnet';\nif (capabilities.includes('bridge')) await appKit.bridge({ amount });"
+      )
+    ).resolves.toEqual([]);
+  });
+
+  it("APPKIT_CAPABILITY_SUPPORTED ignores capability documentation", async () => {
+    await expect(
+      runAppKitRule(
+        appKitCapabilitySupportedRule,
+        "import { AppKit } from '@circle-fin/app-kit';\nconst chain = 'Arc_Testnet';\n// Unsupported capabilities should be guarded before calling appKit.bridge()."
       )
     ).resolves.toEqual([]);
   });
@@ -91,6 +109,15 @@ describe("app-kit rules", () => {
     ).resolves.toEqual([]);
   });
 
+  it("APPKIT_CUSTOM_RPC_RECOMMENDED ignores RPC documentation comments", async () => {
+    await expect(
+      runAppKitRule(
+        appKitCustomRpcRecommendedRule,
+        "import { AppKit } from '@circle-fin/app-kit';\n// Arc_Testnet RPC is recommended for production App Kit flows."
+      )
+    ).resolves.toEqual([]);
+  });
+
   it("UB_DELEGATE_REQUIRED flags Unified Balance spend without delegate language", async () => {
     const findings = await runAppKitRule(
       ubDelegateRequiredRule,
@@ -109,6 +136,15 @@ describe("app-kit rules", () => {
       runAppKitRule(
         ubDelegateRequiredRule,
         "import { AppKit } from '@circle-fin/app-kit';\nconst delegateWallet = await createDelegate();\nawait appKit.unifiedBalance.spend({ delegateWallet });"
+      )
+    ).resolves.toEqual([]);
+  });
+
+  it("UB_DELEGATE_REQUIRED ignores comments warning that delegate is required", async () => {
+    await expect(
+      runAppKitRule(
+        ubDelegateRequiredRule,
+        "import { AppKit } from '@circle-fin/app-kit';\n// Unified Balance spend from Circle Wallets requires delegate handling."
       )
     ).resolves.toEqual([]);
   });
@@ -135,6 +171,15 @@ describe("app-kit rules", () => {
     ).resolves.toEqual([]);
   });
 
+  it("UB_FEE_EXPLANATION_PRESENT ignores fee explanation TODO comments", async () => {
+    await expect(
+      runAppKitRule(
+        ubFeeExplanationPresentRule,
+        "import { AppKit } from '@circle-fin/app-kit';\n// TODO: unifiedBalance checkout should show forwardingFee and receivedAmount."
+      )
+    ).resolves.toEqual([]);
+  });
+
   it("APPKIT_BRIDGE_MIN_AMOUNT_NOTE flags Arc-origin bridge without guards", async () => {
     const findings = await runAppKitRule(
       appKitBridgeMinAmountNoteRule,
@@ -153,6 +198,15 @@ describe("app-kit rules", () => {
       runAppKitRule(
         appKitBridgeMinAmountNoteRule,
         "import { AppKit } from '@circle-fin/app-kit';\nif (amount > minAmount) await appKit.bridge({ sourceChain: 'Arc_Testnet', amount, maxFee });"
+      )
+    ).resolves.toEqual([]);
+  });
+
+  it("APPKIT_BRIDGE_MIN_AMOUNT_NOTE ignores generic bridge guidance", async () => {
+    await expect(
+      runAppKitRule(
+        appKitBridgeMinAmountNoteRule,
+        "import { AppKit } from '@circle-fin/app-kit';\n// App Kit bridge copy should mention minimum amount and maxFee for Arc_Testnet."
       )
     ).resolves.toEqual([]);
   });

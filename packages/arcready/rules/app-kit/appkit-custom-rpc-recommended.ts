@@ -2,6 +2,7 @@ import type { Rule } from "../../core/rules/index.js";
 import {
   APP_KIT_DOCS,
   createAppKitFinding,
+  getActiveContent,
   isAppKitRelated,
   readAppKitFiles
 } from "./helpers.js";
@@ -20,11 +21,16 @@ export const appKitCustomRpcRecommendedRule: Rule = {
     const findings = [];
 
     for (const { filePath, content } of await readAppKitFiles(context)) {
-      if (!isAppKitRelated(content) || !/\bArc_Testnet\b/.test(content)) {
+      const activeContent = getActiveContent(content, /\b(RPC|rpc|Arc_Testnet)\b/);
+
+      if (
+        !isAppKitRelated(content) ||
+        !/\bArc_Testnet\b/.test(activeContent)
+      ) {
         continue;
       }
 
-      if (!hasCustomRpcConfig(content)) {
+      if (!hasCustomRpcConfig(activeContent)) {
         findings.push(
           createAppKitFinding(
             appKitCustomRpcRecommendedRule,

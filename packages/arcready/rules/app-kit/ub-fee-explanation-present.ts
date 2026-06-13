@@ -2,6 +2,7 @@ import type { Rule } from "../../core/rules/index.js";
 import {
   APP_KIT_DOCS,
   createAppKitFinding,
+  getActiveContent,
   isAppKitRelated,
   readAppKitFiles
 } from "./helpers.js";
@@ -46,14 +47,21 @@ export const ubFeeExplanationPresentRule: Rule = {
 };
 
 function hasUnifiedBalanceConfirmation(content: string): boolean {
+  const activeContent = getActiveContent(
+    content,
+    /\b(unifiedBalance|fee|fees|forwardingFee|receivedAmount)\b/i
+  );
+
   return (
-    /\bunifiedBalance\b/i.test(content) &&
-    /\b(spend|payment|confirm|confirmation|checkout)\b/i.test(content)
+    /\bunifiedBalance\b/i.test(activeContent) &&
+    /\b(spend|payment|confirm|confirmation|checkout)\b/i.test(activeContent)
   );
 }
 
 function hasFeeExplanation(content: string): boolean {
+  const activeContent = getActiveContent(content);
+
   return /\b(estimateSpend|fee|forwardingFee|sourceGas|destinationAmount|receivedAmount)\b/i.test(
-    content
+    activeContent
   );
 }

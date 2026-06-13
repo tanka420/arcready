@@ -2,6 +2,7 @@ import type { Rule } from "../../core/rules/index.js";
 import {
   APP_KIT_DOCS,
   createAppKitFinding,
+  getActiveContent,
   isAppKitRelated,
   isArcRelated,
   readAppKitFiles
@@ -44,16 +45,26 @@ export const appKitCapabilitySupportedRule: Rule = {
 };
 
 function hasCapabilityCall(content: string): boolean {
-  return /\b(send|bridge|swap|unifiedBalance)\s*\(/i.test(content);
+  const activeContent = getActiveContent(
+    content,
+    /\b(send|bridge|swap|unifiedBalance|capabilit(?:y|ies))\b/i
+  );
+
+  return (
+    /\b(?:appKit\.)?(send|bridge|swap)\s*\(/i.test(activeContent) ||
+    /\bappKit\.unifiedBalance\b/i.test(activeContent)
+  );
 }
 
 function hasCapabilityGuard(content: string): boolean {
+  const activeContent = getActiveContent(content);
+
   return (
-    /\bcapabilities\.includes\s*\(/.test(content) ||
-    /\bisCapabilitySupported\s*\(/.test(content) ||
-    /\bsupportedCapabilities\b/i.test(content) ||
+    /\bcapabilities\.includes\s*\(/.test(activeContent) ||
+    /\bisCapabilitySupported\s*\(/.test(activeContent) ||
+    /\bsupportedCapabilities\b/i.test(activeContent) ||
     /\btry\s*{[\s\S]{0,600}\b(send|bridge|swap|unifiedBalance)\s*\(/i.test(
-      content
+      activeContent
     )
   );
 }

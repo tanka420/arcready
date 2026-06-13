@@ -2,6 +2,7 @@ import type { Rule } from "../../core/rules/index.js";
 import {
   APP_KIT_DOCS,
   createAppKitFinding,
+  getActiveContent,
   isAppKitRelated,
   readAppKitFiles
 } from "./helpers.js";
@@ -42,7 +43,12 @@ export const appKitChainIdentifierValidRule: Rule = {
 };
 
 function hasInvalidArcIdentifier(content: string): boolean {
+  const activeContent = getActiveContent(
+    content,
+    /\b(Arc|arc|ARC|ArcTestnet|arc_testnet|arc-testnet|Arc Testnet)\b/
+  );
+
   return /["'`](Arc|arc|ARC|ArcTestnet|arc_testnet|arc-testnet|Arc Testnet)["'`]/.test(
-    content
+    activeContent
   );
 }
