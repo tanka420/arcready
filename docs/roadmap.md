@@ -107,11 +107,15 @@ Related issue:
 
 * Prepare npm package publishing
 
-### 4. Prepare GitHub Marketplace Action Publishing
+### 4. Prepare External GitHub Action Usage
 
 Goal:
 
-Prepare the local composite GitHub Action for future external repository usage.
+Prepare the composite GitHub Action for external repository usage.
+
+Status:
+
+In progress. The root action metadata, external usage docs, example workflow, and action smoke workflow are being prepared. Do not mark this complete until the action smoke workflow has passed on GitHub.
 
 Scope:
 
@@ -120,7 +124,7 @@ Scope:
 * Confirm report artifact behavior
 * Document required permissions
 * Add usage examples for external repositories
-* Make sure the action does not depend on unpublished local workspace behavior
+* Make sure the external action uses the published npm CLI instead of local workspace behavior
 
 Non-goals:
 
@@ -131,7 +135,7 @@ Non-goals:
 
 Related issue:
 
-* Prepare GitHub Marketplace action publishing
+* Prepare external GitHub Action usage
 
 ## Later Ideas
 

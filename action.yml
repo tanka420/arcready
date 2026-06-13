@@ -1,0 +1,99 @@
+name: ArcReady
+description: Run ArcReady static CI checks for Arc wallet, bridge, App Kit, and dApp integrations.
+
+inputs:
+  arcready-version:
+    description: "ArcReady npm package version to run"
+    required: false
+    default: "0.1.0"
+  working-directory:
+    description: "Directory to scan"
+    required: false
+    default: "."
+  fail-on:
+    description: "Fail when findings reach this level: critical, warning, info, or none"
+    required: false
+    default: "critical"
+  output-dir:
+    description: "Directory for ArcReady report files"
+    required: false
+    default: ".arcready/reports"
+  upload-artifact:
+    description: "Upload ArcReady reports as a workflow artifact"
+    required: false
+    default: "true"
+  artifact-name:
+    description: "Artifact name for uploaded ArcReady reports"
+    required: false
+    default: "arcready-report"
+
+runs:
+  using: composite
+  steps:
+    - name: Print Node and npm versions
+      shell: bash
+      run: |
+        node --version
+        npm --version
+
+    - name: Run ArcReady scans
+      id: scan
+      shell: bash
+      run: |
+        set +e
+
+        WORKING_DIRECTORY="${{ inputs.working-directory }}"
+        OUTPUT_DIR="${{ inputs.output-dir }}"
+        REPORT_DIR="${WORKING_DIRECTORY}/${OUTPUT_DIR}"
+        ARC_READY_PACKAGE="arcready@${{ inputs.arcready-version }}"
+
+        mkdir -p "${REPORT_DIR}"
+
+        (
+          cd "${WORKING_DIRECTORY}" &&
+          npx --yes "${ARC_READY_PACKAGE}" scan --format json --out "${OUTPUT_DIR}/arcready.json" --fail-on "${{ inputs.fail-on }}"
+        )
+        scan_exit_code="$?"
+
+        (
+          cd "${WORKING_DIRECTORY}" &&
+          npx --yes "${ARC_READY_PACKAGE}" scan --format markdown --out "${OUTPUT_DIR}/arcready.md" --fail-on none
+        )
+        markdown_exit_code="$?"
+
+        (
+          cd "${WORKING_DIRECTORY}" &&
+          npx --yes "${ARC_READY_PACKAGE}" scan --format html --out "${OUTPUT_DIR}/arcready.html" --fail-on none
+        )
+        html_exit_code="$?"
+
+        if [ -n "${GITHUB_STEP_SUMMARY:-}" ] && [ -f "${REPORT_DIR}/arcready.md" ]; then
+          cat "${REPORT_DIR}/arcready.md" >> "${GITHUB_STEP_SUMMARY}"
+        fi
+
+        echo "exit-code=${scan_exit_code}" >> "${GITHUB_OUTPUT}"
+        echo "json-report=${REPORT_DIR}/arcready.json" >> "${GITHUB_OUTPUT}"
+        echo "markdown-report=${REPORT_DIR}/arcready.md" >> "${GITHUB_OUTPUT}"
+        echo "html-report=${REPORT_DIR}/arcready.html" >> "${GITHUB_OUTPUT}"
+
+        if [ "${markdown_exit_code}" -ne 0 ]; then
+          echo "Markdown report generation failed with exit code ${markdown_exit_code}."
+        fi
+
+        if [ "${html_exit_code}" -ne 0 ]; then
+          echo "HTML report generation failed with exit code ${html_exit_code}."
+        fi
+
+        exit 0
+
+    - name: Upload ArcReady reports
+      if: ${{ inputs.upload-artifact == 'true' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ inputs.working-directory }}/${{ inputs.output-dir }}
+        if-no-files-found: error
+
+    - name: Fail on ArcReady result
+      shell: bash
+      run: exit "${{ steps.scan.outputs.exit-code }}"

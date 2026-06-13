@@ -5,6 +5,35 @@ import { describe, expect, it } from "vitest";
 const repoRoot = join(import.meta.dirname, "..", "..", "..");
 
 describe("GitHub Action wrapper", () => {
+  it("defines the root external composite action", () => {
+    const actionPath = join(repoRoot, "action.yml");
+    const action = readFileSync(actionPath, "utf8");
+
+    expect(existsSync(actionPath)).toBe(true);
+    expect(action).toContain("using: composite");
+    expect(action).toContain("arcready-version:");
+    expect(action).toContain('default: "0.1.0"');
+    expect(action).toContain("working-directory:");
+    expect(action).toContain("fail-on:");
+    expect(action).toContain("output-dir:");
+    expect(action).toContain("upload-artifact:");
+    expect(action).toContain("artifact-name:");
+    expect(action).toContain('default: ".arcready/reports"');
+    expect(action).toContain('npx --yes "${ARC_READY_PACKAGE}" scan');
+    expect(action).toContain("arcready@${{ inputs.arcready-version }}");
+    expect(action).not.toContain("node packages/arcready/dist/bin.js");
+    expect(action).not.toContain("corepack pnpm --filter arcready exec");
+    expect(action).toContain("--format json");
+    expect(action).toContain("--out \"${OUTPUT_DIR}/arcready.json\"");
+    expect(action).toContain("--format markdown");
+    expect(action).toContain("--out \"${OUTPUT_DIR}/arcready.md\"");
+    expect(action).toContain("--format html");
+    expect(action).toContain("--out \"${OUTPUT_DIR}/arcready.html\"");
+    expect(action).toContain("actions/upload-artifact@v4");
+    expect(action).toContain("scan_exit_code=\"$?\"");
+    expect(action).toContain("exit \"${{ steps.scan.outputs.exit-code }}\"");
+  });
+
   it("defines the local composite action with required inputs", () => {
     const actionPath = join(repoRoot, "actions", "github", "action.yml");
     const action = readFileSync(actionPath, "utf8");

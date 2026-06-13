@@ -241,41 +241,9 @@ Result: PASS
 
 ## GitHub Action
 
-ArcReady includes a local composite GitHub Action.
+ArcReady can be used as a GitHub Action after the next action-ready release.
 
-Example workflow:
-
-```yaml
-name: ArcReady
-
-on:
-  pull_request:
-  push:
-    branches: [main]
-
-jobs:
-  arcready:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Run ArcReady
-        uses: ./actions/github
-        with:
-          working-directory: .
-          fail-on: critical
-          upload-artifact: true
-```
-
-Notes:
-
-* This is currently a local composite action.
-* GitHub Marketplace publishing is not implemented yet.
-* The action uses the ArcReady CLI as the source of truth.
-* The action generates JSON, Markdown, and HTML reports.
-* The workflow fails based on the CLI exit code.
+See [docs/github-action.md](docs/github-action.md).
 
 ## Development Commands
 

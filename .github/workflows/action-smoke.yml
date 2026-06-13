@@ -1,0 +1,21 @@
+name: ArcReady Action Smoke
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  action-smoke:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./
+        with:
+          working-directory: fixtures/wallet-good
+          fail-on: critical
+          upload-artifact: true
