@@ -241,7 +241,11 @@ Result: PASS
 
 ## GitHub Action
 
-ArcReady can be used as a GitHub Action after the next action-ready release.
+ArcReady can be used as a GitHub Action:
+
+```yaml
+- uses: tanka420/arcready@v0.2.0
+```
 
 See [docs/github-action.md](docs/github-action.md).
 

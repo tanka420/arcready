@@ -8,8 +8,6 @@ The GitHub Action is intended for static integration validation of common Arc wa
 
 ## Basic Usage
 
-After the next release, use:
-
 ```yaml
 name: ArcReady
 
@@ -32,13 +30,13 @@ jobs:
           fail-on: critical
 ```
 
-`v0.1.0` is the currently published npm CLI package used by the action default. `arcready@0.2.0` is being prepared as the next npm package release, and the GitHub Action `v0.2.0` release should come after that npm publish. Do not use `tanka420/arcready@v0.2.0` until that release exists.
+`v0.2.0` is the first GitHub Action-ready release. The action runs the published npm CLI package, and the default CLI version is `0.2.0`. You can override the CLI package version with `arcready-version`.
 
 ## Inputs
 
 | Input | Default | Description |
 | --- | --- | --- |
-| `arcready-version` | `0.1.0` | ArcReady npm package version to run |
+| `arcready-version` | `0.2.0` | ArcReady npm package version to run |
 | `working-directory` | `.` | Directory to scan |
 | `fail-on` | `critical` | Fail when findings reach `critical`, `warning`, `info`, or `none` |
 | `output-dir` | `.arcready/reports` | Directory for ArcReady report files |

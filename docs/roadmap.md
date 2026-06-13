@@ -115,7 +115,7 @@ Prepare the composite GitHub Action for external repository usage.
 
 Status:
 
-In progress. Root action metadata, external usage docs, an example workflow, and an action smoke workflow are prepared. The npm `0.2.0` release candidate is next, and the GitHub Action `v0.2.0` release should come after npm publish.
+Release-ready for `v0.2.0`. Root action metadata, external usage docs, an example workflow, and an action smoke workflow are prepared. This does not include deeper Arc integration, live RPC checks, runtime simulation, or rule hardening.
 
 Scope:
 
@@ -189,7 +189,7 @@ The following are intentionally out of scope for the near-term roadmap:
 The next practical work item should be:
 
 ```text
-Prepare and verify the npm 0.2.0 release candidate before the GitHub Action v0.2.0 release.
+Create the Git tag and GitHub Release for v0.2.0 after maintainer approval.
 ```
 
-This keeps the external action release order safe: npm package first, action tag after.
+This makes the external action available through `tanka420/arcready@v0.2.0`.

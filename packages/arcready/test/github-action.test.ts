@@ -12,7 +12,7 @@ describe("GitHub Action wrapper", () => {
     expect(existsSync(actionPath)).toBe(true);
     expect(action).toContain("using: composite");
     expect(action).toContain("arcready-version:");
-    expect(action).toContain('default: "0.1.0"');
+    expect(action).toContain('default: "0.2.0"');
     expect(action).toContain("working-directory:");
     expect(action).toContain("fail-on:");
     expect(action).toContain("output-dir:");

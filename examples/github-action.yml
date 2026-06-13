@@ -14,7 +14,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Replace v0.2.0 with the latest released tag once available.
       - uses: tanka420/arcready@v0.2.0
         with:
           fail-on: critical
