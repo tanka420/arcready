@@ -30,6 +30,30 @@ pnpm arcready scan --format json
 
 ArcReady supports terminal, JSON, Markdown, and HTML reports, plus configurable fail thresholds with `--fail-on`.
 
+## Configuration
+
+Create an `arcready.config.json` file in the project you want to scan:
+
+```json
+{
+  "presets": ["wallet", "bridge", "app-kit"],
+  "paths": ["src", "app", "components", "lib", "package.json"],
+  "exclude": ["dist/**", "coverage/**", ".next/**", "node_modules/**"],
+  "reporters": ["terminal", "json", "markdown", "html"],
+  "failOn": "critical"
+}
+```
+
+## Reports
+
+Use `--format terminal`, `--format json`, `--format markdown`, or `--format html`.
+
+Write a report to disk with `--out`:
+
+```bash
+npx arcready scan --format json --out .arcready/reports/arcready.json
+```
+
 Full documentation, GitHub Action usage, rule catalog, roadmap, and local development instructions live in the repository:
 
 https://github.com/tanka420/arcready

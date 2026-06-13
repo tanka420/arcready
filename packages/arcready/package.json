@@ -16,16 +16,20 @@
   "keywords": [
     "arc",
     "circle",
+    "web3",
+    "evm",
     "ci",
     "quality-gate",
+    "developer-tools",
     "validation",
     "wallet",
     "bridge",
     "app-kit",
-    "typescript"
+    "typescript",
+    "github-actions"
   ],
   "bin": {
-    "arcready": "./dist/bin.js"
+    "arcready": "dist/bin.js"
   },
   "exports": {
     ".": {
