@@ -3,6 +3,8 @@ import {
   WALLET_DOCS,
   createWalletFinding,
   isArcRelated,
+  isCommentOrDocumentationLine,
+  isGuidanceAgainstUsage,
   readWalletFiles
 } from "./helpers.js";
 
@@ -24,9 +26,7 @@ export const prevrandaoNotSupportedRule: Rule = {
         continue;
       }
 
-      if (
-        /\b(block\.prevrandao|PREVRANDAO|prevrandao|mixHash)\b/.test(content)
-      ) {
+      if (hasActivePrevrandaoUsage(content)) {
         findings.push(
           createWalletFinding(
             prevrandaoNotSupportedRule,
@@ -42,3 +42,16 @@ export const prevrandaoNotSupportedRule: Rule = {
     return findings;
   }
 };
+
+function hasActivePrevrandaoUsage(content: string): boolean {
+  return content.split(/\r?\n/).some((line) => {
+    if (
+      isCommentOrDocumentationLine(line) ||
+      isGuidanceAgainstUsage(line, /\b(block\.prevrandao|PREVRANDAO|prevrandao|mixHash)\b/)
+    ) {
+      return false;
+    }
+
+    return /\b(block\.prevrandao|PREVRANDAO|prevrandao|mixHash)\b/.test(line);
+  });
+}

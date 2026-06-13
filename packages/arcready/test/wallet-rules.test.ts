@@ -48,6 +48,15 @@ describe("wallet rules", () => {
     ).resolves.toEqual([]);
   });
 
+  it("ARC_CHAIN_METADATA ignores generic chain documentation", async () => {
+    await expect(
+      runWalletRule(
+        arcChainMetadataRule,
+        "# Arc Testnet wallet notes\nUse chainId, rpcUrls, and blockExplorers when configuring Arc."
+      )
+    ).resolves.toEqual([]);
+  });
+
   it("WALLET_NATIVE_USDC_DISPLAY flags ETH native currency", async () => {
     const findings = await runWalletRule(
       walletNativeUsdcDisplayRule,
@@ -66,6 +75,15 @@ describe("wallet rules", () => {
       runWalletRule(
         walletNativeUsdcDisplayRule,
         "export const arc = { name: 'Arc Testnet', chainId: 5042002, nativeCurrency: { name: 'USDC', symbol: 'USDC' } };"
+      )
+    ).resolves.toEqual([]);
+  });
+
+  it("WALLET_NATIVE_USDC_DISPLAY ignores explanatory USDC copy", async () => {
+    await expect(
+      runWalletRule(
+        walletNativeUsdcDisplayRule,
+        "const chainId = 5042002;\nexport const help = 'Arc fees are paid in USDC, not ETH.';"
       )
     ).resolves.toEqual([]);
   });
@@ -92,6 +110,15 @@ describe("wallet rules", () => {
     ).resolves.toEqual([]);
   });
 
+  it("NO_ETH_GAS_LABEL ignores comments warning against ETH fee labels", async () => {
+    await expect(
+      runWalletRule(
+        noEthGasLabelRule,
+        "const chainId = 5042002;\n// Do not show Arc gas fees as ETH or gwei."
+      )
+    ).resolves.toEqual([]);
+  });
+
   it("ONE_CONFIRMATION_FINAL flags multi-confirmation Arc logic", async () => {
     const findings = await runWalletRule(
       oneConfirmationFinalRule,
@@ -110,6 +137,15 @@ describe("wallet rules", () => {
       runWalletRule(
         oneConfirmationFinalRule,
         "const chainId = 5042002;\nawait waitForTransactionReceipt({ hash, confirmations: 1 });"
+      )
+    ).resolves.toEqual([]);
+  });
+
+  it("ONE_CONFIRMATION_FINAL ignores guidance against multi-confirmation waits", async () => {
+    await expect(
+      runWalletRule(
+        oneConfirmationFinalRule,
+        "const chainId = 5042002;\nexport const guidance = 'Do not wait for 12 confirmations on Arc.';"
       )
     ).resolves.toEqual([]);
   });
@@ -136,6 +172,15 @@ describe("wallet rules", () => {
     ).resolves.toEqual([]);
   });
 
+  it("PREVRANDAO_NOT_SUPPORTED ignores comments warning against PREVRANDAO", async () => {
+    await expect(
+      runWalletRule(
+        prevrandaoNotSupportedRule,
+        "const chainId = 5042002;\n// PREVRANDAO is not supported for Arc wallet randomness."
+      )
+    ).resolves.toEqual([]);
+  });
+
   it("NO_BLOB_TX_ON_ARC flags blob transaction assumptions", async () => {
     const findings = await runWalletRule(
       noBlobTxOnArcRule,
@@ -154,6 +199,15 @@ describe("wallet rules", () => {
       runWalletRule(
         noBlobTxOnArcRule,
         "const tx = { type: 3, maxFeePerBlobGas: 1n };"
+      )
+    ).resolves.toEqual([]);
+  });
+
+  it("NO_BLOB_TX_ON_ARC ignores guidance against blob transactions", async () => {
+    await expect(
+      runWalletRule(
+        noBlobTxOnArcRule,
+        "const chainId = 5042002;\nexport const warning = 'Do not use EIP-4844 blob transactions on Arc.';"
       )
     ).resolves.toEqual([]);
   });

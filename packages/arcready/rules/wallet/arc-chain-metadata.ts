@@ -25,6 +25,10 @@ export const arcChainMetadataRule: Rule = {
         continue;
       }
 
+      if (!hasConcreteChainConfig(content)) {
+        continue;
+      }
+
       if (!/\b5042002\b/.test(content)) {
         findings.push(
           createWalletFinding(
@@ -65,5 +69,17 @@ function hasObviousWrongExplorerOrRpc(content: string): boolean {
       /(etherscan|ethereum|mainnet|sepolia|holesky|infura|alchemy)/i.test(
         line
       ) && !/\barc\b/i.test(line)
+  );
+}
+
+function hasConcreteChainConfig(content: string): boolean {
+  return (
+    /\bdefineChain\s*\(/.test(content) ||
+    /\b(?:export\s+)?(?:const|let|var)\s+\w*(?:arc|chain)\w*\s*=\s*{[\s\S]{0,800}\b(chainId|id|nativeCurrency|rpcUrls|blockExplorers)\b/i.test(
+      content
+    ) ||
+    /\b(chainId|id)\s*:\s*\d+[\s\S]{0,500}\b(nativeCurrency|rpcUrls|blockExplorers)\b/i.test(
+      content
+    )
   );
 }

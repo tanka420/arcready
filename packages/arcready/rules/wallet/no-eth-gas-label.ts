@@ -4,6 +4,8 @@ import {
   createWalletFinding,
   fileHasLineMatch,
   isArcRelated,
+  isCommentOrDocumentationLine,
+  isGuidanceAgainstUsage,
   readWalletFiles
 } from "./helpers.js";
 
@@ -29,6 +31,8 @@ export const noEthGasLabelRule: Rule = {
         fileHasLineMatch(
           content,
           (line) =>
+            !isCommentOrDocumentationLine(line) &&
+            !isGuidanceAgainstUsage(line, /\b(ETH|gwei)\b/i) &&
             /\b(ETH|gwei)\b/i.test(line) &&
             /\b(gas|fee|network fee|transaction fee|native fee)\b/i.test(line)
         )

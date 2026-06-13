@@ -50,7 +50,7 @@ function hasEthNativeCurrency(content: string): boolean {
 }
 
 function hasVisibleEthNativeFeeConfig(content: string): boolean {
-  return /(native currency|nativeCurrency|fee token|gas token|network fee)[\s\S]{0,120}\b(ETH|Ethereum)\b/i.test(
+  return /(native currency|nativeCurrency|fee token|feeToken|gas token|gasToken)\s*[:=]\s*["'`]?(ETH|Ethereum)\b/i.test(
     content
   );
 }

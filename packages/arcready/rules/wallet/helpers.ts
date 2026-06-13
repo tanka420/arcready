@@ -54,6 +54,32 @@ export function hasChainConfigShape(content: string): boolean {
   );
 }
 
+export function isCommentOrDocumentationLine(line: string): boolean {
+  const trimmed = line.trim();
+
+  return (
+    trimmed.startsWith("//") ||
+    trimmed.startsWith("/*") ||
+    trimmed.startsWith("*") ||
+    trimmed.startsWith("#") ||
+    trimmed.startsWith(">") ||
+    /^[-*]\s+/.test(trimmed)
+  );
+}
+
+export function isGuidanceAgainstUsage(
+  text: string,
+  termPattern: RegExp
+): boolean {
+  if (!termPattern.test(text)) {
+    return false;
+  }
+
+  return /\b(do not|don't|never|avoid|unsupported|not supported|should not|must not|instead of|rather than)\b/i.test(
+    text
+  );
+}
+
 export function createWalletFinding(
   rule: Rule,
   filePath: string,

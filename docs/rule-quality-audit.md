@@ -6,6 +6,8 @@ This Phase 3A audit covered 21 `Rule` objects: 18 active static validation rules
 
 Phase 3B cleanup note: the placeholder/internal no-op rules have now been removed from the package entrypoint and from the default preset registry. Active wallet, App Kit, and bridge rules remain available through their presets.
 
+Phase 3C-1 cleanup note: wallet rule precision has been improved for documentation/comment guidance, generic chain docs, explanatory USDC copy, confirmation guidance, PREVRANDAO warnings, and blob-transaction warnings. Wallet rules now have additional negative tests for these false-positive cases.
+
 ArcReady has a useful rule foundation for v0.2.0. The active rules are Arc-specific in intent, have direct unit coverage, and are backed by smoke fixtures for wallet, bridge, and App Kit presets. The main v0.3.0 risk is not missing product breadth; it is rule precision. Most current rules rely on regex and line-level text matching, which is acceptable for an early static CI gate but creates false positive risk in comments, docs, unrelated helper code, split configuration files, and variable-derived values.
 
 The recommended next implementation order is:

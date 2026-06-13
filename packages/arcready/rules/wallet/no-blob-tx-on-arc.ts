@@ -3,6 +3,8 @@ import {
   WALLET_DOCS,
   createWalletFinding,
   isArcRelated,
+  isCommentOrDocumentationLine,
+  isGuidanceAgainstUsage,
   readWalletFiles
 } from "./helpers.js";
 
@@ -42,10 +44,19 @@ export const noBlobTxOnArcRule: Rule = {
 };
 
 function hasBlobTransactionAssumption(content: string): boolean {
-  return (
-    /\bblobVersionedHashes\b/.test(content) ||
-    /\bmaxFeePerBlobGas\b/.test(content) ||
-    /\btype\s*:\s*3\b/.test(content) ||
-    /\b(blob transaction|blob tx|EIP-4844|4844)\b/i.test(content)
-  );
+  return content.split(/\r?\n/).some((line) => {
+    if (
+      isCommentOrDocumentationLine(line) ||
+      isGuidanceAgainstUsage(line, /\b(blob|EIP-4844|4844)\b/i)
+    ) {
+      return false;
+    }
+
+    return (
+      /\bblobVersionedHashes\b/.test(line) ||
+      /\bmaxFeePerBlobGas\b/.test(line) ||
+      /\btype\s*:\s*3\b/.test(line) ||
+      /\b(blob transaction|blob tx|EIP-4844)\b/i.test(line)
+    );
+  });
 }
