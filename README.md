@@ -247,6 +247,8 @@ ArcReady can be used as a GitHub Action:
 - uses: tanka420/arcready@v0.2.0
 ```
 
+External action usage is validated with `tanka420/arcready@v0.2.0`.
+
 See [docs/github-action.md](docs/github-action.md).
 
 ## Development Commands

@@ -113,3 +113,5 @@ uses: tanka420/arcready@v0.2.0
 ```
 
 It checks a known-good fixture that should pass and a known-bad fixture that should fail as expected.
+
+External action smoke validation has passed using `uses: tanka420/arcready@v0.2.0`.

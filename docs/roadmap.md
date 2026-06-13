@@ -107,7 +107,7 @@ Related issue:
 
 * Prepare npm package publishing
 
-### 4. Prepare External GitHub Action Usage
+### 4. External GitHub Action Usage
 
 Goal:
 
@@ -115,7 +115,7 @@ Prepare the composite GitHub Action for external repository usage.
 
 Status:
 
-Released for `v0.2.0`; external action smoke validation is added to verify `tanka420/arcready@v0.2.0` against known-good and known-bad fixtures. This does not include deeper Arc integration, live RPC checks, runtime simulation, or rule hardening.
+Completed for `v0.2.0`. External GitHub Action usage validated with `uses: tanka420/arcready@v0.2.0` against known-good and known-bad fixtures. This does not include deeper Arc integration, live RPC checks, runtime simulation, rule hardening, or GitHub Marketplace publication.
 
 Scope:
 
@@ -189,7 +189,7 @@ The following are intentionally out of scope for the near-term roadmap:
 The next practical work item should be:
 
 ```text
-Create the Git tag and GitHub Release for v0.2.0 after maintainer approval.
+Improve rule precision and fixture coverage for the next quality-focused release.
 ```
 
-This makes the external action available through `tanka420/arcready@v0.2.0`.
+This keeps ArcReady useful as a static CI quality gate without expanding into runtime checks or hosted infrastructure.
