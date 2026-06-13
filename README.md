@@ -2,9 +2,22 @@
 
 Open-source Arc-specific CI quality gate and integration validator.
 
+[![ArcReady Example](https://github.com/tanka420/arcready/actions/workflows/arcready-example.yml/badge.svg)](https://github.com/tanka420/arcready/actions/workflows/arcready-example.yml)
+[![Release](https://img.shields.io/github/v/release/tanka420/arcready?include_prereleases\&label=release)](https://github.com/tanka420/arcready/releases)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)
+![Node.js](https://img.shields.io/badge/Node.js-22%2B-green)
+![Status](https://img.shields.io/badge/status-MVP-orange)
+![Backend](https://img.shields.io/badge/backend-not_required-lightgrey)
+
 ArcReady helps developers catch Arc-specific integration mistakes before release. It is designed for wallets, bridge flows, App Kit integrations, and dApps that want a lightweight local and CI validation step.
 
 ArcReady is local-first and CI-friendly. It does not require a hosted backend, database, authentication system, telemetry, SaaS workspace, or dashboard.
+
+## Links
+
+* GitHub Action: [ArcReady Example](https://github.com/tanka420/arcready/actions/workflows/arcready-example.yml)
+* MVP Release: [v0.1.0-mvp](https://github.com/tanka420/arcready/releases/tag/v0.1.0-mvp)
+* Roadmap: [GitHub Issues](https://github.com/tanka420/arcready/issues)
 
 ## Why ArcReady Exists
 
