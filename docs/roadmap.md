@@ -115,7 +115,7 @@ Prepare the composite GitHub Action for external repository usage.
 
 Status:
 
-In progress. The root action metadata, external usage docs, example workflow, and action smoke workflow are being prepared. Do not mark this complete until the action smoke workflow has passed on GitHub.
+In progress. Root action metadata, external usage docs, an example workflow, and an action smoke workflow are prepared. The npm `0.2.0` release candidate is next, and the GitHub Action `v0.2.0` release should come after npm publish.
 
 Scope:
 
@@ -189,7 +189,7 @@ The following are intentionally out of scope for the near-term roadmap:
 The next practical work item should be:
 
 ```text
-Improve rule precision and fixture coverage before npm publishing.
+Prepare and verify the npm 0.2.0 release candidate before the GitHub Action v0.2.0 release.
 ```
 
-This keeps ArcReady useful and credible before wider distribution.
+This keeps the external action release order safe: npm package first, action tag after.

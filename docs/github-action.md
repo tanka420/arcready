@@ -32,7 +32,7 @@ jobs:
           fail-on: critical
 ```
 
-`v0.1.0` is the npm CLI package release. `v0.2.0` is planned as the first external GitHub Action-ready release; do not use it until that release exists.
+`v0.1.0` is the currently published npm CLI package used by the action default. `arcready@0.2.0` is being prepared as the next npm package release, and the GitHub Action `v0.2.0` release should come after that npm publish. Do not use `tanka420/arcready@v0.2.0` until that release exists.
 
 ## Inputs
 

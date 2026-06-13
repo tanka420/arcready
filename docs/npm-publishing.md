@@ -7,7 +7,7 @@ ArcReady is being prepared for npm publishing as an installable CLI package.
 | Field | Value |
 | --- | --- |
 | Package name | `arcready` |
-| Version | `0.1.0` |
+| Version | `0.2.0` |
 | License | MIT |
 | Node.js | `>=22` |
 | CLI bin | `arcready` |
@@ -34,7 +34,7 @@ corepack pnpm validate:fixtures
 corepack pnpm smoke:package
 ```
 
-The smoke test builds and packs the package, installs the generated tarball in a temporary npm project, runs `npx arcready --help`, runs `npx arcready init`, runs terminal and JSON scans, verifies `ArcReady v0.1.0`, and verifies JSON output parses.
+The smoke test builds and packs the package, installs the generated tarball in a temporary npm project, runs `npx arcready --help`, runs `npx arcready init`, runs terminal and JSON scans, verifies the package metadata version in terminal output, and verifies JSON output parses.
 
 ## Dry Run
 
@@ -45,7 +45,7 @@ cd packages/arcready
 npm publish --dry-run
 ```
 
-Inspect the output before release. The dry run should show `arcready@0.1.0` and only the expected package files.
+Inspect the output before release. The dry run should show `arcready@0.2.0` and only the expected package files.
 
 ## Before Real Publish
 

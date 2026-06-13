@@ -1,6 +1,6 @@
 # Final npm Publish Checklist
 
-ArcReady is prepared for a first npm publish as `arcready@0.1.0`.
+ArcReady is prepared for the next npm publish as `arcready@0.2.0`.
 
 Do not run the real publish command until the maintainer explicitly approves.
 
@@ -9,7 +9,7 @@ Do not run the real publish command until the maintainer explicitly approves.
 | Field | Value |
 | --- | --- |
 | Package name | `arcready` |
-| Version | `0.1.0` |
+| Version | `0.2.0` |
 | License | MIT |
 | Node.js | `>=22` |
 | CLI bin | `arcready` |
@@ -18,7 +18,7 @@ Do not run the real publish command until the maintainer explicitly approves.
 
 | Check | Status |
 | --- | --- |
-| npm name availability | `npm view arcready` returned `E404 Not Found` |
+| npm package status | `arcready@0.1.0` is already published; `0.2.0` is the next npm release candidate |
 | npm login | `npm whoami` returned `ENEEDAUTH`; npm login is required before real publish |
 | Build | Passed |
 | Test | Passed |
@@ -35,12 +35,9 @@ The publish dry-run includes only the expected package files:
 README.md
 dist/bin.d.ts
 dist/bin.js
-dist/bin.js.map
 dist/chunk-B4MOC2YJ.js
-dist/chunk-B4MOC2YJ.js.map
 dist/index.d.ts
 dist/index.js
-dist/index.js.map
 package.json
 ```
 
