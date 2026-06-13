@@ -85,19 +85,19 @@ runs:
 
         (
           cd "${WORKING_DIRECTORY}" &&
-          "${ARC_READY_BIN}" scan --format json --out .arcready/reports/arcready.json --fail-on "${{ inputs.fail-on }}"
+          "${ARC_READY_BIN}" scan --format json --out ../../.arcready/reports/arcready.json --fail-on "${{ inputs.fail-on }}"
         )
         scan_exit_code="$?"
 
         (
           cd "${WORKING_DIRECTORY}" &&
-          "${ARC_READY_BIN}" scan --format markdown --out .arcready/reports/arcready.md --fail-on none
+          "${ARC_READY_BIN}" scan --format markdown --out ../../.arcready/reports/arcready.md --fail-on none
         )
         markdown_exit_code="$?"
 
         (
           cd "${WORKING_DIRECTORY}" &&
-          "${ARC_READY_BIN}" scan --format html --out .arcready/reports/arcready.html --fail-on none
+          "${ARC_READY_BIN}" scan --format html --out ../../.arcready/reports/arcready.html --fail-on none
         )
         html_exit_code="$?"
 
