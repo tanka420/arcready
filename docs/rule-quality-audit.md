@@ -2,7 +2,9 @@
 
 ## Summary
 
-This audit covers 21 current `Rule` objects: 18 active static validation rules and 3 placeholder/internal no-op rules that are still present in the default preset registry and public exports.
+This Phase 3A audit covered 21 `Rule` objects: 18 active static validation rules and 3 placeholder/internal no-op rules that were still present in the default preset registry and public exports at the time of the audit.
+
+Phase 3B cleanup note: the placeholder/internal no-op rules have now been removed from the package entrypoint and from the default preset registry. Active wallet, App Kit, and bridge rules remain available through their presets.
 
 ArcReady has a useful rule foundation for v0.2.0. The active rules are Arc-specific in intent, have direct unit coverage, and are backed by smoke fixtures for wallet, bridge, and App Kit presets. The main v0.3.0 risk is not missing product breadth; it is rule precision. Most current rules rely on regex and line-level text matching, which is acceptable for an early static CI gate but creates false positive risk in comments, docs, unrelated helper code, split configuration files, and variable-derived values.
 
@@ -43,7 +45,7 @@ Phase 3 should remain static and CLI-first. SaaS, dashboards, authentication, da
 
 ## Highest Priority Improvements
 
-1. Clean up the public API surface before improving behavior. The placeholder rules are exported from the package entrypoint and included in the default preset registry. They are not useful to external users and make the package appear less mature.
+1. Keep the public API surface clean before improving behavior. Phase 3B removed the placeholder rules from the package entrypoint and default preset registry because they were not useful to external users and made the product look unfinished.
 2. Harden fixture realism before broad rule rewrites. Current fixtures are good smoke tests, but most bad fixtures trigger only one representative rule. They do not cover many active rules or realistic framework layouts.
 3. Reduce brittle string matching. Most active rules scan raw text with regexes and coarse context checks. That creates avoidable false positives in comments, README content, tests, and unrelated helper strings.
 4. Improve App Kit warnings first. App Kit warning rules have the highest heuristic risk because they infer missing capability guards, RPC setup, delegate handling, fees, and minimum amounts from broad keyword absence.
@@ -114,7 +116,7 @@ These rules map to clear Arc-specific integration guidance and belong in ArcRead
 
 The package entrypoint exports more than a CLI-oriented public API normally needs. Cleanup should happen deliberately in Phase 3B, with a semver-compatible plan.
 
-Highest priority cleanup candidates:
+Highest priority cleanup candidates addressed in Phase 3B:
 
 - `walletPlaceholderRule`
 - `appKitPlaceholderRule`

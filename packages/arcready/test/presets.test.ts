@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { createPresetRegistry } from "../src/index.js";
+import * as arcready from "../src/index.js";
+import { createPresetRegistry, getRulesForPresets } from "../src/index.js";
 import type { Rule } from "../src/index.js";
 
 describe("preset registry", () => {
@@ -40,6 +41,34 @@ describe("preset registry", () => {
         reasons: ["package.json contains @circle-fin/app-kit"]
       })
     ).toEqual([appKitRule]);
+  });
+
+  it("does not expose placeholder rules from the public entrypoint", () => {
+    expect("walletPlaceholderRule" in arcready).toBe(false);
+    expect("appKitPlaceholderRule" in arcready).toBe(false);
+    expect("bridgePlaceholderRule" in arcready).toBe(false);
+  });
+
+  it("does not include placeholder rules in default presets", () => {
+    const ruleIds = getRulesForPresets(["wallet", "app-kit", "bridge"]).map(
+      (rule) => rule.id
+    );
+
+    expect(ruleIds).not.toContain("wallet/placeholder");
+    expect(ruleIds).not.toContain("app-kit/placeholder");
+    expect(ruleIds).not.toContain("bridge/placeholder");
+  });
+
+  it("keeps active rules available through default presets", () => {
+    expect(getRulesForPresets(["wallet"]).map((rule) => rule.id)).toContain(
+      "wallet/ARC_CHAIN_METADATA"
+    );
+    expect(getRulesForPresets(["app-kit"]).map((rule) => rule.id)).toContain(
+      "app-kit/APPKIT_CHAIN_IDENTIFIER_VALID"
+    );
+    expect(getRulesForPresets(["bridge"]).map((rule) => rule.id)).toContain(
+      "bridge/BRIDGE_CONFIRMATIONS_ONE"
+    );
   });
 });
 

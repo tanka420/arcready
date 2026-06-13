@@ -43,40 +43,10 @@ export function createPresetRegistry(
   };
 }
 
-export const walletPlaceholderRule: Rule = {
-  id: "wallet/placeholder",
-  name: "Wallet placeholder rule",
-  description: "Placeholder wallet rule for rule engine validation.",
-  preset: "wallet",
-  defaultSeverity: "info",
-  docs: [],
-  run: () => []
-};
-
-export const appKitPlaceholderRule: Rule = {
-  id: "app-kit/placeholder",
-  name: "App Kit placeholder rule",
-  description: "Placeholder App Kit rule for rule engine validation.",
-  preset: "app-kit",
-  defaultSeverity: "info",
-  docs: [],
-  run: () => []
-};
-
-export const bridgePlaceholderRule: Rule = {
-  id: "bridge/placeholder",
-  name: "Bridge placeholder rule",
-  description: "Placeholder bridge rule for rule engine validation.",
-  preset: "bridge",
-  defaultSeverity: "info",
-  docs: [],
-  run: () => []
-};
-
 export const defaultPresetRegistry = createPresetRegistry({
-  wallet: [walletPlaceholderRule, ...walletRules],
-  "app-kit": [appKitPlaceholderRule, ...appKitRules],
-  bridge: [bridgePlaceholderRule, ...bridgeRules]
+  wallet: walletRules,
+  "app-kit": appKitRules,
+  bridge: bridgeRules
 });
 
 export function getRulesForPresets(presets: ArcReadyPreset[]): Rule[] {

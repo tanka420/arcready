@@ -42,13 +42,10 @@ export type {
   RuleContext
 } from "../core/rules/index.js";
 export {
-  appKitPlaceholderRule,
-  bridgePlaceholderRule,
   createPresetRegistry,
   defaultPresetRegistry,
   getRulesForPresets,
-  getRulesForScan,
-  walletPlaceholderRule
+  getRulesForScan
 } from "../presets/index.js";
 export type { PresetRegistry, PresetRuleMap } from "../presets/index.js";
 export { getReporter } from "../reporters/index.js";
