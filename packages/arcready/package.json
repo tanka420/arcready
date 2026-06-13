@@ -1,9 +1,29 @@
 {
   "name": "arcready",
-  "version": "0.0.0",
-  "description": "Arc-specific CI quality gate and integration validator.",
+  "version": "0.1.0",
+  "description": "Arc-specific CI quality gate and integration validator for wallets, bridges, App Kit integrations, and dApps.",
   "license": "MIT",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tanka420/arcready.git",
+    "directory": "packages/arcready"
+  },
+  "homepage": "https://github.com/tanka420/arcready#readme",
+  "bugs": {
+    "url": "https://github.com/tanka420/arcready/issues"
+  },
+  "keywords": [
+    "arc",
+    "circle",
+    "ci",
+    "quality-gate",
+    "validation",
+    "wallet",
+    "bridge",
+    "app-kit",
+    "typescript"
+  ],
   "bin": {
     "arcready": "./dist/bin.js"
   },
@@ -14,7 +34,9 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "package.json"
   ],
   "engines": {
     "node": ">=22"
