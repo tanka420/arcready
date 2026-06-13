@@ -1,6 +1,6 @@
 # ArcReady Roadmap
 
-ArcReady is currently preparing the `v0.3.0` rule quality hardening release candidate.
+ArcReady is currently release-ready for the `v0.3.0` rule quality hardening release.
 
 The MVP proves the core foundation:
 
@@ -28,11 +28,11 @@ ArcReady should remain:
 
 ArcReady should not become a SaaS dashboard, telemetry tool, generic multi-chain linter, or hosted monitoring service in the near term.
 
-## v0.3 Release Candidate
+## v0.3 Rule Quality Hardening
 
-The v0.3 phase is nearing completion as a quality-focused npm release candidate.
+The v0.3 phase is release-ready as a quality-focused npm and GitHub Action release.
 
-Completed release-candidate scope:
+Completed release-ready scope:
 
 * removed placeholder/internal no-op rules from public API and default presets
 * improved wallet rule precision and false-positive handling
@@ -40,6 +40,7 @@ Completed release-candidate scope:
 * improved App Kit static integration-pattern rule precision
 * added cross-preset regression coverage
 * improved finding messages and suggestions across all 18 active rules
+* prepared GitHub Action usage for `tanka420/arcready@v0.3.0`
 
 Still out of scope for this release:
 
@@ -212,7 +213,7 @@ The following are intentionally out of scope for the near-term roadmap:
 The next practical work item should be:
 
 ```text
-Complete the v0.3.0 release gate after npm release-candidate verification.
+Create the v0.3.0 git tag and GitHub Release after maintainer approval.
 ```
 
 This keeps ArcReady useful as a static CI quality gate without expanding into runtime checks or hosted infrastructure.

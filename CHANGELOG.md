@@ -2,6 +2,8 @@
 
 ## v0.3.0 - Rule quality hardening
 
+- Published `arcready@0.3.0`
+- Prepared GitHub Action usage for `tanka420/arcready@v0.3.0`
 - Removed placeholder/internal no-op rules from the public API and default presets
 - Improved wallet rule precision and false-positive handling
 - Improved bridge rule precision and false-positive handling

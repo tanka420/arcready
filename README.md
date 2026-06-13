@@ -244,10 +244,10 @@ Result: PASS
 ArcReady can be used as a GitHub Action:
 
 ```yaml
-- uses: tanka420/arcready@v0.2.0
+- uses: tanka420/arcready@v0.3.0
 ```
 
-External action usage is validated with `tanka420/arcready@v0.2.0`.
+External action usage is configured for `tanka420/arcready@v0.3.0`.
 
 See [docs/github-action.md](docs/github-action.md).
 

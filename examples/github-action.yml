@@ -14,7 +14,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: tanka420/arcready@v0.2.0
+      - uses: tanka420/arcready@v0.3.0
         with:
           fail-on: critical
           upload-artifact: true

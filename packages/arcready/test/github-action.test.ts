@@ -12,7 +12,7 @@ describe("GitHub Action wrapper", () => {
     expect(existsSync(actionPath)).toBe(true);
     expect(action).toContain("using: composite");
     expect(action).toContain("arcready-version:");
-    expect(action).toContain('default: "0.2.0"');
+    expect(action).toContain('default: "0.3.0"');
     expect(action).toContain("working-directory:");
     expect(action).toContain("fail-on:");
     expect(action).toContain("output-dir:");
@@ -99,7 +99,7 @@ describe("GitHub Action wrapper", () => {
     expect(existsSync(workflowPath)).toBe(true);
     expect(workflow).toContain("workflow_dispatch:");
     expect(workflow).toContain("branches: [main]");
-    expect(workflow).toContain("uses: tanka420/arcready@v0.2.0");
+    expect(workflow).toContain("uses: tanka420/arcready@v0.3.0");
     expect(workflow).toContain("working-directory: fixtures/wallet-good");
     expect(workflow).toContain("working-directory: fixtures/wallet-bad");
     expect(workflow).toContain("continue-on-error: true");

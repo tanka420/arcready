@@ -4,7 +4,7 @@ ArcReady provides a GitHub Action for running Arc-specific static CI checks in e
 
 > ArcReady is an independent open-source project. It is not an official Circle or Arc product.
 
-The GitHub Action is intended for static integration validation of common Arc wallet, bridge, App Kit, and dApp mistakes. It does not perform live Arc RPC checks, on-chain simulation, contract deployment checks, or bridge runtime simulation.
+The GitHub Action is intended for static integration validation of common Arc wallet, bridge, App Kit, and dApp mistakes. It does not perform live Arc RPC checks, Circle API checks, on-chain simulation, contract deployment checks, bridge runtime simulation, or real App Kit runtime validation.
 
 ## Basic Usage
 
@@ -25,18 +25,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: tanka420/arcready@v0.2.0
+      - uses: tanka420/arcready@v0.3.0
         with:
           fail-on: critical
 ```
 
-`v0.2.0` is the first GitHub Action-ready release. The action runs the published npm CLI package, and the default CLI version is `0.2.0`. You can override the CLI package version with `arcready-version`.
+`v0.3.0` is the current GitHub Action-ready release and includes rule quality hardening. The action runs the published npm CLI package, and the default CLI version is `0.3.0`. You can override the CLI package version with `arcready-version`.
 
 ## Inputs
 
 | Input | Default | Description |
 | --- | --- | --- |
-| `arcready-version` | `0.2.0` | ArcReady npm package version to run |
+| `arcready-version` | `0.3.0` | ArcReady npm package version to run |
 | `working-directory` | `.` | Directory to scan |
 | `fail-on` | `critical` | Fail when findings reach `critical`, `warning`, `info`, or `none` |
 | `output-dir` | `.arcready/reports` | Directory for ArcReady report files |
@@ -48,7 +48,7 @@ jobs:
 Scan a subdirectory:
 
 ```yaml
-- uses: tanka420/arcready@v0.2.0
+- uses: tanka420/arcready@v0.3.0
   with:
     working-directory: apps/wallet
     fail-on: critical
@@ -67,7 +67,7 @@ The action writes:
 Upload artifacts with the default settings:
 
 ```yaml
-- uses: tanka420/arcready@v0.2.0
+- uses: tanka420/arcready@v0.3.0
   with:
     upload-artifact: true
 ```
@@ -75,7 +75,7 @@ Upload artifacts with the default settings:
 Customize the report directory and artifact name:
 
 ```yaml
-- uses: tanka420/arcready@v0.2.0
+- uses: tanka420/arcready@v0.3.0
   with:
     output-dir: reports/arcready
     artifact-name: arc-static-validation
@@ -109,9 +109,9 @@ with:
 The repository includes an external action smoke workflow that validates the released action syntax:
 
 ```yaml
-uses: tanka420/arcready@v0.2.0
+uses: tanka420/arcready@v0.3.0
 ```
 
 It checks a known-good fixture that should pass and a known-bad fixture that should fail as expected.
 
-External action smoke validation has passed using `uses: tanka420/arcready@v0.2.0`.
+External action smoke validation is configured to use `uses: tanka420/arcready@v0.3.0` after the `v0.3.0` tag is created and pushed.

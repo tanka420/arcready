@@ -5,7 +5,7 @@ inputs:
   arcready-version:
     description: "ArcReady npm package version to run"
     required: false
-    default: "0.2.0"
+    default: "0.3.0"
   working-directory:
     description: "Directory to scan"
     required: false
