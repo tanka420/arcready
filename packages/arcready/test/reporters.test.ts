@@ -3,6 +3,7 @@ import {
   htmlReporter,
   jsonReporter,
   markdownReporter,
+  PACKAGE_VERSION,
   terminalReporter
 } from "../src/index.js";
 import type { ScanReport } from "../src/index.js";
@@ -11,7 +12,7 @@ describe("terminalReporter", () => {
   it("renders a clean report", () => {
     const output = terminalReporter.render(createReport([]));
 
-    expect(output).toContain("ArcReady v");
+    expect(output).toContain(`ArcReady v${PACKAGE_VERSION}`);
     expect(output).toContain("Project: fixture");
     expect(output).toContain("Score: 100");
     expect(output).toContain("Status: pass");

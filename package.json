@@ -10,6 +10,7 @@
     "build": "corepack pnpm -r build",
     "validate:fixtures": "tsx scripts/demo-fixtures.ts",
     "demo:fixtures": "tsx scripts/demo-fixtures.ts",
+    "smoke:package": "tsx scripts/smoke-package.ts",
     "test": "corepack pnpm -r test",
     "lint": "eslint .",
     "format": "prettier --write .",

@@ -1,5 +1,6 @@
 export { createStubReport, runScan } from "./report.js";
 export type { ScanResult } from "./report.js";
+export { PACKAGE_VERSION } from "./package.js";
 export {
   CONFIG_FILE_NAME,
   DEFAULT_CONFIG,

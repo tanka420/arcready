@@ -9,7 +9,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { createStubReport, runCli } from "../src/index.js";
+import { createStubReport, PACKAGE_VERSION, runCli } from "../src/index.js";
 import type { CliIo } from "../src/index.js";
 
 const tempDirs: string[] = [];
@@ -47,7 +47,7 @@ describe("arcready CLI", () => {
     const rendered = output.join("");
 
     expect(code).toBe(0);
-    expect(rendered).toContain("ArcReady v");
+    expect(rendered).toContain(`ArcReady v${PACKAGE_VERSION}`);
     expect(rendered).toContain("Project:");
     expect(rendered).toContain("Score: 100");
     expect(rendered).toContain("No findings.");

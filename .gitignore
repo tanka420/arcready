@@ -3,6 +3,7 @@ dist/
 coverage/
 .pnpm-store/
 *.log
+*.tgz
 .arcready/
 reports/
 .claude/

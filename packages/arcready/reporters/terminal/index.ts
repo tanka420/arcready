@@ -1,14 +1,14 @@
 import type { Finding, Severity } from "../../core/findings/index.js";
+import { PACKAGE_VERSION } from "../../src/package.js";
 import type { Reporter } from "../index.js";
 
-const VERSION = "0.0.0";
 const SEVERITY_ORDER: Severity[] = ["critical", "warning", "info"];
 
 export const terminalReporter: Reporter = {
   format: "terminal",
   render(report) {
     const lines = [
-      `ArcReady v${VERSION}`,
+      `ArcReady v${PACKAGE_VERSION}`,
       "",
       `Project: ${report.project}`,
       `Score: ${report.score}`,
