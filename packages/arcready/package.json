@@ -1,0 +1,30 @@
+{
+  "name": "arcready",
+  "version": "0.0.0",
+  "description": "Arc-specific CI quality gate and integration validator.",
+  "type": "module",
+  "bin": {
+    "arcready": "./dist/bin.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "arcready": "node ./dist/bin.js",
+    "build": "tsup src/index.ts src/bin.ts --format esm --dts --clean --sourcemap",
+    "test": "vitest run",
+    "dev": "tsx src/bin.ts"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.4"
+  }
+}

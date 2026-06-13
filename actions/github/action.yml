@@ -1,0 +1,133 @@
+name: ArcReady
+description: Run ArcReady as a CI quality gate and upload scan reports.
+
+inputs:
+  working-directory:
+    description: Directory where ArcReady should scan.
+    required: false
+    default: .
+  format:
+    description: Primary report format to show in logs.
+    required: false
+    default: markdown
+  fail-on:
+    description: Controls when the action fails.
+    required: false
+    default: critical
+  config:
+    description: Path to ArcReady config file.
+    required: false
+    default: arcready.config.json
+  upload-artifact:
+    description: Whether to upload report artifacts.
+    required: false
+    default: "true"
+  artifact-name:
+    description: Name for uploaded report artifact.
+    required: false
+    default: arcready-report
+
+outputs:
+  exit-code:
+    description: ArcReady scan exit code.
+    value: ${{ steps.scan.outputs.exit-code }}
+  json-report:
+    description: Path to the generated JSON report.
+    value: ${{ steps.scan.outputs.json-report }}
+  markdown-report:
+    description: Path to the generated Markdown report.
+    value: ${{ steps.scan.outputs.markdown-report }}
+  html-report:
+    description: Path to the generated HTML report.
+    value: ${{ steps.scan.outputs.html-report }}
+
+runs:
+  using: composite
+  steps:
+    - name: Enable Corepack
+      shell: bash
+      run: corepack enable
+
+    - name: Install dependencies
+      shell: bash
+      working-directory: ${{ github.action_path }}/../..
+      run: corepack pnpm install --frozen-lockfile
+
+    - name: Build ArcReady CLI
+      shell: bash
+      working-directory: ${{ github.action_path }}/../..
+      run: corepack pnpm build
+
+    - name: Print ArcReady version
+      shell: bash
+      working-directory: ${{ github.action_path }}/../..
+      run: node -e "console.log('ArcReady ' + require('./packages/arcready/package.json').version)"
+
+    - name: Run ArcReady scans
+      id: scan
+      shell: bash
+      run: |
+        set +e
+
+        ARC_READY_ROOT="${GITHUB_ACTION_PATH}/../.."
+        WORKING_DIRECTORY="${{ inputs.working-directory }}"
+        REPORT_DIR="${WORKING_DIRECTORY}/.arcready/reports"
+        ARC_READY_BIN="${ARC_READY_ROOT}/node_modules/.bin/arcready"
+
+        mkdir -p "${REPORT_DIR}"
+
+        # TODO: Pass "${{ inputs.config }}" once the CLI supports --config.
+
+        (
+          cd "${WORKING_DIRECTORY}" &&
+          "${ARC_READY_BIN}" scan --format "${{ inputs.format }}" --fail-on none
+        )
+
+        (
+          cd "${WORKING_DIRECTORY}" &&
+          "${ARC_READY_BIN}" scan --format json --out .arcready/reports/arcready.json --fail-on "${{ inputs.fail-on }}"
+        )
+        scan_exit_code="$?"
+
+        (
+          cd "${WORKING_DIRECTORY}" &&
+          "${ARC_READY_BIN}" scan --format markdown --out .arcready/reports/arcready.md --fail-on none
+        )
+        markdown_exit_code="$?"
+
+        (
+          cd "${WORKING_DIRECTORY}" &&
+          "${ARC_READY_BIN}" scan --format html --out .arcready/reports/arcready.html --fail-on none
+        )
+        html_exit_code="$?"
+
+        if [ -n "${GITHUB_STEP_SUMMARY:-}" ] && [ -f "${REPORT_DIR}/arcready.md" ]; then
+          cat "${REPORT_DIR}/arcready.md" >> "${GITHUB_STEP_SUMMARY}"
+        fi
+
+        echo "exit-code=${scan_exit_code}" >> "${GITHUB_OUTPUT}"
+        echo "json-report=${REPORT_DIR}/arcready.json" >> "${GITHUB_OUTPUT}"
+        echo "markdown-report=${REPORT_DIR}/arcready.md" >> "${GITHUB_OUTPUT}"
+        echo "html-report=${REPORT_DIR}/arcready.html" >> "${GITHUB_OUTPUT}"
+
+        if [ "${markdown_exit_code}" -ne 0 ]; then
+          echo "Markdown report generation failed with exit code ${markdown_exit_code}."
+        fi
+
+        if [ "${html_exit_code}" -ne 0 ]; then
+          echo "HTML report generation failed with exit code ${html_exit_code}."
+        fi
+
+        exit 0
+
+    - name: Upload ArcReady reports
+      if: ${{ inputs.upload-artifact == 'true' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ inputs.working-directory }}/.arcready/reports
+        if-no-files-found: error
+
+    - name: Fail on ArcReady result
+      shell: bash
+      run: exit "${{ steps.scan.outputs.exit-code }}"
