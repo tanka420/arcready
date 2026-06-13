@@ -6,26 +6,64 @@ ArcReady is an Arc-specific CI quality gate and integration validator for wallet
 
 ## Install
 
-ArcReady is being prepared for npm publishing. After publishing, install it as a development dependency:
+Run without installing:
+
+```bash
+npx arcready scan
+```
+
+Or install globally:
+
+```bash
+npm install -g arcready
+arcready scan
+```
+
+Or install as a development dependency:
 
 ```bash
 npm install -D arcready
+npx arcready scan
 ```
 
-or:
+With pnpm:
 
 ```bash
 pnpm add -D arcready
+pnpm arcready scan
 ```
 
 ## Usage
+
+Create a config file:
+
+```bash
+npx arcready init
+```
+
+Run a terminal report:
 
 ```bash
 npx arcready scan --format terminal
 ```
 
+Run a JSON report:
+
 ```bash
-pnpm arcready scan --format json
+npx arcready scan --format json
+```
+
+Run Markdown and HTML reports:
+
+```bash
+npx arcready scan --format markdown
+npx arcready scan --format html
+```
+
+Override the fail threshold:
+
+```bash
+npx arcready scan --fail-on warning
 ```
 
 ArcReady supports terminal, JSON, Markdown, and HTML reports, plus configurable fail thresholds with `--fail-on`.
@@ -40,7 +78,11 @@ Create an `arcready.config.json` file in the project you want to scan:
   "paths": ["src", "app", "components", "lib", "package.json"],
   "exclude": ["dist/**", "coverage/**", ".next/**", "node_modules/**"],
   "reporters": ["terminal", "json", "markdown", "html"],
-  "failOn": "critical"
+  "failOn": "critical",
+  "rpc": {
+    "arcTestnetHttp": "https://your-arc-testnet-rpc.example",
+    "arcTestnetWs": "wss://your-arc-testnet-ws.example"
+  }
 }
 ```
 

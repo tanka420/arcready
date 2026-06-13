@@ -89,12 +89,24 @@ Not included in v1:
 
 ## Quick Start
 
-ArcReady is not published to npm yet. For now, run it locally from this repository.
+Run without installing:
 
 ```bash
-corepack pnpm install
-corepack pnpm build
-corepack pnpm --filter arcready exec arcready scan --format terminal
+npx arcready scan
+```
+
+Or install globally:
+
+```bash
+npm install -g arcready
+arcready scan
+```
+
+Or install as a development dependency:
+
+```bash
+npm install -D arcready
+npx arcready scan
 ```
 
 ## Configuration
@@ -108,6 +120,10 @@ Create an `arcready.config.json` file in the project you want to scan.
   "exclude": ["dist/**", "coverage/**", ".next/**", "node_modules/**"],
   "reporters": ["terminal", "json", "markdown", "html"],
   "failOn": "critical",
+  "rpc": {
+    "arcTestnetHttp": "https://your-arc-testnet-rpc.example",
+    "arcTestnetWs": "wss://your-arc-testnet-ws.example"
+  },
   "rules": {
     "wallet/ONE_CONFIRMATION_FINAL": "critical",
     "bridge/BRIDGE_CONFIRMATIONS_ONE": "critical",
@@ -129,56 +145,54 @@ The CLI `--fail-on` option overrides the config value.
 
 ## CLI Usage
 
+Create a config file:
+
+```bash
+npx arcready init
+```
+
 Run a terminal report:
 
 ```bash
-corepack pnpm --filter arcready exec arcready scan --format terminal
+npx arcready scan --format terminal
 ```
 
 Run a JSON report:
 
 ```bash
-corepack pnpm --filter arcready exec arcready scan --format json
+npx arcready scan --format json
 ```
 
 Run a Markdown report:
 
 ```bash
-corepack pnpm --filter arcready exec arcready scan --format markdown
+npx arcready scan --format markdown
 ```
 
 Run an HTML report:
 
 ```bash
-corepack pnpm --filter arcready exec arcready scan --format html
+npx arcready scan --format html
 ```
 
 Override the fail threshold:
 
 ```bash
-corepack pnpm --filter arcready exec arcready scan --fail-on warning
+npx arcready scan --fail-on warning
 ```
 
-### Writing report files
-
-When using `pnpm --filter arcready exec`, relative output paths are resolved from the package working directory.
-
-This command:
+Write report files:
 
 ```bash
-corepack pnpm --filter arcready exec arcready scan --format markdown --out reports/arcready.md
+npx arcready scan --format json --out .arcready/reports/arcready.json
+npx arcready scan --format markdown --out .arcready/reports/arcready.md
+npx arcready scan --format html --out .arcready/reports/arcready.html
 ```
 
-writes to:
-
-```text
-packages/arcready/reports/arcready.md
-```
-
-To write to a root-level `reports/` folder instead, use:
+If installed globally, use `arcready` directly:
 
 ```bash
-corepack pnpm --filter arcready exec arcready scan --format markdown --out ../../reports/arcready.md
+arcready scan --format terminal
 ```
 
 Generated report folders such as `.arcready/` and `reports/` are ignored by git.
