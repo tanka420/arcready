@@ -4,6 +4,8 @@ import {
   createBridgeFinding,
   isArcRelated,
   isBridgeRelated,
+  isCommentOrDocumentationLine,
+  isGuidanceAgainstUsage,
   readBridgeFiles
 } from "./helpers.js";
 
@@ -25,7 +27,7 @@ export const noWrappedUsdcOnArcRule: Rule = {
         continue;
       }
 
-      if (/\b(USDC\.e|wUSDC|wrapped USDC|bridged USDC)\b/i.test(content)) {
+      if (hasWrappedUsdcRoute(content)) {
         findings.push(
           createBridgeFinding(
             noWrappedUsdcOnArcRule,
@@ -41,3 +43,16 @@ export const noWrappedUsdcOnArcRule: Rule = {
     return findings;
   }
 };
+
+function hasWrappedUsdcRoute(content: string): boolean {
+  return content.split(/\r?\n/).some((line) => {
+    if (
+      isCommentOrDocumentationLine(line) ||
+      isGuidanceAgainstUsage(line, /\b(USDC\.e|wUSDC|wrapped USDC|bridged USDC)\b/i)
+    ) {
+      return false;
+    }
+
+    return /\b(USDC\.e|wUSDC|wrapped USDC|bridged USDC)\b/i.test(line);
+  });
+}

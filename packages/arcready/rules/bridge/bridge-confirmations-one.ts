@@ -4,6 +4,8 @@ import {
   createBridgeFinding,
   isArcRelated,
   isBridgeRelated,
+  isCommentOrDocumentationLine,
+  isGuidanceAgainstUsage,
   readBridgeFiles
 } from "./helpers.js";
 
@@ -43,9 +45,18 @@ export const bridgeConfirmationsOneRule: Rule = {
 };
 
 function hasMultiConfirmationBridgeLogic(content: string): boolean {
-  return (
-    /\b(requiredConfirmations|confirmations|finalityBlocks|waitForConfirmations)\s*[:=]\s*(?:[2-9]|\d{2,})\b/i.test(
-      content
-    ) || /\b(?:[2-9]|\d{2,})\s+confirmations?\b/i.test(content)
-  );
+  return content.split(/\r?\n/).some((line) => {
+    if (
+      isCommentOrDocumentationLine(line) ||
+      isGuidanceAgainstUsage(line, /\bconfirmations?\b/i)
+    ) {
+      return false;
+    }
+
+    return (
+      /\b(requiredConfirmations|confirmations|finalityBlocks|waitForConfirmations)\s*[:=]\s*(?:[2-9]|\d{2,})\b/i.test(
+        line
+      ) || /\b(?:[2-9]|\d{2,})\s+confirmations?\b/i.test(line)
+    );
+  });
 }

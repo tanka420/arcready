@@ -4,6 +4,8 @@ import {
   createBridgeFinding,
   isArcRelated,
   isBridgeRelated,
+  isCommentOrDocumentationLine,
+  isGuidanceAgainstUsage,
   readBridgeFiles
 } from "./helpers.js";
 
@@ -43,8 +45,17 @@ export const noPrevrandaoRelaySelectionRule: Rule = {
 };
 
 function hasPrevrandaoRelaySelection(content: string): boolean {
-  return (
-    /\b(block\.prevrandao|PREVRANDAO|prevrandao|mixHash)\b/.test(content) &&
-    /(relay|relayer|selection|select|shuffle|randomness|random)/i.test(content)
-  );
+  return content.split(/\r?\n/).some((line) => {
+    if (
+      isCommentOrDocumentationLine(line) ||
+      isGuidanceAgainstUsage(line, /\b(block\.prevrandao|PREVRANDAO|prevrandao|mixHash)\b/)
+    ) {
+      return false;
+    }
+
+    return (
+      /\b(block\.prevrandao|PREVRANDAO|prevrandao|mixHash)\b/.test(line) &&
+      /(relay|relayer|selection|select|shuffle|randomness|random)/i.test(line)
+    );
+  });
 }

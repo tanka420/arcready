@@ -47,6 +47,15 @@ describe("bridge rules", () => {
     ).resolves.toEqual([]);
   });
 
+  it("BRIDGE_CONFIRMATIONS_ONE ignores guidance against slow finality", async () => {
+    await expect(
+      runBridgeRule(
+        bridgeConfirmationsOneRule,
+        "const chain = 'Arc Testnet';\nexport const docs = 'Do not wait for 12 confirmations in Arc bridge settlement.';"
+      )
+    ).resolves.toEqual([]);
+  });
+
   it("CCTP_DOMAIN_26 flags wrong Arc CCTP domain", async () => {
     const findings = await runBridgeRule(
       cctpDomain26Rule,
@@ -65,6 +74,15 @@ describe("bridge rules", () => {
       runBridgeRule(
         cctpDomain26Rule,
         "export const ARC_DOMAIN = 26; // Arc CCTP depositForBurn attestation"
+      )
+    ).resolves.toEqual([]);
+  });
+
+  it("CCTP_DOMAIN_26 ignores documentation warning about wrong domains", async () => {
+    await expect(
+      runBridgeRule(
+        cctpDomain26Rule,
+        "const chain = 'Arc Testnet';\n// CCTP note: do not set ARC_DOMAIN = 6; use 26."
       )
     ).resolves.toEqual([]);
   });
@@ -91,6 +109,15 @@ describe("bridge rules", () => {
     ).resolves.toEqual([]);
   });
 
+  it("NO_WRAPPED_USDC_ON_ARC ignores guidance against wrapped USDC", async () => {
+    await expect(
+      runBridgeRule(
+        noWrappedUsdcOnArcRule,
+        "const chain = 'Arc Testnet';\nexport const docs = 'Do not route USDC.e or wrapped USDC to Arc bridge users.';"
+      )
+    ).resolves.toEqual([]);
+  });
+
   it("RELAYER_USES_USDC_FOR_GAS flags ETH relayer funding", async () => {
     const findings = await runBridgeRule(
       relayerUsesUsdcForGasRule,
@@ -102,6 +129,28 @@ describe("bridge rules", () => {
       severity: "critical",
       docs: "arc-usdc-gas"
     });
+  });
+
+  it("RELAYER_USES_USDC_FOR_GAS flags ETH relayer gas token config", async () => {
+    const findings = await runBridgeRule(
+      relayerUsesUsdcForGasRule,
+      "export const arcRelayer = { chain: 'Arc Testnet', relayerGasToken: 'ETH' };"
+    );
+
+    expect(findings[0]).toMatchObject({
+      ruleId: "bridge/RELAYER_USES_USDC_FOR_GAS",
+      severity: "critical",
+      docs: "arc-usdc-gas"
+    });
+  });
+
+  it("RELAYER_USES_USDC_FOR_GAS ignores guidance against ETH funding", async () => {
+    await expect(
+      runBridgeRule(
+        relayerUsesUsdcForGasRule,
+        "const chain = 'Arc Testnet';\n// Relayer setup: do not fund with ETH; use USDC for gas."
+      )
+    ).resolves.toEqual([]);
   });
 
   it("RELAYER_USES_USDC_FOR_GAS allows USDC relayer funding", async () => {
@@ -135,6 +184,15 @@ describe("bridge rules", () => {
     ).resolves.toEqual([]);
   });
 
+  it("ATTESTATION_404_NOT_FATAL ignores retry guidance about 404", async () => {
+    await expect(
+      runBridgeRule(
+        attestation404NotFatalRule,
+        "const flow = 'CCTP attestation on Arc';\n// Do not treat attestation 404 as fatal; retry while pending."
+      )
+    ).resolves.toEqual([]);
+  });
+
   it("NO_PREVRANDAO_RELAY_SELECTION flags PREVRANDAO relay selection", async () => {
     const findings = await runBridgeRule(
       noPrevrandaoRelaySelectionRule,
@@ -153,6 +211,15 @@ describe("bridge rules", () => {
       runBridgeRule(
         noPrevrandaoRelaySelectionRule,
         "const relaySelection = block.prevrandao % relayers.length;"
+      )
+    ).resolves.toEqual([]);
+  });
+
+  it("NO_PREVRANDAO_RELAY_SELECTION ignores guidance against PREVRANDAO selection", async () => {
+    await expect(
+      runBridgeRule(
+        noPrevrandaoRelaySelectionRule,
+        "const chain = 'Arc Testnet';\n// Do not use PREVRANDAO or mixHash for relayer selection randomness."
       )
     ).resolves.toEqual([]);
   });

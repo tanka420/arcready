@@ -4,6 +4,8 @@ import {
   createBridgeFinding,
   isArcRelated,
   isCctpRelated,
+  isCommentOrDocumentationLine,
+  isGuidanceAgainstUsage,
   readBridgeFiles
 } from "./helpers.js";
 
@@ -42,8 +44,18 @@ export const cctpDomain26Rule: Rule = {
 };
 
 function hasWrongArcDomain(content: string): boolean {
-  return (
-    /\bARC(?:_CCTP)?_DOMAIN\b\s*[:=]\s*(?!26\b)\d+\b/i.test(content) ||
-    /\bcctpDomains\b[\s\S]{0,400}\barc\b\s*:\s*(?!26\b)\d+\b/i.test(content)
-  );
+  return content.split(/\r?\n/).some((line) => {
+    if (
+      isCommentOrDocumentationLine(line) ||
+      isGuidanceAgainstUsage(line, /\bdomain\b/i)
+    ) {
+      return false;
+    }
+
+    return (
+      /\bARC(?:_CCTP)?_DOMAIN\b\s*[:=]\s*(?!26\b)\d+\b/i.test(line) ||
+      /\bcctpDomains\b.*\barc\b\s*:\s*(?!26\b)\d+\b/i.test(line) ||
+      /\barc\b\s*:\s*(?!26\b)\d+\b/i.test(line)
+    );
+  });
 }

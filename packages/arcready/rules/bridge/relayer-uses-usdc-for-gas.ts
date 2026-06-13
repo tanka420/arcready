@@ -3,6 +3,8 @@ import {
   BRIDGE_DOCS,
   createBridgeFinding,
   isArcRelated,
+  isCommentOrDocumentationLine,
+  isGuidanceAgainstUsage,
   readBridgeFiles
 } from "./helpers.js";
 
@@ -19,7 +21,10 @@ export const relayerUsesUsdcForGasRule: Rule = {
     const findings = [];
 
     for (const { filePath, content } of await readBridgeFiles(context)) {
-      if (!isArcRelated(content) || !/\brelayer?\b/i.test(content)) {
+      if (
+        !isArcRelated(content) ||
+        !/\b(relayers?|relay|relayerGasToken|gasToken|feeToken)\b/i.test(content)
+      ) {
         continue;
       }
 
@@ -41,7 +46,21 @@ export const relayerUsesUsdcForGasRule: Rule = {
 };
 
 function hasEthRelayerFunding(content: string): boolean {
-  return /\b(ETH funding|native ETH|fund with ETH|relayer ETH|gas token ETH|allocate ETH|send ETH|fund.*ETH)\b/i.test(
-    content
-  );
+  return content.split(/\r?\n/).some((line) => {
+    if (
+      isCommentOrDocumentationLine(line) ||
+      isGuidanceAgainstUsage(line, /\bETH\b/i)
+    ) {
+      return false;
+    }
+
+    return (
+      /\b(ETH funding|native ETH|fund with ETH|relayer ETH|gas token ETH|allocate ETH|send ETH|fund.*ETH)\b/i.test(
+        line
+      ) ||
+      /\b(?:gasToken|feeToken|relayerGasToken)\b\s*[:=]\s*["'`]ETH["'`]/i.test(
+        line
+      )
+    );
+  });
 }

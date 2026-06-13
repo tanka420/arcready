@@ -3,6 +3,8 @@ import {
   BRIDGE_DOCS,
   createBridgeFinding,
   isCctpRelated,
+  isCommentOrDocumentationLine,
+  isGuidanceAgainstUsage,
   readBridgeFiles
 } from "./helpers.js";
 
@@ -42,10 +44,20 @@ export const attestation404NotFatalRule: Rule = {
 };
 
 function hasFatal404AttestationHandling(content: string): boolean {
+  const activeContent = content
+    .split(/\r?\n/)
+    .filter(
+      (line) =>
+        !isCommentOrDocumentationLine(line) &&
+        !isGuidanceAgainstUsage(line, /\b404\b/i)
+    )
+    .join("\n");
+
   const fatal404Blocks =
     /(response\.status|status)\s*={0,2}\s*={1,2}\s*404[\s\S]{0,180}\b(throw|fatal|failed|error)\b/i.test(
-      content
-    ) || /\b404\b[\s\S]{0,120}\b(throw|fatal|failed|error)\b/i.test(content);
+      activeContent
+    ) ||
+    /\b404\b[\s\S]{0,120}\b(throw|fatal|failed|error)\b/i.test(activeContent);
 
   if (!fatal404Blocks) {
     return false;
@@ -53,10 +65,10 @@ function hasFatal404AttestationHandling(content: string): boolean {
 
   const hasPendingHandlingNear404 =
     /\b404\b[\s\S]{0,220}\b(retry|pending|not ready|processing|continue)\b/i.test(
-      content
+      activeContent
     ) ||
     /\b(retry|pending|not ready|processing|continue)\b[\s\S]{0,220}\b404\b/i.test(
-      content
+      activeContent
     );
 
   return !hasPendingHandlingNear404;
