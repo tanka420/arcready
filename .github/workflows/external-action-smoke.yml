@@ -1,0 +1,47 @@
+name: ArcReady External Action Smoke
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  wallet-good:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: tanka420/arcready@v0.2.0
+        with:
+          working-directory: fixtures/wallet-good
+          fail-on: critical
+          upload-artifact: true
+          artifact-name: arcready-external-good-report
+
+  wallet-bad:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: arcready-bad
+        uses: tanka420/arcready@v0.2.0
+        continue-on-error: true
+        with:
+          working-directory: fixtures/wallet-bad
+          fail-on: critical
+          upload-artifact: true
+          artifact-name: arcready-external-bad-report
+
+      - name: Verify ArcReady failed on wallet-bad
+        shell: bash
+        run: |
+          if [ "${{ steps.arcready-bad.outcome }}" != "failure" ]; then
+            echo "Expected ArcReady to fail on wallet-bad fixture"
+            exit 1
+          fi

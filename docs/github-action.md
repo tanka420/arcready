@@ -103,3 +103,13 @@ Generate reports without failing on findings:
 with:
   fail-on: none
 ```
+
+## External Smoke Coverage
+
+The repository includes an external action smoke workflow that validates the released action syntax:
+
+```yaml
+uses: tanka420/arcready@v0.2.0
+```
+
+It checks a known-good fixture that should pass and a known-bad fixture that should fail as expected.

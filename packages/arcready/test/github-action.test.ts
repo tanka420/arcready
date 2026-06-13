@@ -86,4 +86,25 @@ describe("GitHub Action wrapper", () => {
     expect(workflow).toContain("fail-on: critical");
     expect(workflow).toContain("upload-artifact: true");
   });
+
+  it("defines the external action smoke workflow", () => {
+    const workflowPath = join(
+      repoRoot,
+      ".github",
+      "workflows",
+      "external-action-smoke.yml"
+    );
+    const workflow = readFileSync(workflowPath, "utf8");
+
+    expect(existsSync(workflowPath)).toBe(true);
+    expect(workflow).toContain("workflow_dispatch:");
+    expect(workflow).toContain("branches: [main]");
+    expect(workflow).toContain("uses: tanka420/arcready@v0.2.0");
+    expect(workflow).toContain("working-directory: fixtures/wallet-good");
+    expect(workflow).toContain("working-directory: fixtures/wallet-bad");
+    expect(workflow).toContain("continue-on-error: true");
+    expect(workflow).toContain('steps.arcready-bad.outcome }}" != "failure"');
+    expect(workflow).toContain("arcready-external-good-report");
+    expect(workflow).toContain("arcready-external-bad-report");
+  });
 });

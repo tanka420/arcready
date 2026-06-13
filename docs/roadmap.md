@@ -115,7 +115,7 @@ Prepare the composite GitHub Action for external repository usage.
 
 Status:
 
-Release-ready for `v0.2.0`. Root action metadata, external usage docs, an example workflow, and an action smoke workflow are prepared. This does not include deeper Arc integration, live RPC checks, runtime simulation, or rule hardening.
+Released for `v0.2.0`; external action smoke validation is added to verify `tanka420/arcready@v0.2.0` against known-good and known-bad fixtures. This does not include deeper Arc integration, live RPC checks, runtime simulation, or rule hardening.
 
 Scope:
 
