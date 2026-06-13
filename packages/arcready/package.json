@@ -1,6 +1,6 @@
 {
   "name": "arcready",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Arc-specific CI quality gate and integration validator for wallets, bridges, App Kit integrations, and dApps.",
   "license": "MIT",
   "type": "module",

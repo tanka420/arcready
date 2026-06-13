@@ -16,6 +16,8 @@ Phase 3C-4 cleanup note: cross-preset regression coverage was added to verify pr
 
 Phase 3D cleanup note: finding messages and suggestions were improved across wallet, bridge, and App Kit rules while preserving ArcReady's static validation scope.
 
+Phase 3E-1 release-candidate note: Phase 3 hardening is complete as an npm `arcready@0.3.0` release candidate, with 18 active static rules, placeholder cleanup, rule precision hardening, cross-preset regression coverage, and improved finding messages.
+
 ArcReady has a useful rule foundation for v0.2.0. The active rules are Arc-specific in intent, have direct unit coverage, and are backed by smoke fixtures for wallet, bridge, and App Kit presets. The main v0.3.0 risk is not missing product breadth; it is rule precision. Most current rules rely on regex and line-level text matching, which is acceptable for an early static CI gate but creates false positive risk in comments, docs, unrelated helper code, split configuration files, and variable-derived values.
 
 The recommended next implementation order is:
