@@ -7,7 +7,7 @@ ArcReady is being prepared for npm publishing as an installable CLI package.
 | Field | Value |
 | --- | --- |
 | Package name | `arcready` |
-| Version | `0.2.0` |
+| Version | `0.3.0` |
 | License | MIT |
 | Node.js | `>=22` |
 | CLI bin | `arcready` |
@@ -45,7 +45,7 @@ cd packages/arcready
 npm publish --dry-run
 ```
 
-Inspect the output before release. The dry run should show `arcready@0.2.0` and only the expected package files.
+Inspect the output before release. The dry run should show `arcready@0.3.0` and only the expected package files.
 
 ## Before Real Publish
 
