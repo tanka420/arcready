@@ -15,6 +15,7 @@ import type { RuleMetadataInput } from "../../rules/taxonomy.js";
 import {
   ARCREADY_CONTRACT_VERSION,
   ContractV2ValidationError,
+  type CoverageV2,
   type FindingEvidenceV2,
   type FindingFingerprintV1,
   type FindingV2,
@@ -67,6 +68,464 @@ const DIAGNOSTIC_PHASES = [
 const DIAGNOSTIC_ORIGINS = ["user-input", "repository", "tool"] as const;
 const ANALYSIS_ENGINES = ["ast", "structured-config", "text-pattern"] as const;
 const LOCATION_PRECISIONS = ["repository", "file", "region"] as const;
+const DISCOVERY_COVERAGE_STATES = [
+  "complete",
+  "partial",
+  "failed",
+  "insufficient"
+] as const;
+const RULE_EXECUTION_COVERAGE_STATES = [
+  "complete",
+  "partial",
+  "failed",
+  "insufficient"
+] as const;
+const ENTRY_OBSERVATION_STATES = ["complete", "truncated"] as const;
+
+export function validateCoverageV2(
+  value: unknown
+): asserts value is CoverageV2 {
+  assertCoverageRecord(value, "CoverageV2");
+  assertOnlyKeys(
+    value,
+    [
+      "contractVersion",
+      "scope",
+      "discovery",
+      "ruleExecution",
+      "analysis",
+      "evidence"
+    ],
+    "CoverageV2"
+  );
+  if (value.contractVersion !== ARCREADY_CONTRACT_VERSION) {
+    fail(`CoverageV2 contractVersion must be "${ARCREADY_CONTRACT_VERSION}"`);
+  }
+
+  validateCoverageScope(value.scope);
+  validateDiscoveryCoverage(value.discovery, value.scope);
+  validateRuleExecutionCoverage(value.ruleExecution);
+  validateAnalysisCoverage(value.analysis);
+  validateCoverageEvidence(value.evidence);
+}
+
+function validateCoverageScope(
+  value: unknown
+): asserts value is Record<string, unknown> {
+  assertCoverageRecord(value, "CoverageV2 scope");
+  assertOnlyKeys(value, ["roots", "entries"], "CoverageV2 scope");
+
+  assertCoverageRecord(value.roots, "CoverageV2 scope roots");
+  assertOnlyKeys(
+    value.roots,
+    [
+      "requested",
+      "observedRootOutcomes",
+      "acceptedRootOutcomes",
+      "unavailableRootOutcomes",
+      "outsideProjectRootOutcomes"
+    ],
+    "CoverageV2 scope roots"
+  );
+  validateRequestedRootCount(value.roots.requested);
+  for (const field of [
+    "observedRootOutcomes",
+    "acceptedRootOutcomes",
+    "unavailableRootOutcomes",
+    "outsideProjectRootOutcomes"
+  ] as const) {
+    assertNonNegativeSafeInteger(
+      value.roots[field],
+      `CoverageV2 scope roots ${field}`
+    );
+  }
+  const observedRootOutcomes = value.roots.observedRootOutcomes as number;
+  const acceptedRootOutcomes = value.roots.acceptedRootOutcomes as number;
+  const unavailableRootOutcomes = value.roots
+    .unavailableRootOutcomes as number;
+  const outsideProjectRootOutcomes = value.roots
+    .outsideProjectRootOutcomes as number;
+  const dispositionRootOutcomes = checkedSafeIntegerAdd(
+    checkedSafeIntegerAdd(
+      acceptedRootOutcomes,
+      unavailableRootOutcomes,
+      "CoverageV2 root disposition outcome total"
+    ),
+    outsideProjectRootOutcomes,
+    "CoverageV2 root disposition outcome total"
+  );
+  if (
+    observedRootOutcomes !== dispositionRootOutcomes
+  ) {
+    fail("CoverageV2 observed root outcomes must equal disposition outcomes");
+  }
+  if (
+    value.roots.requested.state === "known" &&
+    value.roots.requested.count !== observedRootOutcomes
+  ) {
+    fail("CoverageV2 known requested roots must equal observed root outcomes");
+  }
+
+  assertCoverageRecord(value.entries, "CoverageV2 scope entries");
+  assertOnlyKeys(
+    value.entries,
+    [
+      "observation",
+      "uniqueEncounteredEntries",
+      "excludedEntries",
+      "extensionSupportedRegularFiles",
+      "extensionUnsupportedRegularFiles",
+      "candidateFiles",
+      "unrepresentableEntries"
+    ],
+    "CoverageV2 scope entries"
+  );
+  if (!includesValue(ENTRY_OBSERVATION_STATES, value.entries.observation)) {
+    fail("CoverageV2 entry observation is unsupported");
+  }
+  for (const field of [
+    "uniqueEncounteredEntries",
+    "excludedEntries",
+    "extensionSupportedRegularFiles",
+    "extensionUnsupportedRegularFiles",
+    "candidateFiles",
+    "unrepresentableEntries"
+  ] as const) {
+    assertNonNegativeSafeInteger(
+      value.entries[field],
+      `CoverageV2 scope entries ${field}`
+    );
+  }
+  const uniqueEncounteredEntries = value.entries
+    .uniqueEncounteredEntries as number;
+  const extensionSupportedRegularFiles = value.entries
+    .extensionSupportedRegularFiles as number;
+  const extensionUnsupportedRegularFiles = value.entries
+    .extensionUnsupportedRegularFiles as number;
+  for (const field of [
+    "excludedEntries",
+    "extensionSupportedRegularFiles",
+    "extensionUnsupportedRegularFiles",
+    "unrepresentableEntries"
+  ] as const) {
+    if ((value.entries[field] as number) > uniqueEncounteredEntries) {
+      fail(`CoverageV2 scope entries ${field} exceeds encountered entries`);
+    }
+  }
+  if (
+    checkedSafeIntegerAdd(
+      extensionSupportedRegularFiles,
+      extensionUnsupportedRegularFiles,
+      "CoverageV2 extension-support regular file total"
+    ) > uniqueEncounteredEntries
+  ) {
+    fail(
+      "CoverageV2 extension-support regular files exceed encountered entries"
+    );
+  }
+  if (
+    (value.entries.candidateFiles as number) >
+    extensionSupportedRegularFiles
+  ) {
+    fail("CoverageV2 candidate files exceed supported regular files");
+  }
+}
+
+function validateRequestedRootCount(
+  value: unknown
+): asserts value is Record<string, unknown> {
+  assertCoverageRecord(value, "CoverageV2 requested roots");
+  if (value.state === "known") {
+    assertOnlyKeys(value, ["state", "count"], "CoverageV2 requested roots");
+    assertNonNegativeSafeInteger(
+      value.count,
+      "CoverageV2 requested root count"
+    );
+    return;
+  }
+  if (value.state === "unknown") {
+    assertOnlyKeys(value, ["state"], "CoverageV2 requested roots");
+    return;
+  }
+  fail("CoverageV2 requested root count state is unsupported");
+}
+
+function validateDiscoveryCoverage(
+  value: unknown,
+  scope: Record<string, unknown>
+): void {
+  assertCoverageRecord(value, "CoverageV2 discovery");
+  assertOnlyKeys(value, ["state"], "CoverageV2 discovery");
+  if (!includesValue(DISCOVERY_COVERAGE_STATES, value.state)) {
+    fail("CoverageV2 discovery state is unsupported");
+  }
+
+  const roots = scope.roots as Record<string, unknown>;
+  const entries = scope.entries as Record<string, unknown>;
+  const requested = roots.requested as Record<string, unknown>;
+  const accepted = roots.acceptedRootOutcomes as number;
+  const observation = entries.observation;
+
+  if (requested.state === "unknown") {
+    if (observation !== "truncated" || value.state !== "failed") {
+      fail("CoverageV2 unknown requested roots require failed discovery");
+    }
+  }
+
+  switch (value.state) {
+    case "complete":
+      if (
+        requested.state !== "known" ||
+        (requested.count as number) === 0 ||
+        accepted !== requested.count ||
+        observation !== "complete"
+      ) {
+        fail("CoverageV2 complete discovery invariants are not satisfied");
+      }
+      return;
+    case "partial":
+      if (
+        requested.state !== "known" ||
+        accepted === 0 ||
+        accepted >= (requested.count as number) ||
+        observation !== "complete"
+      ) {
+        fail("CoverageV2 partial discovery invariants are not satisfied");
+      }
+      return;
+    case "insufficient":
+      if (
+        requested.state !== "known" ||
+        observation !== "complete" ||
+        ((requested.count as number) !== 0 && accepted !== 0)
+      ) {
+        fail("CoverageV2 insufficient discovery invariants are not satisfied");
+      }
+      return;
+    case "failed":
+      if (requested.state !== "unknown" || observation !== "truncated") {
+        fail("CoverageV2 failed discovery invariants are not satisfied");
+      }
+  }
+}
+
+function validateRuleExecutionCoverage(value: unknown): void {
+  assertCoverageRecord(value, "CoverageV2 ruleExecution");
+  assertOnlyKeys(value, ["state", "counts"], "CoverageV2 ruleExecution");
+  if (!includesValue(RULE_EXECUTION_COVERAGE_STATES, value.state)) {
+    fail("CoverageV2 rule execution state is unsupported");
+  }
+
+  assertCoverageRecord(value.counts, "CoverageV2 rule execution counts");
+  assertOnlyKeys(
+    value.counts,
+    [
+      "selectedOccurrences",
+      "disabledOccurrences",
+      "scheduledOccurrences",
+      "completedOccurrences",
+      "failedOccurrences",
+      "completedWithFindingsOccurrences",
+      "completedWithNoFindingsOccurrences",
+      "normalizedDetectorFindings",
+      "unrepresentableRuleOccurrences"
+    ],
+    "CoverageV2 rule execution counts"
+  );
+  for (const field of [
+    "selectedOccurrences",
+    "disabledOccurrences",
+    "scheduledOccurrences",
+    "completedOccurrences",
+    "failedOccurrences",
+    "completedWithFindingsOccurrences",
+    "completedWithNoFindingsOccurrences",
+    "normalizedDetectorFindings",
+    "unrepresentableRuleOccurrences"
+  ] as const) {
+    assertNonNegativeSafeInteger(
+      value.counts[field],
+      `CoverageV2 rule execution counts ${field}`
+    );
+  }
+
+  const counts = value.counts as Record<
+    | "selectedOccurrences"
+    | "disabledOccurrences"
+    | "scheduledOccurrences"
+    | "completedOccurrences"
+    | "failedOccurrences"
+    | "completedWithFindingsOccurrences"
+    | "completedWithNoFindingsOccurrences"
+    | "normalizedDetectorFindings"
+    | "unrepresentableRuleOccurrences",
+    number
+  >;
+  if (
+    counts.selectedOccurrences !==
+    checkedSafeIntegerAdd(
+      counts.disabledOccurrences,
+      counts.scheduledOccurrences,
+      "CoverageV2 selected rule occurrence total"
+    )
+  ) {
+    fail("CoverageV2 selected rule occurrences equation is not satisfied");
+  }
+  if (
+    counts.scheduledOccurrences !==
+    checkedSafeIntegerAdd(
+      counts.completedOccurrences,
+      counts.failedOccurrences,
+      "CoverageV2 scheduled rule occurrence total"
+    )
+  ) {
+    fail("CoverageV2 scheduled rule occurrences equation is not satisfied");
+  }
+  if (
+    counts.completedOccurrences !==
+    checkedSafeIntegerAdd(
+      counts.completedWithFindingsOccurrences,
+      counts.completedWithNoFindingsOccurrences,
+      "CoverageV2 completed rule emission total"
+    )
+  ) {
+    fail("CoverageV2 completed rule emission equation is not satisfied");
+  }
+  if (counts.unrepresentableRuleOccurrences > counts.selectedOccurrences) {
+    fail("CoverageV2 unrepresentable rules exceed selected occurrences");
+  }
+  if (
+    (counts.completedWithFindingsOccurrences === 0 &&
+      counts.normalizedDetectorFindings !== 0) ||
+    (counts.completedWithFindingsOccurrences > 0 &&
+      counts.normalizedDetectorFindings <
+        counts.completedWithFindingsOccurrences)
+  ) {
+    fail("CoverageV2 normalized detector finding relationship is invalid");
+  }
+
+  switch (value.state) {
+    case "complete":
+      if (
+        counts.scheduledOccurrences === 0 ||
+        counts.failedOccurrences !== 0 ||
+        counts.completedOccurrences !== counts.scheduledOccurrences
+      ) {
+        fail("CoverageV2 complete rule execution invariants are not satisfied");
+      }
+      return;
+    case "partial":
+      if (
+        counts.completedOccurrences === 0 ||
+        counts.failedOccurrences === 0
+      ) {
+        fail("CoverageV2 partial rule execution invariants are not satisfied");
+      }
+      return;
+    case "failed":
+      if (
+        counts.scheduledOccurrences === 0 ||
+        counts.completedOccurrences !== 0 ||
+        counts.failedOccurrences !== counts.scheduledOccurrences
+      ) {
+        fail("CoverageV2 failed rule execution invariants are not satisfied");
+      }
+      return;
+    case "insufficient":
+      if (
+        counts.scheduledOccurrences !== 0 ||
+        counts.completedOccurrences !== 0 ||
+        counts.failedOccurrences !== 0
+      ) {
+        fail(
+          "CoverageV2 insufficient rule execution invariants are not satisfied"
+        );
+      }
+  }
+}
+
+function validateAnalysisCoverage(value: unknown): void {
+  assertCoverageRecord(value, "CoverageV2 analysis");
+  assertOnlyKeys(
+    value,
+    ["state", "applicability", "reason"],
+    "CoverageV2 analysis"
+  );
+  if (value.state !== "unknown") {
+    fail("CoverageV2 analysis state must be unknown");
+  }
+  if (value.applicability !== "unknown") {
+    fail("CoverageV2 analysis applicability must be unknown");
+  }
+  if (value.reason !== "analysis-acknowledgements-unavailable") {
+    fail("CoverageV2 analysis reason is unsupported");
+  }
+}
+
+function validateCoverageEvidence(value: unknown): void {
+  assertCoverageRecord(value, "CoverageV2 evidence");
+  assertOnlyKeys(value, ["ruleContextReads"], "CoverageV2 evidence");
+  assertCoverageRecord(
+    value.ruleContextReads,
+    "CoverageV2 RuleContext read evidence"
+  );
+  assertOnlyKeys(
+    value.ruleContextReads,
+    [
+      "attempts",
+      "succeeded",
+      "failed",
+      "unsettled",
+      "representablePaths",
+      "unrepresentablePaths"
+    ],
+    "CoverageV2 RuleContext read evidence"
+  );
+  for (const field of [
+    "attempts",
+    "succeeded",
+    "failed",
+    "unsettled",
+    "representablePaths",
+    "unrepresentablePaths"
+  ] as const) {
+    assertNonNegativeSafeInteger(
+      value.ruleContextReads[field],
+      `CoverageV2 RuleContext read evidence ${field}`
+    );
+  }
+  const reads = value.ruleContextReads as Record<
+    | "attempts"
+    | "succeeded"
+    | "failed"
+    | "unsettled"
+    | "representablePaths"
+    | "unrepresentablePaths",
+    number
+  >;
+  const readOutcomeTotal = checkedSafeIntegerAdd(
+    checkedSafeIntegerAdd(
+      reads.succeeded,
+      reads.failed,
+      "CoverageV2 read outcome total"
+    ),
+    reads.unsettled,
+    "CoverageV2 read outcome total"
+  );
+  if (reads.attempts !== readOutcomeTotal) {
+    fail("CoverageV2 read outcome equation is not satisfied");
+  }
+  if (
+    reads.attempts !==
+    checkedSafeIntegerAdd(
+      reads.representablePaths,
+      reads.unrepresentablePaths,
+      "CoverageV2 read path total"
+    )
+  ) {
+    fail("CoverageV2 read path equation is not satisfied");
+  }
+}
 
 export function validateFindingEvidenceV2(
   value: unknown
@@ -719,6 +1178,42 @@ function assertRecord(
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     fail(`${label} must be an object`);
   }
+}
+
+function assertCoverageRecord(
+  value: unknown,
+  label: string
+): asserts value is Record<string, unknown> {
+  assertRecord(value, label);
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) {
+    fail(`${label} must be a plain object`);
+  }
+}
+
+function assertNonNegativeSafeInteger(
+  value: unknown,
+  label: string
+): asserts value is number {
+  if (
+    typeof value !== "number" ||
+    !Number.isSafeInteger(value) ||
+    value < 0
+  ) {
+    fail(`${label} must be a non-negative safe integer`);
+  }
+}
+
+function checkedSafeIntegerAdd(
+  left: number,
+  right: number,
+  label: string
+): number {
+  const sum = left + right;
+  if (!Number.isSafeInteger(sum)) {
+    fail(`${label} exceeds the safe-integer range`);
+  }
+  return sum;
 }
 
 function assertOnlyKeys(

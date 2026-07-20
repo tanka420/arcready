@@ -167,3 +167,96 @@ export interface RuleDefinitionV2 {
   metadata: RuleMetadata;
   capabilities: RuleCapabilitiesV2;
 }
+
+export type KnownRequestedRootCountV2 =
+  | {
+      state: "known";
+      count: number;
+    }
+  | {
+      state: "unknown";
+    };
+
+export interface ScanScopeRootsV2 {
+  requested: KnownRequestedRootCountV2;
+  observedRootOutcomes: number;
+  acceptedRootOutcomes: number;
+  unavailableRootOutcomes: number;
+  outsideProjectRootOutcomes: number;
+}
+
+export interface ScanScopeEntriesV2 {
+  observation: "complete" | "truncated";
+  uniqueEncounteredEntries: number;
+  excludedEntries: number;
+  extensionSupportedRegularFiles: number;
+  extensionUnsupportedRegularFiles: number;
+  candidateFiles: number;
+  unrepresentableEntries: number;
+}
+
+export interface ScanScopeV2 {
+  roots: ScanScopeRootsV2;
+  entries: ScanScopeEntriesV2;
+}
+
+export type DiscoveryCoverageStateV2 =
+  | "complete"
+  | "partial"
+  | "failed"
+  | "insufficient";
+
+export interface DiscoveryCoverageV2 {
+  state: DiscoveryCoverageStateV2;
+}
+
+export interface RuleExecutionCountsV2 {
+  selectedOccurrences: number;
+  disabledOccurrences: number;
+  scheduledOccurrences: number;
+  completedOccurrences: number;
+  failedOccurrences: number;
+  completedWithFindingsOccurrences: number;
+  completedWithNoFindingsOccurrences: number;
+  normalizedDetectorFindings: number;
+  unrepresentableRuleOccurrences: number;
+}
+
+export type RuleExecutionCoverageStateV2 =
+  | "complete"
+  | "partial"
+  | "failed"
+  | "insufficient";
+
+export interface RuleExecutionCoverageV2 {
+  state: RuleExecutionCoverageStateV2;
+  counts: RuleExecutionCountsV2;
+}
+
+export interface AnalysisCoverageV2 {
+  state: "unknown";
+  applicability: "unknown";
+  reason: "analysis-acknowledgements-unavailable";
+}
+
+export interface ObservedRuleReadEvidenceV2 {
+  attempts: number;
+  succeeded: number;
+  failed: number;
+  unsettled: number;
+  representablePaths: number;
+  unrepresentablePaths: number;
+}
+
+export interface CoverageEvidenceV2 {
+  ruleContextReads: ObservedRuleReadEvidenceV2;
+}
+
+export interface CoverageV2 {
+  contractVersion: ArcReadyContractVersion;
+  scope: ScanScopeV2;
+  discovery: DiscoveryCoverageV2;
+  ruleExecution: RuleExecutionCoverageV2;
+  analysis: AnalysisCoverageV2;
+  evidence: CoverageEvidenceV2;
+}
