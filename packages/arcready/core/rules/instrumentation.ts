@@ -63,6 +63,11 @@ export interface InstrumentedRuleRunResult {
   instrumentation: RuleExecutionInstrumentationV1;
 }
 
+export interface StructuredInstrumentedRuleRunResult {
+  readonly execution: RuleExecutionResult;
+  readonly instrumentation: RuleExecutionInstrumentationV1;
+}
+
 interface MutableReadAttempt {
   attemptIndex: number;
   path: DiscoveryPathV1;
@@ -212,11 +217,24 @@ export async function runRulesInstrumented(
   rules: Rule[],
   context: RuleContext
 ): Promise<InstrumentedRuleRunResult> {
-  const recorder = new RuleExecutionInstrumentationRecorder();
-  const result = await executeRulesStructured(rules, context, recorder);
+  const { execution, instrumentation } =
+    await runRulesStructuredInstrumented(rules, context);
 
   return {
-    findings: projectLegacyFindings(result),
+    findings: projectLegacyFindings(execution),
+    instrumentation
+  };
+}
+
+export async function runRulesStructuredInstrumented(
+  rules: Rule[],
+  context: RuleContext
+): Promise<StructuredInstrumentedRuleRunResult> {
+  const recorder = new RuleExecutionInstrumentationRecorder();
+  const execution = await executeRulesStructured(rules, context, recorder);
+
+  return {
+    execution,
     instrumentation: recorder.build()
   };
 }
