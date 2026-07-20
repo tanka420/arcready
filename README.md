@@ -224,6 +224,8 @@ The CLI `--fail-on` option overrides the config value.
 
 Full rule list: [docs/rule-catalog.md](docs/rule-catalog.md)
 
+Demo projects: use the [broken Arc integration](examples/demo-projects/broken-arc-integration) and [fixed Arc integration](examples/demo-projects/fixed-arc-integration) as before/after states for a static repair workflow.
+
 ## Validation Fixtures
 
 ArcReady includes good and bad fixtures for wallet, bridge, and App Kit integrations:
