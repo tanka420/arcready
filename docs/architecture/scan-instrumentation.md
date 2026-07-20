@@ -137,12 +137,79 @@ data.
 portion. Future ScanResult v2 integration must explicitly project or omit the
 legacy `files` array rather than serializing the complete internal result.
 
+## PR 4B2 rule-execution instrumentation
+
+PR 4B2 adds one shared lower-level rule executor with two projections:
+
+- public `runRules` returns the existing legacy `Finding[]` and passes the
+  original `RuleContext` object directly to every scheduled rule;
+- internal `runRulesInstrumented` returns the same legacy findings alongside
+  sanitized rule-execution and read-attempt facts. It is not exported from the
+  package entrypoint.
+
+In this instrumentation, **selected** means one `Rule` occurrence supplied in
+the executor's input array. It does not mean that registry inventory or preset
+resolution was instrumented. Every occurrence receives its zero-based
+`selectionIndex`; duplicate IDs remain separate and execute in input order.
+
+A selected rule is either `disabled` by its existing configuration entry or
+`scheduled`. Disabled rules are `not-run` and have no read attempts. A
+scheduled rule is `completed` only when both `Rule.run` and existing finding
+normalization finish successfully; otherwise it is `failed`. Later rules still
+run after a failure.
+
+A completed rule records `emitted-findings` or `emitted-no-findings` from its
+normalized finding count. A failed rule records `not-evaluated`; its legacy
+fallback warning is not detector-emitted evidence. Applicability is always
+`unknown`. Zero findings do not mean applicable, not applicable, compatible,
+or fully analyzed.
+
+### Read attempts
+
+Only the instrumented projection wraps `RuleContext.readFile`. `RuleContext` is
+a plain data contract, so the private shallow wrapper preserves its fields and
+their value identities while replacing only `readFile`. The legacy projection
+does not wrap, clone, proxy, or mutate its context.
+
+Each instrumented invocation reserves an `attemptIndex`, calls the original
+read function exactly once with the original argument, and begins as
+`unsettled`. Resolution records `succeeded` and returns the exact resolved
+value. A synchronous throw or promise rejection records `failed` and rethrows
+the exact original failure. No content, error, stack, encoding guess, byte
+count, timestamp, or duration is retained.
+
+Rule completion snapshots the attempts without awaiting promises the rule did
+not await. A fire-and-forget operation can therefore remain `unsettled`, and
+later settlement cannot mutate the returned snapshot. A successful read means
+only that the configured read function resolved; it does not mean parsing or
+analysis succeeded.
+
+Read paths use the discovery path representation. Only string absolute paths
+lexically inside `context.projectRoot` and accepted by native-safe path
+normalization become repository-relative. The root itself uses `project-root`.
+Relative, outside-root, non-string, ambiguous POSIX literal-backslash, and
+otherwise unsafe arguments are `unrepresentable`. The original argument is
+still passed unchanged to the read function.
+
+### Rule failures and serialization
+
+Every failed scheduled rule produces one validated `RULE_EXECUTION_FAILED`
+diagnostic with a fixed generic message. A safe rule ID may be included; an
+unsafe ID is represented as `unrepresentable` in the outcome and omitted from
+the diagnostic. Raw rule IDs, exceptions, stacks, locations, source content,
+configuration values, and environment data are not canonical instrumentation.
+
+`InstrumentedRuleRunResult.findings` is legacy operational data. It retains
+existing severity and fallback behavior, including raw exception messages in
+legacy failure findings. It must not be copied into future v2 diagnostics or
+serialized as canonical instrumentation. A future ScanResult v2 integration
+must explicitly adapt or omit those findings so a failure is not represented
+both as a diagnostic and as a v2 compatibility finding.
+
 ## Deferred work
 
-PR 4B1 does not record file reads, parsers, analysis engines, rule selection,
-rule execution, findings, applicability, scoring, or enforcement.
-
-PR 4B2 is planned to add internal rule-selection and execution facts and
-per-attempt read outcomes while preserving legacy rule behavior. PR 4C may then
+Project-detection reads, registry inventory, preset resolution, parsers,
+analysis engines, and explicit applicability remain uninstrumented. PR 4C may
 derive a truthful `CoverageV2` from facts the runtime actually records.
-`CoverageV2`, `ScanResultV2`, and `ReportV2` do not exist in this implementation.
+`CoverageV2`, `ScanResultV2`, `ReportV2`, json-v2, SARIF, baselines, and
+suppression do not exist in this implementation.
