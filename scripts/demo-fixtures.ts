@@ -5,6 +5,7 @@ import type { FindingStatus } from "../packages/arcready/src/index.js";
 
 export interface FixtureExpectation {
   name: string;
+  projectPath: string;
   shouldPass: boolean;
 }
 
@@ -22,12 +23,46 @@ export interface FixtureValidationResult {
 }
 
 export const FIXTURES: FixtureExpectation[] = [
-  { name: "wallet-good", shouldPass: true },
-  { name: "wallet-bad", shouldPass: false },
-  { name: "bridge-good", shouldPass: true },
-  { name: "bridge-bad", shouldPass: false },
-  { name: "app-kit-good", shouldPass: true },
-  { name: "app-kit-bad", shouldPass: false }
+  {
+    name: "wallet-good",
+    projectPath: "fixtures/wallet-good",
+    shouldPass: true
+  },
+  {
+    name: "wallet-bad",
+    projectPath: "fixtures/wallet-bad",
+    shouldPass: false
+  },
+  {
+    name: "bridge-good",
+    projectPath: "fixtures/bridge-good",
+    shouldPass: true
+  },
+  {
+    name: "bridge-bad",
+    projectPath: "fixtures/bridge-bad",
+    shouldPass: false
+  },
+  {
+    name: "app-kit-good",
+    projectPath: "fixtures/app-kit-good",
+    shouldPass: true
+  },
+  {
+    name: "app-kit-bad",
+    projectPath: "fixtures/app-kit-bad",
+    shouldPass: false
+  },
+  {
+    name: "broken-arc-integration",
+    projectPath: "examples/demo-projects/broken-arc-integration",
+    shouldPass: false
+  },
+  {
+    name: "fixed-arc-integration",
+    projectPath: "examples/demo-projects/fixed-arc-integration",
+    shouldPass: true
+  }
 ];
 
 export async function runFixtureDemo(
@@ -97,7 +132,7 @@ async function scanFixture(
   const expected = fixture.shouldPass ? "pass" : "findings";
 
   try {
-    const { report } = await runScan(join(repoRoot, "fixtures", fixture.name));
+    const { report } = await runScan(join(repoRoot, fixture.projectPath));
     const result: FixtureValidationResult = {
       fixture: fixture.name,
       status: report.status,
@@ -154,7 +189,10 @@ async function main(): Promise<number> {
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
   main()
     .then((exitCode) => {
       process.exitCode = exitCode;

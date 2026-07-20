@@ -1,0 +1,72 @@
+name: Repository Verification
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Print tool versions
+        run: |
+          node --version
+          corepack --version
+          corepack pnpm --version
+
+      - name: Install dependencies
+        run: corepack pnpm install --frozen-lockfile
+
+      - name: Build
+        run: corepack pnpm build
+
+      - name: Test
+        run: corepack pnpm test
+
+      - name: Lint
+        run: corepack pnpm lint
+
+      - name: Validate fixtures
+        run: corepack pnpm validate:fixtures
+
+      - name: Smoke test package
+        run: corepack pnpm smoke:package
+
+      - name: Check diff
+        run: git diff --check
+
+      - name: Verify clean repository
+        shell: bash
+        run: |
+          smoke_tarballs="$(find . -maxdepth 1 -type f -name 'arcready-*-smoke-*.tgz' -print)"
+          if [ -n "$smoke_tarballs" ]; then
+            printf '%s\n' "$smoke_tarballs"
+            exit 1
+          fi
+
+          status="$(git status --porcelain --untracked-files=all)"
+          if [ -n "$status" ]; then
+            printf '%s\n' "$status"
+            exit 1
+          fi

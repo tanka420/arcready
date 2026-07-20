@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -14,16 +15,18 @@ const packageRoot = join(repoRoot, "packages", "arcready");
 const packageJson = JSON.parse(
   readFileSync(join(packageRoot, "package.json"), "utf8")
 ) as PackageJson;
-const tarballPath = join(
-  repoRoot,
-  `${packageJson.name}-${packageJson.version}.tgz`
-);
+const tarballName = `${packageJson.name}-${packageJson.version}-smoke-${randomUUID()}.tgz`;
+const tarballPath = join(repoRoot, tarballName);
 
 let smokeRoot: string | undefined;
 
 try {
   run("corepack", ["pnpm", "--filter", "arcready", "build"], repoRoot);
-  run("corepack", ["pnpm", "--filter", "arcready", "pack"], repoRoot);
+  run(
+    "corepack",
+    ["pnpm", "--filter", "arcready", "pack", "--out", tarballName],
+    repoRoot
+  );
 
   if (!existsSync(tarballPath)) {
     throw new Error(`Expected package tarball was not created: ${tarballPath}`);
@@ -72,8 +75,12 @@ try {
   JSON.parse(jsonOutput);
   console.log("Package smoke test passed.");
 } finally {
-  if (smokeRoot) {
-    removeTempDirectory(smokeRoot);
+  try {
+    if (smokeRoot) {
+      removeTempDirectory(smokeRoot);
+    }
+  } finally {
+    rmSync(tarballPath, { force: true });
   }
 }
 
@@ -90,7 +97,6 @@ function run(command: string, args: string[], cwd: string): string {
     stdio: ["ignore", "pipe", "pipe"]
   });
 }
-
 
 function removeTempDirectory(path: string): void {
   const resolvedPath = resolve(path);

@@ -18,5 +18,9 @@ export default [
     rules: {
       "@typescript-eslint/consistent-type-imports": "error"
     }
+  },
+  {
+    ...tseslint.configs.disableTypeChecked,
+    files: ["examples/demo-projects/**/*.ts"]
   }
 ];
