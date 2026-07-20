@@ -1,0 +1,7 @@
+{
+  "presets": ["wallet", "bridge", "app-kit"],
+  "paths": ["src"],
+  "exclude": ["dist/**", "node_modules/**"],
+  "reporters": ["terminal"],
+  "failOn": "critical"
+}
