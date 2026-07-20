@@ -1,7 +1,12 @@
 import type { ArcReadyPreset } from "../core/config/index.js";
 import type { ProjectDetection } from "../core/project/index.js";
 import type { Rule } from "../core/rules/index.js";
-import { appKitRules } from "../rules/app-kit/index.js";
+import {
+  appKitChainIdentifierValidRule,
+  appKitCustomRpcRecommendedRule,
+  ubDelegateRequiredRule,
+  ubFeeExplanationPresentRule
+} from "../rules/app-kit/index.js";
 import { bridgeRules } from "../rules/bridge/index.js";
 import { walletRules } from "../rules/wallet/index.js";
 
@@ -15,6 +20,15 @@ export interface PresetRegistry {
     detection: ProjectDetection
   ): Rule[];
 }
+
+// Deprecated unsupported rules remain in the known public inventory, while the
+// policy-only taxonomy catalog does not configure runtime preset selection.
+const appKitDefaultPresetRules: Rule[] = [
+  appKitChainIdentifierValidRule,
+  appKitCustomRpcRecommendedRule,
+  ubDelegateRequiredRule,
+  ubFeeExplanationPresentRule
+];
 
 export function createPresetRegistry(
   initialRules: Partial<Record<ArcReadyPreset, Rule[]>> = {}
@@ -45,7 +59,7 @@ export function createPresetRegistry(
 
 export const defaultPresetRegistry = createPresetRegistry({
   wallet: walletRules,
-  "app-kit": appKitRules,
+  "app-kit": appKitDefaultPresetRules,
   bridge: bridgeRules
 });
 

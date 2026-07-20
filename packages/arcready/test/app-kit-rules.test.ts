@@ -290,6 +290,64 @@ describe("app-kit rules", () => {
       "app-kit/APPKIT_CHAIN_IDENTIFIER_VALID"
     );
   });
+
+  it("default App Kit scans exclude deprecated unsupported rules", async () => {
+    const projectRoot = createTempProject();
+    writeFixture(
+      projectRoot,
+      "arcready.config.json",
+      JSON.stringify({
+        presets: ["app-kit"],
+        rules: {
+          "app-kit/APPKIT_CAPABILITY_SUPPORTED": "critical",
+          "app-kit/APPKIT_BRIDGE_MIN_AMOUNT_NOTE": "critical"
+        }
+      })
+    );
+    writeFixture(
+      projectRoot,
+      "package.json",
+      JSON.stringify({ name: "unsupported-app-kit-patterns" })
+    );
+    writeFixture(
+      projectRoot,
+      "src/appkit.ts",
+      "import { AppKit } from '@circle-fin/app-kit';\nconst chain = 'Arc_Testnet';\nconst rpcUrl = process.env.ARC_RPC_URL;\nawait appKit.bridge({ sourceChain: chain, amount, rpcUrl });"
+    );
+
+    const report = await createStubReport(projectRoot);
+
+    expect(report.status).toBe("pass");
+    expect(report.findings).toEqual([]);
+  });
+
+  it("default App Kit scans continue running all four retained rules", async () => {
+    const projectRoot = createTempProject();
+    writeFixture(
+      projectRoot,
+      "arcready.config.json",
+      JSON.stringify({ presets: ["app-kit"] })
+    );
+    writeFixture(
+      projectRoot,
+      "package.json",
+      JSON.stringify({ name: "retained-app-kit-patterns" })
+    );
+    writeFixture(
+      projectRoot,
+      "src/appkit.ts",
+      "import { AppKit } from '@circle-fin/app-kit';\nconst chain = 'arc-testnet';\nconst supportedChain = 'Arc_Testnet';\nawait appKit.unifiedBalance.spend({ wallet: 'server wallet' });\nexport function Confirm() { return 'Confirm unifiedBalance spend payment'; }"
+    );
+
+    const report = await createStubReport(projectRoot);
+
+    expect(report.findings.map((finding) => finding.ruleId)).toEqual([
+      "app-kit/APPKIT_CHAIN_IDENTIFIER_VALID",
+      "app-kit/APPKIT_CUSTOM_RPC_RECOMMENDED",
+      "app-kit/UB_DELEGATE_REQUIRED",
+      "app-kit/UB_FEE_EXPLANATION_PRESENT"
+    ]);
+  });
 });
 
 async function runAppKitRule(

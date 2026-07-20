@@ -220,6 +220,21 @@ describe("arcready CLI scan exit codes", () => {
     const code = await runCli(["scan", "--fail-on", "warning"], io);
     expect(code).toBe(1);
   });
+
+  it("deprecated App Kit patterns do not fail default scans", async () => {
+    const output: string[] = [];
+    const io = createIo(output);
+    writeDeprecatedAppKitFixture(io.cwd);
+
+    const code = await runCli(
+      ["scan", "--format", "json", "--fail-on", "warning"],
+      io
+    );
+    const report = JSON.parse(output.join(""));
+
+    expect(code).toBe(0);
+    expect(report.findings).toEqual([]);
+  });
 });
 
 describe("arcready CLI scan error handling", () => {
@@ -336,5 +351,23 @@ function writeFindingFixture(
   writeFileSync(
     join(cwd, "src", "wallet.ts"),
     "const arcTestnet = { confirmations: 3 };\n"
+  );
+}
+
+function writeDeprecatedAppKitFixture(cwd: string): void {
+  writeFileSync(
+    join(cwd, "arcready.config.json"),
+    JSON.stringify({
+      presets: ["app-kit"],
+      rules: {
+        "app-kit/APPKIT_CAPABILITY_SUPPORTED": "critical",
+        "app-kit/APPKIT_BRIDGE_MIN_AMOUNT_NOTE": "critical"
+      }
+    })
+  );
+  mkdirSync(join(cwd, "src"), { recursive: true });
+  writeFileSync(
+    join(cwd, "src", "appkit.ts"),
+    "import { AppKit } from '@circle-fin/app-kit';\nconst chain = 'Arc_Testnet';\nconst rpcUrl = process.env.ARC_RPC_URL;\nawait appKit.bridge({ sourceChain: chain, amount, rpcUrl });\n"
   );
 }

@@ -62,6 +62,21 @@ describe("loadConfig", () => {
       /Invalid ArcReady config.*presets contains invalid value "not-a-preset"/
     );
   });
+
+  it("accepts deprecated App Kit rule IDs for compatibility", () => {
+    const projectRoot = createTempProject({
+      presets: ["app-kit"],
+      rules: {
+        "app-kit/APPKIT_CAPABILITY_SUPPORTED": "critical",
+        "app-kit/APPKIT_BRIDGE_MIN_AMOUNT_NOTE": "off"
+      }
+    });
+
+    expect(loadConfig(projectRoot).rules).toEqual({
+      "app-kit/APPKIT_CAPABILITY_SUPPORTED": "critical",
+      "app-kit/APPKIT_BRIDGE_MIN_AMOUNT_NOTE": "off"
+    });
+  });
 });
 
 function createTempProject(config?: unknown): string {

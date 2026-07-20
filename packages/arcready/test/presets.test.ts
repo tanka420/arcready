@@ -59,7 +59,7 @@ describe("preset registry", () => {
     expect(ruleIds).not.toContain("bridge/placeholder");
   });
 
-  it("keeps active rules available through default presets", () => {
+  it("keeps retained rules available through default presets", () => {
     expect(getRulesForPresets(["wallet"]).map((rule) => rule.id)).toContain(
       "wallet/ARC_CHAIN_METADATA"
     );
@@ -68,6 +68,23 @@ describe("preset registry", () => {
     );
     expect(getRulesForPresets(["bridge"]).map((rule) => rule.id)).toContain(
       "bridge/BRIDGE_CONFIRMATIONS_ONE"
+    );
+  });
+
+  it("preserves deprecated App Kit rules as public inventory exports", () => {
+    expect(arcready.appKitRules.map((rule) => rule.id)).toEqual([
+      "app-kit/APPKIT_CHAIN_IDENTIFIER_VALID",
+      "app-kit/APPKIT_CAPABILITY_SUPPORTED",
+      "app-kit/APPKIT_CUSTOM_RPC_RECOMMENDED",
+      "app-kit/UB_DELEGATE_REQUIRED",
+      "app-kit/UB_FEE_EXPLANATION_PRESENT",
+      "app-kit/APPKIT_BRIDGE_MIN_AMOUNT_NOTE"
+    ]);
+    expect(arcready.appKitCapabilitySupportedRule.id).toBe(
+      "app-kit/APPKIT_CAPABILITY_SUPPORTED"
+    );
+    expect(arcready.appKitBridgeMinAmountNoteRule.id).toBe(
+      "app-kit/APPKIT_BRIDGE_MIN_AMOUNT_NOTE"
     );
   });
 });

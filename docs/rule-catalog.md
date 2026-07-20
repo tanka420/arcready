@@ -23,11 +23,11 @@ ArcReady does not perform live Arc RPC checks, Circle API checks, on-chain trans
 | Bridge | `bridge/ATTESTATION_404_NOT_FATAL` | Critical | Checks CCTP attestation polling for fatal handling of retryable `404` responses. |
 | Bridge | `bridge/NO_PREVRANDAO_RELAY_SELECTION` | Critical | Checks Arc relay selection for PREVRANDAO or mixHash randomness assumptions. |
 | App Kit | `app-kit/APPKIT_CHAIN_IDENTIFIER_VALID` | Critical | Checks App Kit Arc chain identifiers for unsupported spellings. |
-| App Kit | `app-kit/APPKIT_CAPABILITY_SUPPORTED` | Warning | Checks App Kit Arc capability calls for missing supported-capability guards. |
+| App Kit | `app-kit/APPKIT_CAPABILITY_SUPPORTED` | Warning | Deprecated, default-excluded detector with an unsupported generic capability-guard contract. |
 | App Kit | `app-kit/APPKIT_CUSTOM_RPC_RECOMMENDED` | Warning | Checks App Kit Arc Testnet usage for implicit or shared RPC configuration. |
 | App Kit | `app-kit/UB_DELEGATE_REQUIRED` | Warning | Checks Unified Balance spend flows that may need delegate wallet handling. |
 | App Kit | `app-kit/UB_FEE_EXPLANATION_PRESENT` | Warning | Checks Unified Balance confirmation UI for missing fee or received-amount context. |
-| App Kit | `app-kit/APPKIT_BRIDGE_MIN_AMOUNT_NOTE` | Warning | Checks Arc-origin App Kit bridge flows for missing minimum amount or fee guardrails. |
+| App Kit | `app-kit/APPKIT_BRIDGE_MIN_AMOUNT_NOTE` | Warning | Deprecated, default-excluded detector for an unsupported universal Arc bridge-minimum assumption. |
 
 ## Wallet preset
 
@@ -240,7 +240,13 @@ ArcReady does not perform live Arc RPC checks, Circle API checks, on-chain trans
 - Suggested fix: Replace PREVRANDAO or mixHash-based relay selection with deterministic selection, offchain coordination, or another documented randomness source.
 - Static-analysis limitation: ArcReady checks source patterns; it does not evaluate relayer selection fairness or runtime execution.
 
-## App Kit preset
+## App Kit rules
+
+The default App Kit preset runs `APPKIT_CHAIN_IDENTIFIER_VALID`,
+`APPKIT_CUSTOM_RPC_RECOMMENDED`, `UB_DELEGATE_REQUIRED`, and
+`UB_FEE_EXPLANATION_PRESENT`. The two deprecated rules below remain in the
+known public inventory temporarily for API compatibility, but default scans do
+not select them.
 
 ### APPKIT_CHAIN_IDENTIFIER_VALID
 
@@ -261,10 +267,14 @@ ArcReady does not perform live Arc RPC checks, Circle API checks, on-chain trans
 
 ### APPKIT_CAPABILITY_SUPPORTED
 
-- Preset: App Kit
+- Known inventory group: App Kit
+- Default preset status: Excluded
 - Severity: Warning
+- Runtime status: Deprecated and excluded from the default App Kit preset. The rule object and individual export are preserved temporarily for API compatibility and direct invocation.
+- Evidence boundary: Official App Kit documentation lists Arc Testnet support for Send, Bridge, Swap, and Unified Balance with operation and token constraints; it does not support this detector's generic guard-string contract.
+- Replacement direction: Design a versioned, evidence-backed compatibility detector under a new rule ID instead of aliasing or silently repurposing this ID.
 - What it detects: App Kit Arc capability calls such as send, bridge, swap, or Unified Balance paths that appear to run without a supported-capability guard.
-- Why it matters: Capability support can differ by chain or context, so App Kit flows should guard unsupported paths before calling them.
+- Why the legacy detector existed: Capability compatibility can depend on SDK version, operation, token, adapter, and chain. The current generic guard-string detector is not an evidence-backed way to validate that compatibility.
 - Example bad pattern:
 
   ```ts
@@ -274,7 +284,7 @@ ArcReady does not perform live Arc RPC checks, Circle API checks, on-chain trans
   await appKit.bridge({ amount });
   ```
 
-- Suggested fix: Check supported App Kit capabilities for `Arc_Testnet` and guard send, bridge, swap, or Unified Balance paths before calling them.
+- Legacy suggested fix: The detector suggested adding generic capability guards. That is not a current evidence-backed recommendation; validate compatibility against versioned official SDK, operation, token, adapter, and chain documentation instead.
 - Static-analysis limitation: ArcReady checks for common guard patterns; it does not query App Kit capabilities at runtime.
 
 ### APPKIT_CUSTOM_RPC_RECOMMENDED
@@ -335,10 +345,14 @@ ArcReady does not perform live Arc RPC checks, Circle API checks, on-chain trans
 
 ### APPKIT_BRIDGE_MIN_AMOUNT_NOTE
 
-- Preset: App Kit
+- Known inventory group: App Kit
+- Default preset status: Excluded
 - Severity: Warning
+- Runtime status: Deprecated and excluded from the default App Kit preset. The rule object and individual export are preserved temporarily for API compatibility and direct invocation.
+- Evidence boundary: Official App Kit documentation describes bridge amounts, estimation, optional maximum fees, and fee disclosure, but does not establish a universal Arc-specific bridge minimum.
+- Replacement direction: If evidence supports it, introduce fee-estimation or confirmation-disclosure advice under a new rule ID instead of aliasing or silently repurposing this ID.
 - What it detects: Arc-origin App Kit bridge flows that appear to omit minimum amount or fee guardrails.
-- Why it matters: Users should see minimum amount and fee context before starting a bridge flow where fees may affect the effective transfer.
+- Why the legacy detector existed: Bridge fee estimation and confirmation disclosure can be useful UX concerns, but no documented universal Arc-specific minimum supports treating a minimum-amount note as a current compatibility requirement.
 - Example bad pattern:
 
   ```ts
@@ -350,7 +364,7 @@ ArcReady does not perform live Arc RPC checks, Circle API checks, on-chain trans
   });
   ```
 
-- Suggested fix: Add user-facing minimum amount and fee guardrails before starting an Arc-origin App Kit bridge flow.
+- Legacy suggested fix: The detector suggested adding minimum-amount and fee guardrails. ArcReady does not currently assert a universal Arc-specific minimum; any future fee-estimation or confirmation-disclosure advice requires an evidence-backed rule under a new ID.
 - Static-analysis limitation: ArcReady checks static bridge-flow patterns; it does not execute App Kit bridge calls or validate runtime fee quotes.
 
 ## Static analysis limitations

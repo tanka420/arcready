@@ -220,7 +220,14 @@ The CLI `--fail-on` option overrides the config value.
 | --- | --- | --- |
 | `wallet` | Wallet UX, chain metadata, fee display, finality | `ARC_CHAIN_METADATA`, `NO_ETH_GAS_LABEL`, `ONE_CONFIRMATION_FINAL` |
 | `bridge` | CCTP, finality, relayer gas, canonical USDC | `BRIDGE_CONFIRMATIONS_ONE`, `CCTP_DOMAIN_26`, `RELAYER_USES_USDC_FOR_GAS` |
-| `app-kit` | App Kit chain identifiers, capability guards, Unified Balance UX | `APPKIT_CHAIN_IDENTIFIER_VALID`, `APPKIT_CAPABILITY_SUPPORTED`, `UB_FEE_EXPLANATION_PRESENT` |
+| `app-kit` | App Kit chain identifiers, RPC configuration, Unified Balance checks | `APPKIT_CHAIN_IDENTIFIER_VALID`, `APPKIT_CUSTOM_RPC_RECOMMENDED`, `UB_DELEGATE_REQUIRED`, `UB_FEE_EXPLANATION_PRESENT` |
+
+The deprecated `APPKIT_CAPABILITY_SUPPORTED` and
+`APPKIT_BRIDGE_MIN_AMOUNT_NOTE` rule objects remain programmatically available
+for compatibility, but the default App Kit preset excludes them because their
+current contracts are unsupported or contradicted by official evidence. This
+focused exclusion does not apply the taxonomy catalog's other default-policy
+recommendations at runtime.
 
 Full rule list: [docs/rule-catalog.md](docs/rule-catalog.md)
 

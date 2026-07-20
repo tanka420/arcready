@@ -15,16 +15,16 @@ import { appKitRules } from "../rules/app-kit/index.js";
 import { bridgeRules } from "../rules/bridge/index.js";
 import { walletRules } from "../rules/wallet/index.js";
 
-const activeRules = [...walletRules, ...bridgeRules, ...appKitRules];
+const knownRules = [...walletRules, ...bridgeRules, ...appKitRules];
 
 describe("internal rule taxonomy catalog", () => {
-  it("matches all 18 active registry rule IDs exactly once", () => {
+  it("matches all 18 known rule inventory IDs exactly once", () => {
     const catalogIds = ruleTaxonomyCatalog.map((metadata) => metadata.id);
-    const activeIds = activeRules.map((rule) => rule.id);
+    const knownIds = knownRules.map((rule) => rule.id);
 
     expect(catalogIds).toHaveLength(18);
     expect(new Set(catalogIds).size).toBe(18);
-    expect([...catalogIds].sort()).toEqual([...activeIds].sort());
+    expect([...catalogIds].sort()).toEqual([...knownIds].sort());
   });
 
   it("uses deterministic rule-ID order", () => {
