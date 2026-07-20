@@ -36,11 +36,9 @@ describe("cross-preset regression coverage", () => {
 
     expect(ruleIdsFor("app-kit")).toEqual([
       "app-kit/APPKIT_CHAIN_IDENTIFIER_VALID",
-      "app-kit/APPKIT_CAPABILITY_SUPPORTED",
       "app-kit/APPKIT_CUSTOM_RPC_RECOMMENDED",
       "app-kit/UB_DELEGATE_REQUIRED",
-      "app-kit/UB_FEE_EXPLANATION_PRESENT",
-      "app-kit/APPKIT_BRIDGE_MIN_AMOUNT_NOTE"
+      "app-kit/UB_FEE_EXPLANATION_PRESENT"
     ]);
   });
 
@@ -49,7 +47,7 @@ describe("cross-preset regression coverage", () => {
       (rule) => rule.id
     );
 
-    expect(ruleIds).toHaveLength(18);
+    expect(ruleIds).toHaveLength(16);
     expect(ruleIds.every((ruleId) => !ruleId.includes("placeholder"))).toBe(
       true
     );

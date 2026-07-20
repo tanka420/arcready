@@ -136,8 +136,12 @@ must be reviewed when the relevant network, SDK, API, or support matrix changes.
 
 ## Migration boundary
 
-The catalog is deliberately not consumed by the active registry. Moving these
-recommendations into configuration defaults, preset selection, severity,
-scoring, findings, reporter output, CLI exit behavior, or GitHub Actions needs a
-separate behavior and compatibility design. Unsupported rules remain active at
-runtime until that later work is explicitly approved.
+The catalog remains policy-only and is not consumed as runtime configuration.
+The default App Kit preset now manually excludes the two `remove-or-replace`
+rules as a focused compatibility mitigation. Their IDs, implementations,
+individual exports, and known-inventory membership remain available; direct
+invocation is unchanged.
+
+All other catalog recommendations for default selection, opt-in policy,
+severity, scoring, findings, reporter output, CLI exit behavior, or GitHub
+Actions remain deferred to separately reviewed behavior and compatibility work.
