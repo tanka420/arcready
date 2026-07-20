@@ -260,3 +260,10 @@ export interface CoverageV2 {
   analysis: AnalysisCoverageV2;
   evidence: CoverageEvidenceV2;
 }
+
+export interface ScanResultV2 {
+  contractVersion: ArcReadyContractVersion;
+  coverage: CoverageV2;
+  findings: readonly FindingV2[];
+  diagnostics: readonly ScanDiagnosticV2[];
+}

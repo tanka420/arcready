@@ -21,7 +21,8 @@ import {
   type FindingV2,
   type RuleCapabilitiesV2,
   type RuleDefinitionV2,
-  type ScanDiagnosticV2
+  type ScanDiagnosticV2,
+  type ScanResultV2
 } from "./model.js";
 import { validateSourceLocationV2 } from "./source-location.js";
 
@@ -107,6 +108,53 @@ export function validateCoverageV2(
   validateRuleExecutionCoverage(value.ruleExecution);
   validateAnalysisCoverage(value.analysis);
   validateCoverageEvidence(value.evidence);
+}
+
+export function validateScanResultV2(
+  value: unknown
+): asserts value is ScanResultV2 {
+  assertPlainScanResultRecord(value, "ScanResultV2");
+  assertOnlyKeys(
+    value,
+    ["contractVersion", "coverage", "findings", "diagnostics"],
+    "ScanResultV2"
+  );
+  if (value.contractVersion !== ARCREADY_CONTRACT_VERSION) {
+    fail(`ScanResultV2 contractVersion must be "${ARCREADY_CONTRACT_VERSION}"`);
+  }
+
+  validateCoverageV2(value.coverage);
+  if (value.coverage.contractVersion !== value.contractVersion) {
+    fail("ScanResultV2 coverage contractVersion must match the result version");
+  }
+
+  assertArray(value.findings, "ScanResultV2 findings");
+  assertCollectionSize(value.findings, "ScanResultV2 findings");
+  const fingerprints = new Set<string>();
+  let previousFingerprint: string | undefined;
+  for (const finding of value.findings) {
+    assertPlainScanResultRecord(finding, "ScanResultV2 finding");
+    validateFindingV2(finding);
+    const fingerprint = finding.fingerprints.exact.value;
+    if (fingerprints.has(fingerprint)) {
+      fail("ScanResultV2 exact finding fingerprints must be unique");
+    }
+    fingerprints.add(fingerprint);
+    if (
+      previousFingerprint !== undefined &&
+      previousFingerprint > fingerprint
+    ) {
+      fail("ScanResultV2 findings must use exact-fingerprint order");
+    }
+    previousFingerprint = fingerprint;
+  }
+
+  assertArray(value.diagnostics, "ScanResultV2 diagnostics");
+  assertCollectionSize(value.diagnostics, "ScanResultV2 diagnostics");
+  for (const diagnostic of value.diagnostics) {
+    assertPlainScanResultRecord(diagnostic, "ScanResultV2 diagnostic");
+    validateScanDiagnosticV2(diagnostic);
+  }
 }
 
 function validateCoverageScope(
@@ -1181,6 +1229,17 @@ function assertRecord(
 }
 
 function assertCoverageRecord(
+  value: unknown,
+  label: string
+): asserts value is Record<string, unknown> {
+  assertRecord(value, label);
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) {
+    fail(`${label} must be a plain object`);
+  }
+}
+
+function assertPlainScanResultRecord(
   value: unknown,
   label: string
 ): asserts value is Record<string, unknown> {
