@@ -1,7 +1,12 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import type { ArcReadyFailLevel } from "../core/config/index.js";
+import {
+  loadConfig,
+  type ArcReadyFailLevel
+} from "../core/config/index.js";
+import type { ScanResultV2 } from "../core/contracts/v2/model.js";
 import type { ScanSummary } from "../core/findings/index.js";
+import { runInternalScanV2 } from "../core/scan-v2/index.js";
 import { getReporter } from "../reporters/index.js";
 import type { ReporterFormat } from "../reporters/index.js";
 import { runScan } from "./report.js";
@@ -33,8 +38,18 @@ Options:
   --format <format>    Render scan as terminal, json, markdown, or html
   --out <path>         Write scan output to a file
   --fail-on <level>    Override config failOn: critical, warning, info, or none
+  --json-v2           Emit experimental canonical ScanResultV2 JSON to stdout
   -h, --help           Show this help message
 `;
+
+const JSON_V2_OPTION_CONFLICT =
+  "--json-v2 cannot be combined with --format, --out, or --fail-on";
+const JSON_V2_CONFIG_ERROR =
+  "ArcReady json-v2 error: invalid configuration.\n";
+const JSON_V2_PRODUCTION_ERROR =
+  "ArcReady json-v2 error: unable to produce canonical scan output.\n";
+const JSON_V2_WRITE_ERROR =
+  "ArcReady json-v2 error: unable to write canonical scan output.\n";
 
 export async function runCli(argv: string[], io: CliIo): Promise<number> {
   const [command] = argv;
@@ -62,6 +77,10 @@ export async function runCli(argv: string[], io: CliIo): Promise<number> {
       const message = error instanceof Error ? error.message : String(error);
       io.stderr.write(`${message}\n`);
       return 1;
+    }
+
+    if (scanOptions.jsonV2) {
+      return runJsonV2(io);
     }
 
     let report: Awaited<ReturnType<typeof runScan>>["report"];
@@ -96,13 +115,27 @@ export async function runCli(argv: string[], io: CliIo): Promise<number> {
 
 interface ScanOptions {
   format: "terminal" | "json" | "markdown" | "html";
+  jsonV2: boolean;
   out?: string;
   failOn?: ArcReadyFailLevel;
 }
 
+export interface ScanOptionPresence {
+  readonly jsonV2: boolean;
+  readonly format: boolean;
+  readonly out: boolean;
+  readonly failOn: boolean;
+}
+
 function parseScanOptions(argv: string[]): ScanOptions {
+  const presence = inspectScanOptionPresence(argv);
+  if (presence.jsonV2 && (presence.format || presence.out || presence.failOn)) {
+    throw new Error(JSON_V2_OPTION_CONFLICT);
+  }
+
   const options: ScanOptions = {
-    format: "terminal"
+    format: "terminal",
+    jsonV2: false
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -117,6 +150,11 @@ function parseScanOptions(argv: string[]): ScanOptions {
 
       options.format = value;
       index += 1;
+      continue;
+    }
+
+    if (arg === "--json-v2") {
+      options.jsonV2 = true;
       continue;
     }
 
@@ -150,6 +188,72 @@ function parseScanOptions(argv: string[]): ScanOptions {
   }
 
   return options;
+}
+
+export function inspectScanOptionPresence(
+  argv: readonly string[]
+): ScanOptionPresence {
+  const presence = {
+    jsonV2: false,
+    format: false,
+    out: false,
+    failOn: false
+  };
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+
+    if (arg === "--json-v2") {
+      presence.jsonV2 = true;
+      continue;
+    }
+
+    if (arg === "--format" || arg === "--out" || arg === "--fail-on") {
+      if (arg === "--format") presence.format = true;
+      if (arg === "--out") presence.out = true;
+      if (arg === "--fail-on") presence.failOn = true;
+      if (argv[index + 1] !== undefined) index += 1;
+    }
+  }
+
+  return presence;
+}
+
+async function runJsonV2(io: CliIo): Promise<number> {
+  let config: ReturnType<typeof loadConfig>;
+
+  try {
+    config = loadConfig(io.cwd);
+  } catch {
+    io.stderr.write(JSON_V2_CONFIG_ERROR);
+    return 2;
+  }
+
+  let output: string;
+
+  try {
+    const scanResult = await runInternalScanV2({
+      projectRoot: io.cwd,
+      config
+    });
+    output = serializeScanResultV2(scanResult);
+  } catch {
+    io.stderr.write(JSON_V2_PRODUCTION_ERROR);
+    return 2;
+  }
+
+  try {
+    io.stdout.write(output);
+  } catch {
+    io.stderr.write(JSON_V2_WRITE_ERROR);
+    return 2;
+  }
+
+  return 0;
+}
+
+function serializeScanResultV2(scanResult: ScanResultV2): string {
+  return `${JSON.stringify(scanResult, null, 2)}\n`;
 }
 
 function isImplementedFormat(value: unknown): value is ScanOptions["format"] {

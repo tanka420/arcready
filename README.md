@@ -162,6 +162,32 @@ npx --yes arcready@0.3.0 scan --format html --out arcready-report.html
 
 Generated report folders such as `.arcready/` and `reports/` are ignored by git.
 
+## Experimental canonical JSON output
+
+Use the explicit opt-in canonical projection:
+
+```powershell
+arcready scan --json-v2
+```
+
+This leaves the default legacy output unchanged and emits the exact
+`ScanResultV2` document, versioned by `contractVersion`:
+
+```text
+{
+  "contractVersion": "2.0",
+  "coverage": { ... },
+  "findings": [ ... ],
+  "diagnostics": [ ... ]
+}
+```
+
+The experimental runtime currently executes only
+`bridge/CCTP_DOMAIN_26` and `bridge/NO_WRAPPED_USDC_ON_ARC`. Analysis and
+applicability remain unknown. Exit code `0` means a valid document was
+produced, not that the repository is compatible: findings and recoverable
+diagnostics are observational, and canonical enforcement is deferred.
+
 ## What ArcReady Does Not Do
 
 ArcReady does not perform:
