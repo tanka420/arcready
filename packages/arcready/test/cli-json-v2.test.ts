@@ -23,7 +23,7 @@ const CCTP_RULE_ID = "bridge/CCTP_DOMAIN_26";
 const WRAPPED_RULE_ID = "bridge/NO_WRAPPED_USDC_ON_ARC";
 const CCTP_SOURCE = "Arc CCTP bridge\nconst ARC_CCTP_DOMAIN = 7;\n";
 const WRAPPED_SOURCE =
-  "Arc bridge route uses USDC.e as its destination asset.\n";
+  'export const route = { chain: "Arc Testnet", bridge: true, token: "USDC.e" };\n';
 const SAFE_SOURCE =
   "Arc CCTP bridge\nconst ARC_CCTP_DOMAIN = 26;\nconst asset = 'USDC';\n";
 const CONFLICT_MESSAGE =
