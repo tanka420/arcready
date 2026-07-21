@@ -61,7 +61,7 @@ describe("bridge rules", () => {
   it.each([
     ["ARC_DOMAIN", "const ARC_DOMAIN = 7;"],
     ["ARC_CCTP_DOMAIN", "const ARC_CCTP_DOMAIN = 7;"],
-    ["case and whitespace variants", "const arc_cctp_domain : 7;"]
+    ["case and whitespace variants", "const arc_cctp_domain = 7;"]
   ])("CCTP_DOMAIN_26 flags wrong explicit %s", async (_name, source) => {
     const findings = await runBridgeRule(
       cctpDomain26Rule,
@@ -126,7 +126,9 @@ describe("bridge rules", () => {
   it("CCTP_DOMAIN_26 flags a directly indented YAML domain map", async () => {
     const findings = await runBridgeRule(
       cctpDomain26Rule,
-      "Arc CCTP bridge\ncctpDomains:\n  arc: 7"
+      "Arc CCTP bridge\ncctpDomains:\n  arc: 7",
+      {},
+      "config.yaml"
     );
 
     expect(findings).toHaveLength(1);
@@ -136,7 +138,9 @@ describe("bridge rules", () => {
     await expect(
       runBridgeRule(
         cctpDomain26Rule,
-        "Arc CCTP bridge\ncctpDomains:\n  arc: 26"
+        "Arc CCTP bridge\ncctpDomains:\n  arc: 26",
+        {},
+        "config.yaml"
       )
     ).resolves.toEqual([]);
   });
@@ -149,7 +153,9 @@ describe("bridge rules", () => {
     async (_name, source) => {
       const findings = await runBridgeRule(
         cctpDomain26Rule,
-        `Arc CCTP bridge\r\n${source}`
+        `Arc CCTP bridge\r\n${source}`,
+        {},
+        _name === "YAML" ? "config.yaml" : "src/fixture.ts"
       );
 
       expect(findings).toHaveLength(1);
@@ -209,6 +215,515 @@ describe("bridge rules", () => {
       )
     ).resolves.toEqual([]);
   });
+
+  it.each([
+    [
+      "a direct declaration in Markdown",
+      "# Arc CCTP migration\n\nconst ARC_DOMAIN = 7;",
+      "docs/migration.md"
+    ],
+    [
+      "an indented declaration in Markdown",
+      "# Arc CCTP migration\n\n    const ARC_CCTP_DOMAIN = 7;",
+      "docs/migration.md"
+    ],
+    [
+      "a named map in MDX",
+      "# Arc CCTP\n\nconst cctpDomains = {\n  arc: 7\n};",
+      "docs/configuration.mdx"
+    ]
+  ])("CCTP_DOMAIN_26 skips %s", async (_name, source, filePath) => {
+    await expect(
+      runBridgeRule(cctpDomain26Rule, source, {}, filePath)
+    ).resolves.toEqual([]);
+  });
+
+  it.each([
+    [
+      "equivalent TypeScript",
+      'const protocol = "Arc CCTP";\nconst ARC_DOMAIN = 7;',
+      "src/config.ts"
+    ],
+    [
+      "equivalent YAML",
+      "chain: Arc\nbridge: CCTP\ncctpDomains:\n  arc: 7",
+      "config/bridge.yaml"
+    ]
+  ])("CCTP_DOMAIN_26 keeps %s live", async (_name, source, filePath) => {
+    await expect(
+      runBridgeRule(cctpDomain26Rule, source, {}, filePath)
+    ).resolves.toHaveLength(1);
+  });
+
+  it.each([
+    ["wrong direct candidate", "Arc CCTP bridge\nconst ARC_CCTP_DOMAIN = 7;"],
+    [
+      "compatibility direct candidate",
+      "Arc CCTP bridge\nconst ARC_DOMAIN = 7;"
+    ],
+    [
+      "exported direct candidate",
+      "Arc CCTP bridge\nexport const ARC_CCTP_DOMAIN = 7;"
+    ],
+    [
+      "multiline direct candidate",
+      "Arc CCTP bridge\nconst ARC_CCTP_DOMAIN /* Arc */ =\n  7\n;"
+    ],
+    ["standalone line-start candidate", "Arc CCTP bridge\n  ARC_DOMAIN = 7;"],
+    [
+      "direct object property",
+      "Arc CCTP bridge\nconst config = {\n  ARC_CCTP_DOMAIN: 7,\n};"
+    ],
+    ["inline named map", "Arc CCTP bridge\nconst cctpDomains = { arc: 7 };"],
+    [
+      "multiline named map",
+      "Arc CCTP bridge\nconst cctpDomains = {\n  arc: 7\n};"
+    ],
+    [
+      "named map in a parent",
+      "Arc CCTP bridge\nconst config = { cctpDomains: { arc: 7 } };"
+    ],
+    [
+      "named-map member with same-line sibling",
+      "Arc CCTP bridge\nconst config = { cctpDomains: { arc: 7 }, enabled: true };"
+    ],
+    [
+      "named-map member between siblings",
+      "Arc CCTP bridge\nconst config = {\n  enabled: true,\n  cctpDomains: { arc: 7 },\n  retry: 3\n};"
+    ],
+    [
+      "compact nested direct object property",
+      "Arc CCTP bridge\nconst config = { bridge: { ARC_CCTP_DOMAIN: 7 } };"
+    ],
+    [
+      "compact nested direct object property with outer sibling",
+      "Arc CCTP bridge\nconst config = {\n  bridge: { ARC_CCTP_DOMAIN: 7 },\n  enabled: true\n};"
+    ],
+    [
+      "comments between map tokens",
+      "Arc CCTP bridge\nconst cctpDomains /* a */ = /* b */ { /* c */ arc /* d */ : /* e */ 7 };"
+    ],
+    [
+      "quoted braces in a live map",
+      'Arc CCTP bridge\nconst cctpDomains = { note: "{ ignored }", arc: 7 };'
+    ],
+    [
+      "comment braces in a live map",
+      "Arc CCTP bridge\nconst cctpDomains = { /* { ignored } */ arc: 7 };"
+    ],
+    [
+      "inert spread text in a live map",
+      'Arc CCTP bridge\nconst cctpDomains = { note: "...", /* ... */ arc: 7 };'
+    ],
+    [
+      "direct candidate with trailing guidance",
+      "Arc CCTP bridge\nconst ARC_CCTP_DOMAIN = 7; // This domain should not be used."
+    ],
+    [
+      "map with trailing guidance",
+      "Arc CCTP bridge\nconst cctpDomains = { arc: 7 }; // Do not use domain 7 for Arc."
+    ],
+    [
+      "live map after a block comment",
+      "Arc CCTP bridge\n/* preface\n*/ const cctpDomains = { arc: 7 };"
+    ],
+    [
+      "independent named maps",
+      "Arc CCTP bridge\nconst first = { cctpDomains: { arc: 26 } };\nconst second = { cctpDomains: { arc: 7 } };"
+    ],
+    [
+      "independent direct candidates",
+      "Arc CCTP bridge\nconst ARC_DOMAIN = 26;\nconst ARC_DOMAIN = 7;"
+    ],
+    [
+      "basic YAML child",
+      "chain: Arc\nbridge: CCTP\ncctpDomains:\n  arc: 7",
+      "config.yaml"
+    ],
+    [
+      "YAML child with trailing guidance",
+      "chain: Arc\nbridge: CCTP\ncctpDomains:\n  arc: 7 # This domain should not be used.",
+      "config.yml"
+    ],
+    [
+      "YAML wrapper nesting",
+      "chain: Arc\nbridge: CCTP\nconfig:\n  cctpDomains:\n    arc: 7",
+      "config.yaml"
+    ],
+    [
+      "flow YAML with an inert quoted brace",
+      'chain: Arc\nbridge: CCTP\ncctpDomains: { note: "}", arc: 7 }',
+      "config.yaml"
+    ],
+    ["closed candidate at EOF", "Arc CCTP bridge\nARC_DOMAIN = 7"],
+    [
+      "multiple independent wrong candidates",
+      "Arc CCTP bridge\nconst ARC_DOMAIN = 7;\nconst cctpDomains = { arc: 8 };"
+    ],
+    [
+      "emoji string before a direct candidate",
+      'Arc CCTP bridge\nconst note = "😀";\nconst ARC_CCTP_DOMAIN = 7;'
+    ],
+    [
+      "emoji line comment before a named map",
+      "Arc CCTP bridge\n// 😀\nconst cctpDomains = { arc: 7 };"
+    ],
+    [
+      "YAML emoji comment before a child",
+      "chain: Arc\nbridge: CCTP\n# 😀\ncctpDomains:\n  arc: 7",
+      "config.yaml"
+    ],
+    [
+      "YAML emoji scalar before a child",
+      'chain: Arc\nbridge: CCTP\nnote: "😀"\ncctpDomains:\n  arc: 7',
+      "config.yaml"
+    ],
+    [
+      "guidance-like named-map members",
+      'const bridgeName = "Arc CCTP";\nconst unsupported = 0;\nconst cctpDomains = { arc: 7, domain: unsupported };'
+    ],
+    [
+      "flow YAML plain scalar hash",
+      "chain: Arc\nbridge: CCTP\ncctpDomains: { arc: 7, note: value#hash }",
+      "config.yaml"
+    ],
+    [
+      "flow YAML trailing comment",
+      "chain: Arc\nbridge: CCTP\ncctpDomains: { arc: 7, note: value#hash } # comment",
+      "config.yaml"
+    ],
+    [
+      "block YAML after a plain scalar hash",
+      "chain: Arc\nbridge: CCTP\nnote: value#hash\ncctpDomains:\n  arc: 7",
+      "config.yaml"
+    ]
+  ])(
+    "CCTP_DOMAIN_26 reports one finding for %s",
+    async (_name, source, filePath = "src/fixture.ts") => {
+      const findings = await runBridgeRule(
+        cctpDomain26Rule,
+        source,
+        {},
+        filePath
+      );
+
+      expect(findings).toHaveLength(1);
+    }
+  );
+
+  it.each([
+    [
+      "correct direct candidates",
+      "Arc CCTP bridge\nconst ARC_DOMAIN = 26;\nconst ARC_CCTP_DOMAIN = 26;"
+    ],
+    ["correct named map", "Arc CCTP bridge\nconst cctpDomains = { arc: 26 };"],
+    [
+      "correct YAML",
+      "chain: Arc\nbridge: CCTP\ncctpDomains:\n  arc: 26",
+      "config.yaml"
+    ],
+    [
+      "direct text in source strings",
+      "const a = 'Arc CCTP ARC_DOMAIN = 7';\nconst b = \"ARC_CCTP_DOMAIN: 8\";\nconst c = `ARC_DOMAIN = 9`;"
+    ],
+    [
+      "map text in strings and templates",
+      "const a = 'Arc CCTP cctpDomains = { arc: 7 }';\nconst b = `cctpDomains: { arc: 8 }`;"
+    ],
+    [
+      "candidate text in source comments",
+      "// Arc CCTP cctpDomains = { arc: 7 }\nconst ok = true; // ARC_DOMAIN = 8"
+    ],
+    [
+      "candidate text in a block comment",
+      "/* Arc CCTP\ncctpDomains = { arc: 7 }\nARC_DOMAIN = 8\n*/"
+    ],
+    [
+      "guidance before a textual map",
+      "Arc CCTP bridge\nDo not use this CCTP map: cctpDomains = { arc: 7 }"
+    ],
+    [
+      "guidance after a textual map",
+      "Arc CCTP bridge\ncctpDomains = { arc: 7 } should not be used for domains"
+    ],
+    [
+      "separate CCTP gate before never guidance",
+      'const protocol = "CCTP";\nNever cctpDomains = { arc: 7 } for Arc bridge'
+    ],
+    [
+      "separate CCTP gate before map guidance",
+      'const protocol = "CCTP";\ncctpDomains = { arc: 7 } should not be used.'
+    ],
+    [
+      "separate CCTP gate before semicolon map guidance",
+      'const protocol = "CCTP";\nconst chain = "Arc";\ncctpDomains = { arc: 7 }; should not be used.'
+    ],
+    [
+      "separate CCTP gate before unsupported direct guidance",
+      'const protocol = "CCTP";\nARC_DOMAIN = 7; is unsupported.'
+    ],
+    [
+      "separate CCTP gate before direct should-not guidance",
+      'const protocol = "CCTP";\nARC_CCTP_DOMAIN = 7; should not be used.'
+    ],
+    ["Markdown heading", "# Bad Arc CCTP map: cctpDomains = { arc: 7 }"],
+    ["Markdown dash bullet", "- Bad Arc CCTP map: cctpDomains = { arc: 7 }"],
+    [
+      "Markdown asterisk bullet",
+      "* Bad Arc CCTP map: cctpDomains = { arc: 7 }"
+    ],
+    ["Markdown bold", "**Bad Arc CCTP map:** cctpDomains = { arc: 7 }"],
+    ["compact asterisk prose", "*Bad Arc CCTP map: cctpDomains = { arc: 7 }"],
+    ["Markdown blockquote", "> Bad Arc CCTP map: cctpDomains = { arc: 7 }"],
+    [
+      "cross-object arc",
+      "Arc CCTP bridge\nconst cctpDomains = { ethereum: 0 };\nconst unrelated = { arc: 7 };"
+    ],
+    [
+      "nested metadata arc",
+      "Arc CCTP bridge\nconst cctpDomains = { metadata: { arc: 7 } };"
+    ],
+    [
+      "spread before arc",
+      "Arc CCTP bridge\nconst cctpDomains = { ...defaults, arc: 7 };"
+    ],
+    [
+      "spread after arc",
+      "Arc CCTP bridge\nconst cctpDomains = { arc: 7, ...defaults };"
+    ],
+    [
+      "direct object property inside function call",
+      "Arc CCTP bridge\nconfigure({ ARC_CCTP_DOMAIN: 7 });"
+    ],
+    [
+      "direct object property inside array object",
+      "Arc CCTP bridge\nconst configs = [{ ARC_CCTP_DOMAIN: 7 }];"
+    ],
+    [
+      "correct map with numeric noise",
+      "Arc CCTP bridge\nconst cctpDomains = { arc: 26 };\nconst retry = 7;"
+    ],
+    [
+      "identifier value",
+      "Arc CCTP bridge\nconst cctpDomains = { arc: WRONG_ARC_DOMAIN };"
+    ],
+    [
+      "call value",
+      "Arc CCTP bridge\nconst cctpDomains = { arc: getDomain() };"
+    ],
+    [
+      "template value",
+      "Arc CCTP bridge\nconst cctpDomains = { arc: `${domain}` };"
+    ],
+    ["negative value", "Arc CCTP bridge\nconst cctpDomains = { arc: -7 };"],
+    ["hex value", "Arc CCTP bridge\nconst cctpDomains = { arc: 0x1a };"],
+    ["fractional value", "Arc CCTP bridge\nconst cctpDomains = { arc: 7.5 };"],
+    ["bigint value", "Arc CCTP bridge\nconst cctpDomains = { arc: 7n };"],
+    [
+      "numeric separator value",
+      "Arc CCTP bridge\nconst cctpDomains = { arc: 2_6 };"
+    ],
+    ["quoted arc key", "Arc CCTP bridge\nconst cctpDomains = { 'arc': 7 };"],
+    ["computed arc key", "Arc CCTP bridge\nconst cctpDomains = { [arc]: 7 };"],
+    [
+      "duplicate correct then wrong",
+      "Arc CCTP bridge\nconst cctpDomains = { arc: 26, arc: 7 };"
+    ],
+    [
+      "duplicate wrong then correct",
+      "Arc CCTP bridge\nconst cctpDomains = { arc: 7, arc: 26 };"
+    ],
+    [
+      "duplicate wrong values",
+      "Arc CCTP bridge\nconst cctpDomains = { arc: 7, arc: 7 };"
+    ],
+    ["unterminated map", "Arc CCTP bridge\nconst cctpDomains = { arc: 7;"],
+    [
+      "YAML nested descendant",
+      "chain: Arc\nbridge: CCTP\ncctpDomains:\n  metadata:\n    arc: 7",
+      "config.yaml"
+    ],
+    [
+      "YAML sibling outside boundary",
+      "chain: Arc\nbridge: CCTP\ncctpDomains:\n  ethereum: 0\narc: 7",
+      "config.yaml"
+    ],
+    [
+      "YAML quoted arc key",
+      'chain: Arc\nbridge: CCTP\ncctpDomains:\n  "arc": 7',
+      "config.yaml"
+    ],
+    [
+      "YAML comment-only map",
+      "chain: Arc\nbridge: CCTP\ncctpDomains:\n  # arc: 7",
+      "config.yaml"
+    ],
+    [
+      "YAML header at EOF",
+      "chain: Arc\nbridge: CCTP\ncctpDomains:",
+      "config.yaml"
+    ],
+    [
+      "duplicate YAML arc children",
+      "chain: Arc\nbridge: CCTP\ncctpDomains:\n  arc: 7\n  arc: WRONG_DOMAIN",
+      "config.yaml"
+    ],
+    [
+      "JS private field",
+      'const context = "Arc CCTP";\nclass Config { #cctpDomains = { arc: 7 }; }'
+    ],
+    [
+      "block terminator before documentation",
+      "/* Arc CCTP preface\n*/ **Bad CCTP map:** cctpDomains = { arc: 7 }"
+    ],
+    [
+      "deferred identifier resolution",
+      "Arc CCTP bridge\nconst WRONG_ARC_DOMAIN = 7;\nconst cctpDomains = { arc: WRONG_ARC_DOMAIN };"
+    ],
+    ["invalid colon declaration", "Arc CCTP bridge\nconst ARC_CCTP_DOMAIN: 7;"],
+    [
+      "multiline multi-declarator candidate",
+      'const bridgeName = "Arc CCTP";\nconst unsupported = 0,\n  domain = unsupported,\n  ARC_CCTP_DOMAIN = 7;'
+    ],
+    [
+      "same-line multi-declarator candidate",
+      'const bridgeName = "Arc CCTP";\nconst unsupported = 0, domain = unsupported, ARC_CCTP_DOMAIN = 7;'
+    ],
+    ["direct expression value", "Arc CCTP bridge\nARC_DOMAIN = 7 + 1;"],
+    ["direct call value", "Arc CCTP bridge\nARC_DOMAIN = getDomain();"],
+    ["direct identifier value", "Arc CCTP bridge\nARC_DOMAIN = WRONG_DOMAIN;"],
+    ["parenthesized direct value", "Arc CCTP bridge\nARC_DOMAIN = (7);"],
+    ["signed direct value", "Arc CCTP bridge\nARC_DOMAIN = -7;"],
+    ["positive direct value", "Arc CCTP bridge\nARC_DOMAIN = +7;"],
+    ["fractional direct value", "Arc CCTP bridge\nARC_DOMAIN = 7.0;"],
+    ["hex direct value", "Arc CCTP bridge\nARC_DOMAIN = 0x07;"],
+    ["octal direct value", "Arc CCTP bridge\nARC_DOMAIN = 0o7;"],
+    ["binary direct value", "Arc CCTP bridge\nARC_DOMAIN = 0b111;"],
+    ["bigint direct value", "Arc CCTP bridge\nARC_DOMAIN = 7n;"],
+    ["separated direct value", "Arc CCTP bridge\nARC_DOMAIN = 7_0;"],
+    [
+      "multiline arithmetic expression",
+      "Arc CCTP bridge\nARC_DOMAIN = 7\n  + 1;"
+    ],
+    [
+      "multiline ternary expression",
+      "Arc CCTP bridge\nARC_DOMAIN = condition\n  ? 7\n  : 26;"
+    ],
+    [
+      "ASI-dependent assignment",
+      "Arc CCTP bridge\nARC_DOMAIN = 7\nconst next = true;"
+    ],
+    [
+      "assignment inside if",
+      "Arc CCTP bridge\nif ((ARC_DOMAIN = 7)) { run(); }"
+    ],
+    [
+      "assignment inside return",
+      "Arc CCTP bridge\nreturn (ARC_CCTP_DOMAIN = 7);"
+    ],
+    [
+      "assignment inside function call",
+      "Arc CCTP bridge\navoid(ARC_DOMAIN = 7);"
+    ],
+    [
+      "commented function-call boundary",
+      "Arc CCTP bridge\navoid /* comment */ (ARC_DOMAIN = 7);"
+    ],
+    ["assignment inside label", "Arc CCTP bridge\navoid: ARC_DOMAIN = 7;"],
+    [
+      "executable prefix before assignment",
+      'const bridgeName = "Arc CCTP";\nif (avoid) ARC_DOMAIN = 7;'
+    ],
+    [
+      "multiple statements after direct candidate",
+      "Arc CCTP bridge\nARC_DOMAIN = 7; const next = true;"
+    ],
+    [
+      "quoted direct object key",
+      "Arc CCTP bridge\nconst config = { 'ARC_DOMAIN': 7, };"
+    ],
+    [
+      "computed direct object key",
+      "Arc CCTP bridge\nconst config = { [ARC_DOMAIN]: 7, };"
+    ],
+    [
+      "candidate text in an emoji source string",
+      'const note = "😀 Arc CCTP ARC_CCTP_DOMAIN = 7";'
+    ],
+    [
+      "candidate text in an emoji YAML scalar",
+      'chain: Arc\nbridge: CCTP\nnote: "😀 cctpDomains: { arc: 7 }"',
+      "config.yaml"
+    ],
+    [
+      "avoid guidance for a direct candidate",
+      "Avoid ARC_CCTP_DOMAIN = 7 for this Arc CCTP bridge."
+    ],
+    [
+      "candidate-like YAML hash comment",
+      "chain: Arc\nbridge: CCTP\n# cctpDomains: { arc: 7, note: value#hash }",
+      "config.yaml"
+    ],
+    [
+      "YAML quoted map key",
+      'chain: Arc\nbridge: CCTP\n"cctpDomains":\n  arc: 7',
+      "config.yaml"
+    ],
+    [
+      "YAML quoted numeric value",
+      'chain: Arc\nbridge: CCTP\ncctpDomains:\n  arc: "7"',
+      "config.yaml"
+    ],
+    [
+      "correct flow YAML plain scalar hash",
+      "chain: Arc\nbridge: CCTP\ncctpDomains: { arc: 26, note: value#hash }",
+      "config.yaml"
+    ]
+  ])(
+    "CCTP_DOMAIN_26 stays silent for %s",
+    async (_name, source, filePath = "src/fixture.ts") => {
+      await expect(
+        runBridgeRule(cctpDomain26Rule, source, {}, filePath)
+      ).resolves.toEqual([]);
+    }
+  );
+
+  it.each([
+    ["emoji", 'const note = "😀";\nconst ARC_CCTP_DOMAIN = 7;'],
+    ["Vietnamese text", 'const note = "cấu hình";\nconst ARC_CCTP_DOMAIN = 7;'],
+    ["quoted braces", 'const cctpDomains = { note: "{ }", arc: 7 };'],
+    ["comment braces", "const cctpDomains = { /* { } */ arc: 7 };"],
+    ["LF", "const cctpDomains = {\n  arc: 7\n};"],
+    ["CRLF", "const cctpDomains = {\r\n  arc: 7\r\n};"],
+    ["escaped quotes", 'const note = "\\"{\\"";\nconst ARC_DOMAIN = 7;']
+  ])(
+    "CCTP_DOMAIN_26 preserves a supported candidate with inert %s",
+    async (_name, candidate) => {
+      const findings = await runBridgeRule(
+        cctpDomain26Rule,
+        `const bridge = "Arc CCTP";\n${candidate}`
+      );
+
+      expect(findings).toHaveLength(1);
+    }
+  );
+
+  it.each([
+    ["guidance", "Do not use ARC_CCTP_DOMAIN = 7."],
+    ["map prose", "Never use this map: cctpDomains = { arc: 7 }"],
+    ["suffix prose", "cctpDomains = { arc: 7 }; should not be used."],
+    ["control flow", "return (ARC_CCTP_DOMAIN = 7);"]
+  ])(
+    "CCTP_DOMAIN_26 keeps unsupported %s negative with gates elsewhere",
+    async (_name, candidate) => {
+      await expect(
+        runBridgeRule(
+          cctpDomain26Rule,
+          `const protocol = "CCTP";\nconst chain = "Arc";\n${candidate}`
+        )
+      ).resolves.toEqual([]);
+    }
+  );
 
   it("NO_WRAPPED_USDC_ON_ARC flags a same-line Arc wrapped-USDC route", async () => {
     const findings = await runBridgeRule(
@@ -857,7 +1372,8 @@ describe("bridge rules", () => {
 async function runBridgeRule(
   rule: Rule,
   content: string,
-  rules: RuleContext["config"]["rules"] = {}
+  rules: RuleContext["config"]["rules"] = {},
+  filePath = "src/fixture.ts"
 ) {
   return runRules([rule], {
     projectRoot: "/fixture",
@@ -866,7 +1382,7 @@ async function runBridgeRule(
       presets: ["bridge"],
       rules
     },
-    files: ["src/fixture.ts"],
+    files: [filePath],
     detectedPresets: {
       detectedPresets: ["bridge"],
       confidence: "high",

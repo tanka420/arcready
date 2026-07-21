@@ -135,10 +135,37 @@ describe("private ScanResultV2 runtime", () => {
   it("returns one validated CCTP FindingV2", async () => {
     const result = await scanProject({ "src/cctp.ts": cctpSource });
 
-    expect(result.findings.map(({ ruleId }) => ruleId)).toEqual([
-      "bridge/CCTP_DOMAIN_26"
-    ]);
+    assertCctpRuntime(result, "src/cctp.ts", 1);
     validateCompleteResult(result);
+  });
+
+  it.each([
+    [
+      "a named map with inert braces and Unicode",
+      'Arc CCTP bridge\nconst cctpDomains = { note: "😀 }", /* { ignored } */ arc: 7 };\n',
+      "src/cctp.ts"
+    ],
+    [
+      "a named-map member with a same-line sibling",
+      "Arc CCTP bridge\nconst config = { cctpDomains: { arc: 7 }, enabled: true };\n",
+      "src/cctp.ts"
+    ],
+    [
+      "a YAML child",
+      "chain: Arc\nbridge: CCTP\ncctpDomains:\n  arc: 7\n",
+      "src/cctp.yaml"
+    ]
+  ])("adapts CCTP context from %s", async (_name, source, filePath) => {
+    const result = await scanProject({ [filePath]: source });
+
+    assertCctpRuntime(result, filePath, 1);
+    validateCompleteResult(result);
+    if (filePath === "src/cctp.ts") {
+      const baseline = await scanProject({ "src/cctp.ts": cctpSource });
+      expect(exactFingerprint(result.findings[0])).toBe(
+        exactFingerprint(baseline.findings[0])
+      );
+    }
   });
 
   it("returns one validated wrapped-USDC FindingV2", async () => {
@@ -297,6 +324,44 @@ describe("private ScanResultV2 runtime", () => {
       failedOccurrences: 0,
       completedWithNoFindingsOccurrences: 2
     });
+    expect(
+      result.coverage.ruleExecution.counts.normalizedDetectorFindings
+    ).toBe(0);
+    expect(result.diagnostics).toEqual([]);
+    validateCompleteResult(result);
+  });
+
+  it.each([
+    [
+      "cross-object association",
+      "Arc CCTP bridge\nconst cctpDomains = { ethereum: 0 };\nconst unrelated = { arc: 7 };\n"
+    ],
+    [
+      "guidance with raw evidence elsewhere",
+      'const protocol = "CCTP";\nconst chain = "Arc";\nNever cctpDomains = { arc: 7 } for this bridge\n'
+    ],
+    ["a multiline expression", "Arc CCTP bridge\nARC_DOMAIN = 7\n  + 1;\n"],
+    [
+      "a named map with a live spread",
+      "Arc CCTP bridge\nconst cctpDomains = { arc: 7, ...defaults };\n"
+    ]
+  ])("does not adapt CCTP from %s", async (_name, source) => {
+    const result = await scanProject({ "src/bridge.ts": source });
+
+    assertCctpRuntime(result, "src/bridge.ts", 0);
+    validateCompleteResult(result);
+  });
+
+  it("does not adapt CCTP examples from Markdown", async () => {
+    const result = await scanProject(
+      {
+        "docs/migration.md":
+          "# Arc CCTP migration\n\nconst ARC_DOMAIN = 7;\n"
+      },
+      { paths: ["docs"] }
+    );
+
+    assertCctpRuntime(result, "docs/migration.md", 0);
     validateCompleteResult(result);
   });
 
@@ -977,6 +1042,62 @@ function completedOccurrence(
     execution: "completed",
     detectorFindings
   };
+}
+
+function assertCctpRuntime(
+  result: Awaited<ReturnType<typeof runInternalScanV2>>,
+  filePath: string,
+  normalizedDetectorFindings: 0 | 1
+): void {
+  expect(result.coverage.ruleExecution.counts).toMatchObject({
+    selectedOccurrences: 2,
+    scheduledOccurrences: 2,
+    completedOccurrences: 2,
+    failedOccurrences: 0,
+    normalizedDetectorFindings
+  });
+  expect(result.diagnostics).toEqual([]);
+  expect(result.findings).toHaveLength(normalizedDetectorFindings);
+  if (normalizedDetectorFindings === 0) {
+    return;
+  }
+
+  const finding = result.findings[0];
+  expect(finding).toMatchObject({
+    ruleId: "bridge/CCTP_DOMAIN_26",
+    title: "CCTP domain 26",
+    message: "Arc CCTP domain config appears to use a value other than 26.",
+    classification: {
+      taxonomy: "experimental-compatibility",
+      impact: "blocker",
+      category: "bridge",
+      maturity: "prototype"
+    },
+    confidence: { level: "medium", basis: "adapter" },
+    primaryLocation: { path: filePath },
+    relatedLocations: [],
+    evidence: [
+      {
+        kind: "pattern-match",
+        patternId: "bridge.cctp-domain.non-26",
+        location: { path: filePath }
+      }
+    ],
+    remediation: {
+      summary:
+        "Check the CCTP domain map and set the Arc domain value to 26 wherever Arc routes are configured."
+    },
+    fingerprints: {
+      exact: {
+        scheme: "arcready/exact-location/v1",
+        algorithm: "sha256",
+        stability: "exact"
+      }
+    }
+  });
+  expect(finding?.primaryLocation?.region).toBeUndefined();
+  expect(finding?.evidence[0]).not.toHaveProperty("excerpt");
+  expect(exactFingerprint(finding)).toMatch(/^sha256:[0-9a-f]{64}$/);
 }
 
 function validateCompleteResult(
