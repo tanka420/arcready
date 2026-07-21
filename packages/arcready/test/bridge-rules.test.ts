@@ -589,6 +589,14 @@ describe("bridge rules", () => {
       '* Example Arc bridge route: { chain: "Arc", token: "USDC.e" }'
     ],
     [
+      "Markdown bold documentation",
+      '**Bad Arc bridge route:** { chain: "Arc", token: "USDC.e" }'
+    ],
+    [
+      "compact asterisk documentation",
+      '*compact Arc bridge route:* { chain: "Arc", token: "USDC.e" }'
+    ],
+    [
       "Markdown blockquote",
       '> Avoid this Arc bridge route: { chain: "Arc", token: "USDC.e" }'
     ],
@@ -606,7 +614,7 @@ describe("bridge rules", () => {
     ],
     [
       "avoid guidance after an object",
-      'Example: { chain: "Arc", token: "USDC.e" }. Avoid this configuration.'
+      'Example Arc bridge route: { chain: "Arc", token: "USDC.e" }. Avoid this configuration.'
     ],
     [
       "guidance between route prose and an object",
@@ -619,11 +627,32 @@ describe("bridge rules", () => {
     [
       "block comment object",
       '/* Bad Arc bridge route: { chain: "Arc", token: "USDC.e" } */'
+    ],
+    [
+      "block-comment terminator followed by guidance",
+      '/* preface\n*/ Example Arc bridge route: { chain: "Arc", token: "USDC.e" } should not be used.'
+    ],
+    [
+      "block-comment terminator followed by a Markdown heading",
+      '/* preface\n*/ # Bad Arc bridge route: { chain: "Arc", token: "USDC.e" }'
+    ],
+    [
+      "block-comment terminator followed by Markdown bold documentation",
+      '/* preface\n*/ **Bad Arc bridge route:** { chain: "Arc", token: "USDC.e" }'
     ]
   ])("NO_WRAPPED_USDC_ON_ARC ignores a %s", async (_name, source) => {
     await expect(
       runBridgeRule(noWrappedUsdcOnArcRule, source)
     ).resolves.toEqual([]);
+  });
+
+  it("NO_WRAPPED_USDC_ON_ARC flags executable code after a block-comment terminator", async () => {
+    await expect(
+      runBridgeRule(
+        noWrappedUsdcOnArcRule,
+        '/* preface\n*/ export const route = {\n  chain: "Arc",\n  token: "USDC.e"\n};'
+      )
+    ).resolves.toHaveLength(1);
   });
 
   it("NO_WRAPPED_USDC_ON_ARC ignores guidance-only prose without an object", async () => {

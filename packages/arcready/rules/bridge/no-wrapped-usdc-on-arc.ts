@@ -15,7 +15,7 @@ const WRAPPED_USDC_TERM_PATTERN =
   /\b(USDC\.e|wUSDC|wrapped USDC|bridged USDC)\b/i;
 const NEGATIVE_GUIDANCE_PATTERN =
   /\b(do not|don't|never|avoid|unsupported|not supported|should not|must not|instead of|rather than)\b/i;
-const DOCUMENTATION_PREFIX_PATTERN = /^(?:#|>|[-*]\s)/;
+const DOCUMENTATION_PREFIX_PATTERN = /^(?:#|>|\*|-\s)/;
 const RELEVANT_FIELDS = new Set([
   "chain",
   "token",
@@ -85,9 +85,9 @@ function hasWrappedUsdcRoute(content: string): boolean {
 
     if (character === "\n") {
       atLineStart = true;
-    } else if (atLineStart && !isWhitespace(character)) {
+    } else if (atLineStart && state === "code" && !isWhitespace(character)) {
       atLineStart = false;
-      if (state === "code" && candidate === undefined) {
+      if (candidate === undefined) {
         const newline = content.indexOf("\n", index);
         const lineEnd = newline === -1 ? content.length : newline;
         if (shouldIgnorePhysicalLine(content.slice(index, lineEnd))) {

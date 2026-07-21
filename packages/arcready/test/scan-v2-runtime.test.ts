@@ -162,6 +162,10 @@ describe("private ScanResultV2 runtime", () => {
     [
       "negative guidance in an irrelevant string",
       'export const route = { chain: "Arc", token: "USDC.e", note: "This route should not be used." };\n'
+    ],
+    [
+      "executable code after a block-comment terminator",
+      '/* preface\n*/ export const route = { chain: "Arc", token: "USDC.e" };\n'
     ]
   ])("adapts wrapped USDC with %s", async (_name, source) => {
     const result = await scanProject({ "src/route.ts": source });
