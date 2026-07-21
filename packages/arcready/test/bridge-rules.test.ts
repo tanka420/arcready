@@ -210,7 +210,7 @@ describe("bridge rules", () => {
     ).resolves.toEqual([]);
   });
 
-  it("NO_WRAPPED_USDC_ON_ARC flags wrapped USDC routes", async () => {
+  it("NO_WRAPPED_USDC_ON_ARC flags a same-line Arc wrapped-USDC route", async () => {
     const findings = await runBridgeRule(
       noWrappedUsdcOnArcRule,
       "export const route = { chain: 'Arc Testnet', bridge: true, token: 'USDC.e' };"
@@ -225,6 +225,81 @@ describe("bridge rules", () => {
     });
   });
 
+  it.each([
+    ["wUSDC token", "token", "wUSDC"],
+    ["wrapped USDC asset", "asset", "wrapped USDC"],
+    ["bridged USDC asset", "asset", "bridged USDC"],
+    ["case-insensitive USDC.e token", "token", "usdc.E"],
+    ["case-insensitive wUSDC token", "token", "Wusdc"]
+  ])(
+    "NO_WRAPPED_USDC_ON_ARC flags a generic Arc route with %s",
+    async (_name, field, token) => {
+      const findings = await runBridgeRule(
+        noWrappedUsdcOnArcRule,
+        `export const route = { chain: "Arc Testnet", bridge: true, ${field}: "${token}" };`
+      );
+
+      expect(findings).toHaveLength(1);
+      expect(findings[0]?.ruleId).toBe("bridge/NO_WRAPPED_USDC_ON_ARC");
+    }
+  );
+
+  it.each([
+    ["LF", "\n"],
+    ["CRLF", "\r\n"]
+  ])(
+    "NO_WRAPPED_USDC_ON_ARC flags a flat multiline Arc route with %s",
+    async (_name, newline) => {
+      const source = [
+        "export const route = {",
+        '  chain: "Arc Testnet",',
+        "  bridge: true,",
+        '  token: "USDC.e"',
+        "};"
+      ].join(newline);
+
+      await expect(
+        runBridgeRule(noWrappedUsdcOnArcRule, source)
+      ).resolves.toHaveLength(1);
+    }
+  );
+
+  it("NO_WRAPPED_USDC_ON_ARC flags an Arc source token", async () => {
+    await expect(
+      runBridgeRule(
+        noWrappedUsdcOnArcRule,
+        'export const route = { bridge: true, sourceChain: "Arc Testnet", sourceToken: "USDC.e", destinationChain: "Ethereum", destinationToken: "USDC" };'
+      )
+    ).resolves.toHaveLength(1);
+  });
+
+  it("NO_WRAPPED_USDC_ON_ARC flags an Arc destination token", async () => {
+    await expect(
+      runBridgeRule(
+        noWrappedUsdcOnArcRule,
+        'export const route = { bridge: true, sourceChain: "Ethereum", sourceToken: "USDC", destinationChain: "Arc Testnet", destinationToken: "wUSDC" };'
+      )
+    ).resolves.toHaveLength(1);
+  });
+
+  it.each([
+    ["Arc", '"Arc"'],
+    ["case-insensitive Arc", '"arc"'],
+    ["Arc_Testnet", '"Arc_Testnet"'],
+    ["arcTestnet", '"arcTestnet"'],
+    ["numeric Arc chain ID", "5042002"]
+  ])(
+    "NO_WRAPPED_USDC_ON_ARC supports the direct %s chain literal",
+    async (_name, chain) => {
+      await expect(
+        runBridgeRule(
+          noWrappedUsdcOnArcRule,
+          `export const route = { chain: ${chain}, bridge: true, token: "USDC.e" };`
+        )
+      ).resolves.toHaveLength(1);
+    }
+  );
+
   it("NO_WRAPPED_USDC_ON_ARC allows canonical USDC routes", async () => {
     await expect(
       runBridgeRule(
@@ -234,11 +309,123 @@ describe("bridge rules", () => {
     ).resolves.toEqual([]);
   });
 
+  it("NO_WRAPPED_USDC_ON_ARC ignores wrapped USDC on a non-Arc source", async () => {
+    await expect(
+      runBridgeRule(
+        noWrappedUsdcOnArcRule,
+        'export const route = { bridge: true, sourceChain: "Ethereum", sourceToken: "USDC.e", destinationChain: "Arc Testnet", destinationToken: "USDC" };'
+      )
+    ).resolves.toEqual([]);
+  });
+
+  it("NO_WRAPPED_USDC_ON_ARC does not pair an Arc destination with a wrapped source token", async () => {
+    await expect(
+      runBridgeRule(
+        noWrappedUsdcOnArcRule,
+        'export const route = { bridge: true, sourceToken: "USDC.e", destinationChain: "Arc Testnet", destinationToken: "USDC" };'
+      )
+    ).resolves.toEqual([]);
+  });
+
+  it("NO_WRAPPED_USDC_ON_ARC ignores a non-Arc wrapped source without a destination", async () => {
+    await expect(
+      runBridgeRule(
+        noWrappedUsdcOnArcRule,
+        'export const arcBridge = { sourceChain: "Ethereum", sourceToken: "USDC.e" };'
+      )
+    ).resolves.toEqual([]);
+  });
+
+  it("NO_WRAPPED_USDC_ON_ARC keeps separate array route objects isolated", async () => {
+    await expect(
+      runBridgeRule(
+        noWrappedUsdcOnArcRule,
+        'export const routes = [{ chain: "Ethereum", bridge: true, token: "wUSDC" }, { chain: "Arc Testnet", bridge: true, token: "USDC" }];'
+      )
+    ).resolves.toEqual([]);
+  });
+
+  it("NO_WRAPPED_USDC_ON_ARC ignores an unrelated wrapped-token variable", async () => {
+    await expect(
+      runBridgeRule(
+        noWrappedUsdcOnArcRule,
+        'const wrappedToken = "USDC.e";\nexport const route = { chain: "Arc Testnet", bridge: true, token: "USDC" };'
+      )
+    ).resolves.toEqual([]);
+  });
+
+  it.each([
+    [
+      "aliased",
+      'const wrappedToken = "USDC.e";\nexport const route = { chain: "Arc Testnet", bridge: true, token: wrappedToken };'
+    ],
+    [
+      "computed",
+      'export const route = { chain: "Arc Testnet", bridge: true, token: getToken("USDC.e") };'
+    ],
+    [
+      "quoted-key",
+      'export const route = { "chain": "Arc Testnet", bridge: true, token: "USDC.e" };'
+    ],
+    [
+      "computed-key",
+      'const chainKey = "chain";\nexport const route = { [chainKey]: "Arc Testnet", bridge: true, token: "USDC.e" };'
+    ],
+    [
+      "spread",
+      'const overrides = {};\nexport const route = { chain: "Arc Testnet", bridge: true, token: "USDC.e", ...overrides };'
+    ]
+  ])(
+    "NO_WRAPPED_USDC_ON_ARC ignores an unsupported %s object form",
+    async (_name, source) => {
+      await expect(
+        runBridgeRule(noWrappedUsdcOnArcRule, source)
+      ).resolves.toEqual([]);
+    }
+  );
+
+  it.each([
+    [
+      "duplicate token fields",
+      'export const route = { chain: "Arc Testnet", bridge: true, token: "USDC.e", token: "USDC" };'
+    ],
+    [
+      "literal and computed token fields",
+      'export const route = { chain: "Arc Testnet", bridge: true, token: "USDC.e", token: getToken() };'
+    ],
+    [
+      "generic token and asset fields",
+      'export const route = { chain: "Arc Testnet", bridge: true, token: "USDC", asset: "USDC.e" };'
+    ]
+  ])("NO_WRAPPED_USDC_ON_ARC ignores ambiguous %s", async (_name, source) => {
+    await expect(
+      runBridgeRule(noWrappedUsdcOnArcRule, source)
+    ).resolves.toEqual([]);
+  });
+
+  it("NO_WRAPPED_USDC_ON_ARC ignores standalone wrapped-USDC comments", async () => {
+    await expect(
+      runBridgeRule(
+        noWrappedUsdcOnArcRule,
+        'export const route = {\n  chain: "Arc Testnet",\n  bridge: true,\n  // token: "USDC.e",\n  token: "USDC"\n};'
+      )
+    ).resolves.toEqual([]);
+  });
+
   it("NO_WRAPPED_USDC_ON_ARC ignores guidance against wrapped USDC", async () => {
     await expect(
       runBridgeRule(
         noWrappedUsdcOnArcRule,
-        "const chain = 'Arc Testnet';\nexport const docs = 'Do not route USDC.e or wrapped USDC to Arc bridge users.';"
+        'export const route = {\n  chain: "Arc Testnet",\n  bridge: true,\n  token: "USDC.e", // Do not use wrapped USDC on Arc.\n};'
+      )
+    ).resolves.toEqual([]);
+  });
+
+  it("NO_WRAPPED_USDC_ON_ARC ignores arbitrary wrapped-USDC prose", async () => {
+    await expect(
+      runBridgeRule(
+        noWrappedUsdcOnArcRule,
+        "Arc bridge route uses USDC.e as its destination asset."
       )
     ).resolves.toEqual([]);
   });

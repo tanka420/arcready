@@ -41,7 +41,8 @@ import { DEFAULT_CONFIG, runScan } from "../src/index.js";
 const repoRoot = join(import.meta.dirname, "..", "..", "..");
 const temporaryRoots: string[] = [];
 const cctpSource = "Arc CCTP bridge\nconst ARC_CCTP_DOMAIN = 7;\n";
-const wrappedSource = "Arc bridge route uses USDC.e as its destination asset.\n";
+const wrappedSource =
+  'export const route = { chain: "Arc Testnet", bridge: true, token: "USDC.e" };\n';
 const safeSource =
   "Arc CCTP bridge\nconst ARC_CCTP_DOMAIN = 26;\nconst asset = 'USDC';\n";
 
@@ -192,6 +193,29 @@ describe("private ScanResultV2 runtime", () => {
       completedOccurrences: 2,
       completedWithNoFindingsOccurrences: 2
     });
+  });
+
+  it("does not adapt wrapped USDC from a non-Arc source route", async () => {
+    const result = await scanProject({
+      "src/route.ts":
+        'export const routes = [{ bridge: true, sourceChain: "Ethereum", sourceToken: "USDC.e", destinationChain: "Arc Testnet", destinationToken: "USDC" }];\n'
+    });
+
+    expect(
+      result.findings.some(
+        ({ ruleId }) => ruleId === "bridge/NO_WRAPPED_USDC_ON_ARC"
+      )
+    ).toBe(false);
+    expect(result.coverage.ruleExecution.counts).toMatchObject({
+      selectedOccurrences: 2,
+      disabledOccurrences: 0,
+      scheduledOccurrences: 2,
+      completedOccurrences: 2,
+      failedOccurrences: 0,
+      completedWithNoFindingsOccurrences: 2,
+      normalizedDetectorFindings: 0
+    });
+    validateCompleteResult(result);
   });
 
   it("does not adapt an unrelated Arc chain ID beside the correct CCTP domain", async () => {
