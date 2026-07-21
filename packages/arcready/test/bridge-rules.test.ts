@@ -58,10 +58,14 @@ describe("bridge rules", () => {
     ).resolves.toEqual([]);
   });
 
-  it("CCTP_DOMAIN_26 flags wrong Arc CCTP domain", async () => {
+  it.each([
+    ["ARC_DOMAIN", "const ARC_DOMAIN = 7;"],
+    ["ARC_CCTP_DOMAIN", "const ARC_CCTP_DOMAIN = 7;"],
+    ["case and whitespace variants", "const arc_cctp_domain : 7;"]
+  ])("CCTP_DOMAIN_26 flags wrong explicit %s", async (_name, source) => {
     const findings = await runBridgeRule(
       cctpDomain26Rule,
-      "export const ARC_DOMAIN = 6; // Arc CCTP depositForBurn attestation"
+      `Arc CCTP bridge\n${source}`
     );
 
     expect(findings[0]).toMatchObject({
@@ -73,11 +77,108 @@ describe("bridge rules", () => {
     });
   });
 
-  it("CCTP_DOMAIN_26 allows Arc CCTP domain 26", async () => {
+  it.each([
+    ["ARC_DOMAIN", "const ARC_DOMAIN = 26;"],
+    ["ARC_CCTP_DOMAIN", "const ARC_CCTP_DOMAIN = 26;"]
+  ])("CCTP_DOMAIN_26 allows correct explicit %s", async (_name, source) => {
+    await expect(
+      runBridgeRule(cctpDomain26Rule, `Arc CCTP bridge\n${source}`)
+    ).resolves.toEqual([]);
+  });
+
+  it("CCTP_DOMAIN_26 flags an inline named domain map", async () => {
+    const findings = await runBridgeRule(
+      cctpDomain26Rule,
+      "Arc CCTP bridge\nconst cctpDomains = { arc: 7 };"
+    );
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0]?.ruleId).toBe("bridge/CCTP_DOMAIN_26");
+  });
+
+  it("CCTP_DOMAIN_26 allows a correct inline named domain map", async () => {
     await expect(
       runBridgeRule(
         cctpDomain26Rule,
-        "export const ARC_DOMAIN = 26; // Arc CCTP depositForBurn attestation"
+        "Arc CCTP bridge\nconst cctpDomains = { arc: 26 };"
+      )
+    ).resolves.toEqual([]);
+  });
+
+  it("CCTP_DOMAIN_26 flags a flat multiline named domain map", async () => {
+    const findings = await runBridgeRule(
+      cctpDomain26Rule,
+      "Arc CCTP bridge\nconst cctpDomains = {\n  arc: 7\n};"
+    );
+
+    expect(findings).toHaveLength(1);
+  });
+
+  it("CCTP_DOMAIN_26 allows a correct flat multiline named domain map", async () => {
+    await expect(
+      runBridgeRule(
+        cctpDomain26Rule,
+        "Arc CCTP bridge\nconst cctpDomains = {\n  arc: 26\n};"
+      )
+    ).resolves.toEqual([]);
+  });
+
+  it("CCTP_DOMAIN_26 flags a directly indented YAML domain map", async () => {
+    const findings = await runBridgeRule(
+      cctpDomain26Rule,
+      "Arc CCTP bridge\ncctpDomains:\n  arc: 7"
+    );
+
+    expect(findings).toHaveLength(1);
+  });
+
+  it("CCTP_DOMAIN_26 allows a correct directly indented YAML domain map", async () => {
+    await expect(
+      runBridgeRule(
+        cctpDomain26Rule,
+        "Arc CCTP bridge\ncctpDomains:\n  arc: 26"
+      )
+    ).resolves.toEqual([]);
+  });
+
+  it.each([
+    ["braced", "const cctpDomains = {\r\n  arc: 7\r\n};"],
+    ["YAML", "cctpDomains:\r\n  arc: 7"]
+  ])(
+    "CCTP_DOMAIN_26 supports CRLF in a multiline %s map",
+    async (_name, source) => {
+      const findings = await runBridgeRule(
+        cctpDomain26Rule,
+        `Arc CCTP bridge\r\n${source}`
+      );
+
+      expect(findings).toHaveLength(1);
+    }
+  );
+
+  it("CCTP_DOMAIN_26 ignores an unrelated Arc chain ID", async () => {
+    await expect(
+      runBridgeRule(
+        cctpDomain26Rule,
+        "Arc CCTP bridge\nconst chainIds = { arc: 5042002 };"
+      )
+    ).resolves.toEqual([]);
+  });
+
+  it("CCTP_DOMAIN_26 ignores an Arc chain ID next to the correct domain", async () => {
+    await expect(
+      runBridgeRule(
+        cctpDomain26Rule,
+        "Arc CCTP bridge\nconst cctpDomains = { arc: 26 };\nconst chainIds = { arc: 5042002 };"
+      )
+    ).resolves.toEqual([]);
+  });
+
+  it("CCTP_DOMAIN_26 ignores unrelated Arc numeric configuration", async () => {
+    await expect(
+      runBridgeRule(
+        cctpDomain26Rule,
+        "Arc CCTP bridge\nconst retryByChain = { arc: 7 };"
       )
     ).resolves.toEqual([]);
   });
@@ -87,6 +188,24 @@ describe("bridge rules", () => {
       runBridgeRule(
         cctpDomain26Rule,
         "const chain = 'Arc Testnet';\n// CCTP note: do not set ARC_DOMAIN = 6; use 26."
+      )
+    ).resolves.toEqual([]);
+  });
+
+  it("CCTP_DOMAIN_26 ignores a commented incorrect named-map entry", async () => {
+    await expect(
+      runBridgeRule(
+        cctpDomain26Rule,
+        "Arc CCTP bridge\nconst cctpDomains = {\n  // arc: 7\n  arc: 26\n};"
+      )
+    ).resolves.toEqual([]);
+  });
+
+  it("CCTP_DOMAIN_26 ignores negative guidance about an incorrect domain", async () => {
+    await expect(
+      runBridgeRule(
+        cctpDomain26Rule,
+        "Arc CCTP bridge\nconst guidance = 'Do not use ARC_DOMAIN = 7 for the Arc CCTP domain.';"
       )
     ).resolves.toEqual([]);
   });

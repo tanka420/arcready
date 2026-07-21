@@ -308,9 +308,9 @@ export const ruleTaxonomyCatalog = [
       }
     ],
     rationale:
-      "An incorrect applicable CCTP domain prevents correct message routing, but the current detector can confuse domain values with other Arc numbers.",
+      "An incorrect applicable CCTP domain prevents correct message routing, while computed and structurally complex domain maps remain outside this text-based detector.",
     detectorLimitations: [
-      "A generic Arc numeric property may be a chain ID or another value rather than a CCTP domain.",
+      "Named-map matching is limited to direct unquoted Arc keys in flat braced or directly indented YAML maps.",
       "The detector cannot resolve computed domain maps."
     ],
     deprecated: false

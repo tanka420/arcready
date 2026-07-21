@@ -194,6 +194,28 @@ describe("private ScanResultV2 runtime", () => {
     });
   });
 
+  it("does not adapt an unrelated Arc chain ID beside the correct CCTP domain", async () => {
+    const result = await scanProject({
+      "src/bridge.ts":
+        "Arc CCTP bridge\nconst cctpDomains = { arc: 26 };\nconst chainIds = { arc: 5042002 };\n"
+    });
+
+    expect(
+      result.findings.some(
+        ({ ruleId }) => ruleId === "bridge/CCTP_DOMAIN_26"
+      )
+    ).toBe(false);
+    expect(result.coverage.ruleExecution.counts).toMatchObject({
+      selectedOccurrences: 2,
+      disabledOccurrences: 0,
+      scheduledOccurrences: 2,
+      completedOccurrences: 2,
+      failedOccurrences: 0,
+      completedWithNoFindingsOccurrences: 2
+    });
+    validateCompleteResult(result);
+  });
+
   it("truthfully scans the existing bridge-bad fixture with the fixed slice", async () => {
     const result = await runInternalScanV2({
       projectRoot: join(repoRoot, "fixtures", "bridge-bad"),

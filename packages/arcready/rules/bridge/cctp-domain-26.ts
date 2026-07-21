@@ -45,18 +45,59 @@ export const cctpDomain26Rule: Rule = {
 };
 
 function hasWrongArcDomain(content: string): boolean {
-  return content.split(/\r?\n/).some((line) => {
-    if (
-      isCommentOrDocumentationLine(line) ||
-      isGuidanceAgainstUsage(line, /\bdomain\b/i)
-    ) {
-      return false;
+  const lines = content.split(/\r?\n/).filter(isActionableDomainLine);
+
+  return (
+    lines.some((line) =>
+      /\bARC(?:_CCTP)?_DOMAIN\b\s*[:=]\s*(?!26\b)\d+\b/i.test(line)
+    ) ||
+    hasWrongArcDomainInBracedMap(lines) ||
+    hasWrongArcDomainInYamlMap(lines)
+  );
+}
+
+function isActionableDomainLine(line: string): boolean {
+  return (
+    !isCommentOrDocumentationLine(line) &&
+    !isGuidanceAgainstUsage(line, /\bdomain\b/i)
+  );
+}
+
+function hasWrongArcDomainInBracedMap(lines: string[]): boolean {
+  return /\bcctpDomains\b\s*[:=]\s*\{[^{}]*\barc\b\s*:\s*(?!26\b)\d+\b[^{}]*\}/i.test(
+    lines.join("\n")
+  );
+}
+
+function hasWrongArcDomainInYamlMap(lines: string[]): boolean {
+  for (const [index, line] of lines.entries()) {
+    const header = /^(?<indent>[\t ]*)cctpDomains\s*:\s*$/i.exec(line);
+    if (header === null) {
+      continue;
     }
 
-    return (
-      /\bARC(?:_CCTP)?_DOMAIN\b\s*[:=]\s*(?!26\b)\d+\b/i.test(line) ||
-      /\bcctpDomains\b.*\barc\b\s*:\s*(?!26\b)\d+\b/i.test(line) ||
-      /\barc\b\s*:\s*(?!26\b)\d+\b/i.test(line)
-    );
-  });
+    const parentIndent = header.groups?.indent.length ?? 0;
+    let childIndent: number | undefined;
+
+    for (const childLine of lines.slice(index + 1)) {
+      if (childLine.trim().length === 0) {
+        continue;
+      }
+
+      const indentation = /^[\t ]*/.exec(childLine)?.[0].length ?? 0;
+      if (indentation <= parentIndent) {
+        break;
+      }
+
+      childIndent ??= indentation;
+      if (
+        indentation === childIndent &&
+        /^\s*arc\s*:\s*(?!26\b)\d+\b/i.test(childLine)
+      ) {
+        return true;
+      }
+    }
+  }
+
+  return false;
 }
