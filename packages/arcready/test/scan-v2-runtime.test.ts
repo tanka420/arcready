@@ -150,6 +150,39 @@ describe("private ScanResultV2 runtime", () => {
     validateCompleteResult(result);
   });
 
+  it.each([
+    [
+      "an irrelevant literal ellipsis",
+      'export const route = { chain: "Arc", token: "USDC.e", note: "loading..." };\n'
+    ],
+    [
+      "trailing negative guidance",
+      'export const route = { chain: "Arc", token: "USDC.e" }; // Do not use wrapped USDC on Arc.\n'
+    ],
+    [
+      "negative guidance in an irrelevant string",
+      'export const route = { chain: "Arc", token: "USDC.e", note: "This route should not be used." };\n'
+    ],
+    [
+      "executable code after a block-comment terminator",
+      '/* preface\n*/ export const route = { chain: "Arc", token: "USDC.e" };\n'
+    ]
+  ])("adapts wrapped USDC with %s", async (_name, source) => {
+    const result = await scanProject({ "src/route.ts": source });
+
+    expect(result.findings.map(({ ruleId }) => ruleId)).toEqual([
+      "bridge/NO_WRAPPED_USDC_ON_ARC"
+    ]);
+    expect(result.coverage.ruleExecution.counts).toMatchObject({
+      selectedOccurrences: 2,
+      scheduledOccurrences: 2,
+      completedOccurrences: 2,
+      failedOccurrences: 0,
+      normalizedDetectorFindings: 1
+    });
+    validateCompleteResult(result);
+  });
+
   it("adapts both supported rules from one file", async () => {
     const result = await scanProject({
       "src/bridge.ts": `${cctpSource}${wrappedSource}`
@@ -213,6 +246,33 @@ describe("private ScanResultV2 runtime", () => {
       completedOccurrences: 2,
       failedOccurrences: 0,
       completedWithNoFindingsOccurrences: 2,
+      normalizedDetectorFindings: 0
+    });
+    validateCompleteResult(result);
+  });
+
+  it.each([
+    [
+      "relevant shorthand ambiguity",
+      'const asset = "USDC";\nexport const route = { chain: "Arc", token: "USDC.e", asset };\n'
+    ],
+    [
+      "a Markdown heading",
+      '# Bad Arc bridge route: { chain: "Arc", token: "USDC.e" }\n'
+    ]
+  ])("does not adapt wrapped USDC from %s", async (_name, source) => {
+    const result = await scanProject({ "src/route.ts": source });
+
+    expect(
+      result.findings.some(
+        ({ ruleId }) => ruleId === "bridge/NO_WRAPPED_USDC_ON_ARC"
+      )
+    ).toBe(false);
+    expect(result.coverage.ruleExecution.counts).toMatchObject({
+      selectedOccurrences: 2,
+      scheduledOccurrences: 2,
+      completedOccurrences: 2,
+      failedOccurrences: 0,
       normalizedDetectorFindings: 0
     });
     validateCompleteResult(result);

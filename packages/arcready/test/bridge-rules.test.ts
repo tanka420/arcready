@@ -245,6 +245,78 @@ describe("bridge rules", () => {
   );
 
   it.each([
+    ["ellipsis", 'note: "loading..."'],
+    ["closing brace", 'note: "literal } brace"'],
+    ["opening brace", 'note: "literal { brace"'],
+    ["negative guidance", 'note: "This route should not be used."'],
+    ["wrapped-USDC guidance", 'note: "Avoid USDC.e on Arc."']
+  ])(
+    "NO_WRAPPED_USDC_ON_ARC ignores a structural-looking %s in an irrelevant string",
+    async (_name, member) => {
+      await expect(
+        runBridgeRule(
+          noWrappedUsdcOnArcRule,
+          `export const route = { chain: "Arc", ${member}, token: "USDC.e" };`
+        )
+      ).resolves.toHaveLength(1);
+    }
+  );
+
+  it.each([
+    [
+      "line comment",
+      'export const route = {\n  chain: "Arc", // loading... } {\n  token: "USDC.e"\n};'
+    ],
+    [
+      "block comment",
+      'export const route = {\n  chain: "Arc", /* loading... } { */\n  token: "USDC.e"\n};'
+    ]
+  ])(
+    "NO_WRAPPED_USDC_ON_ARC allows a neutral %s between direct members",
+    async (_name, source) => {
+      await expect(
+        runBridgeRule(noWrappedUsdcOnArcRule, source)
+      ).resolves.toHaveLength(1);
+    }
+  );
+
+  it("NO_WRAPPED_USDC_ON_ARC preserves executable code before trailing guidance", async () => {
+    await expect(
+      runBridgeRule(
+        noWrappedUsdcOnArcRule,
+        'export const route = { chain: "Arc", token: "USDC.e" }; // Do not use wrapped USDC on Arc.'
+      )
+    ).resolves.toHaveLength(1);
+  });
+
+  it("NO_WRAPPED_USDC_ON_ARC preserves executable code before trailing block guidance", async () => {
+    await expect(
+      runBridgeRule(
+        noWrappedUsdcOnArcRule,
+        'export const route = { chain: "Arc", token: "USDC.e" }; /* This route should not be used. */'
+      )
+    ).resolves.toHaveLength(1);
+  });
+
+  it.each([
+    [
+      "source string",
+      'const example = \'{ chain: "Arc", token: "USDC.e", note: "... }" }\';\nexport const route = { chain: "Arc", token: "USDC.e" };'
+    ],
+    [
+      "block comment",
+      '/* { chain: "Arc", token: "USDC.e", note: "... }" } */\nexport const route = { chain: "Arc", token: "USDC.e" };'
+    ]
+  ])(
+    "NO_WRAPPED_USDC_ON_ARC ignores object-looking text in a %s beside a live route",
+    async (_name, source) => {
+      await expect(
+        runBridgeRule(noWrappedUsdcOnArcRule, source)
+      ).resolves.toHaveLength(1);
+    }
+  );
+
+  it.each([
     ["LF", "\n"],
     ["CRLF", "\r\n"]
   ])(
@@ -386,8 +458,16 @@ describe("bridge rules", () => {
 
   it.each([
     [
+      "duplicate chain fields",
+      'export const route = { chain: "Arc", chain: "Ethereum", token: "USDC.e" };'
+    ],
+    [
       "duplicate token fields",
       'export const route = { chain: "Arc Testnet", bridge: true, token: "USDC.e", token: "USDC" };'
+    ],
+    [
+      "comment-separated duplicate token fields",
+      'export const route = { chain: "Arc", token: "USDC.e", /* override */ token: "USDC" };'
     ],
     [
       "literal and computed token fields",
@@ -403,6 +483,71 @@ describe("bridge rules", () => {
     ).resolves.toEqual([]);
   });
 
+  it.each([
+    [
+      "token shorthand",
+      'const token = "USDC";\nexport const route = { chain: "Arc", token: "USDC.e", token };'
+    ],
+    [
+      "asset shorthand",
+      'const asset = "USDC";\nexport const route = { chain: "Arc", token: "USDC.e", asset };'
+    ],
+    [
+      "sourceToken shorthand",
+      'const sourceToken = "USDC";\nexport const route = { sourceChain: "Arc", sourceToken: "USDC.e", sourceToken };'
+    ],
+    [
+      "destinationToken shorthand",
+      'const destinationToken = "USDC";\nexport const route = { destinationChain: "Arc", destinationToken: "USDC.e", destinationToken };'
+    ]
+  ])(
+    "NO_WRAPPED_USDC_ON_ARC treats relevant %s as ambiguity",
+    async (_name, source) => {
+      await expect(
+        runBridgeRule(noWrappedUsdcOnArcRule, source)
+      ).resolves.toEqual([]);
+    }
+  );
+
+  it.each([
+    [
+      "interpolated template value",
+      'const suffix = "e";\nexport const route = { chain: "Arc", token: `USDC.${suffix}` };'
+    ],
+    ["USDC.evil", 'export const route = { chain: "Arc", token: "USDC.evil" };'],
+    [
+      "prewrapped USDC",
+      'export const route = { chain: "Arc", token: "prewrapped USDC" };'
+    ],
+    [
+      "malformed object",
+      'export const route = { chain: "Arc", token: "USDC.e";'
+    ],
+    [
+      "nested split ownership",
+      'export const route = { chain: "Arc", details: { token: "USDC.e" } };'
+    ],
+    [
+      "object method",
+      'export const route = { chain: "Arc", token: "USDC.e", resolve() { return true; } };'
+    ],
+    [
+      "getter",
+      'export const route = { chain: "Arc", token: "USDC.e", get resolved() { return true; } };'
+    ],
+    [
+      "setter",
+      'export const route = { chain: "Arc", token: "USDC.e", set resolved(value) { void value; } };'
+    ]
+  ])(
+    "NO_WRAPPED_USDC_ON_ARC ignores an unsupported or non-exact %s",
+    async (_name, source) => {
+      await expect(
+        runBridgeRule(noWrappedUsdcOnArcRule, source)
+      ).resolves.toEqual([]);
+    }
+  );
+
   it("NO_WRAPPED_USDC_ON_ARC ignores standalone wrapped-USDC comments", async () => {
     await expect(
       runBridgeRule(
@@ -412,11 +557,109 @@ describe("bridge rules", () => {
     ).resolves.toEqual([]);
   });
 
-  it("NO_WRAPPED_USDC_ON_ARC ignores guidance against wrapped USDC", async () => {
+  it("NO_WRAPPED_USDC_ON_ARC preserves an executable member before inline guidance", async () => {
     await expect(
       runBridgeRule(
         noWrappedUsdcOnArcRule,
         'export const route = {\n  chain: "Arc Testnet",\n  bridge: true,\n  token: "USDC.e", // Do not use wrapped USDC on Arc.\n};'
+      )
+    ).resolves.toHaveLength(1);
+  });
+
+  it("NO_WRAPPED_USDC_ON_ARC ignores guidance-only comments", async () => {
+    await expect(
+      runBridgeRule(
+        noWrappedUsdcOnArcRule,
+        '// Do not use wrapped USDC on an Arc bridge route.\nexport const route = { chain: "Arc", token: "USDC" };'
+      )
+    ).resolves.toEqual([]);
+  });
+
+  it.each([
+    [
+      "Markdown heading",
+      '# Bad Arc bridge route: { chain: "Arc", token: "USDC.e" }'
+    ],
+    [
+      "Markdown bullet",
+      '- Example Arc bridge route: { chain: "Arc", token: "USDC.e" }'
+    ],
+    [
+      "Markdown asterisk bullet",
+      '* Example Arc bridge route: { chain: "Arc", token: "USDC.e" }'
+    ],
+    [
+      "Markdown bold documentation",
+      '**Bad Arc bridge route:** { chain: "Arc", token: "USDC.e" }'
+    ],
+    [
+      "compact asterisk documentation",
+      '*compact Arc bridge route:* { chain: "Arc", token: "USDC.e" }'
+    ],
+    [
+      "Markdown blockquote",
+      '> Avoid this Arc bridge route: { chain: "Arc", token: "USDC.e" }'
+    ],
+    [
+      "guidance-only prose object",
+      'Do not use this Arc bridge route: { chain: "Arc", token: "USDC.e" }'
+    ],
+    [
+      "guidance after an object",
+      'Example Arc bridge route: { chain: "Arc", token: "USDC.e" } should not be used.'
+    ],
+    [
+      "unsupported guidance after an object",
+      'This Arc bridge route { chain: "Arc", token: "USDC.e" } is unsupported.'
+    ],
+    [
+      "avoid guidance after an object",
+      'Example Arc bridge route: { chain: "Arc", token: "USDC.e" }. Avoid this configuration.'
+    ],
+    [
+      "guidance between route prose and an object",
+      'This Arc bridge route should not be used: { chain: "Arc", token: "USDC.e" }'
+    ],
+    [
+      "line comment object",
+      '// Bad Arc bridge route: { chain: "Arc", token: "USDC.e" }'
+    ],
+    [
+      "block comment object",
+      '/* Bad Arc bridge route: { chain: "Arc", token: "USDC.e" } */'
+    ],
+    [
+      "block-comment terminator followed by guidance",
+      '/* preface\n*/ Example Arc bridge route: { chain: "Arc", token: "USDC.e" } should not be used.'
+    ],
+    [
+      "block-comment terminator followed by a Markdown heading",
+      '/* preface\n*/ # Bad Arc bridge route: { chain: "Arc", token: "USDC.e" }'
+    ],
+    [
+      "block-comment terminator followed by Markdown bold documentation",
+      '/* preface\n*/ **Bad Arc bridge route:** { chain: "Arc", token: "USDC.e" }'
+    ]
+  ])("NO_WRAPPED_USDC_ON_ARC ignores a %s", async (_name, source) => {
+    await expect(
+      runBridgeRule(noWrappedUsdcOnArcRule, source)
+    ).resolves.toEqual([]);
+  });
+
+  it("NO_WRAPPED_USDC_ON_ARC flags executable code after a block-comment terminator", async () => {
+    await expect(
+      runBridgeRule(
+        noWrappedUsdcOnArcRule,
+        '/* preface\n*/ export const route = {\n  chain: "Arc",\n  token: "USDC.e"\n};'
+      )
+    ).resolves.toHaveLength(1);
+  });
+
+  it("NO_WRAPPED_USDC_ON_ARC ignores guidance-only prose without an object", async () => {
+    await expect(
+      runBridgeRule(
+        noWrappedUsdcOnArcRule,
+        "Do not use USDC.e for any Arc bridge route."
       )
     ).resolves.toEqual([]);
   });
