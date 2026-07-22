@@ -12,10 +12,16 @@ describe("validation fixtures", () => {
     expect(report.status).toBe("pass");
   });
 
-  it("wallet-bad triggers ONE_CONFIRMATION_FINAL", async () => {
+  it("wallet-bad triggers chain metadata and finality validation", async () => {
     const { report } = await runScan(pathToFixture("wallet-bad"));
 
-    expect(hasFinding(report, "wallet/ONE_CONFIRMATION_FINAL")).toBe(true);
+    expect(report.findings.map(({ ruleId }) => ruleId).sort()).toEqual([
+      "wallet/ARC_CHAIN_METADATA",
+      "wallet/ONE_CONFIRMATION_FINAL"
+    ]);
+    expect(report.findings).toHaveLength(2);
+    expect(report.summary).toEqual({ critical: 2, warning: 0, info: 0 });
+    expect(report.score).toBe(50);
     expect(report.status).toBe("fail");
   });
 

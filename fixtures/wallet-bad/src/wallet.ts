@@ -1,6 +1,6 @@
 export const arcWalletFlow = {
   name: "Arc Testnet",
-  chainId: 5042002,
+  chainId: 1,
   nativeCurrency: {
     name: "USDC",
     symbol: "USDC",
