@@ -10,6 +10,7 @@ The canonical runtime currently executes exactly:
 
 - `bridge/CCTP_DOMAIN_26`
 - `bridge/NO_WRAPPED_USDC_ON_ARC`
+- `bridge/RELAYER_USES_USDC_FOR_GAS`
 
 Its analysis state and applicability remain `unknown` because rule-specific
 analysis acknowledgements are not available.
@@ -142,5 +143,5 @@ do not invoke the published package or require repository fixture changes.
 ## Deferred work
 
 This projection does not add ReportV2, GitHub Action integration, canonical
-enforcement, SARIF, baselines, suppressions, or additional rule adapters. Those
+enforcement, SARIF, baselines, suppressions, or further rule adapters. Those
 features require evidence from real canonical output and separate contracts.

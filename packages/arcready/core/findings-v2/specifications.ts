@@ -8,13 +8,15 @@ import { ruleTaxonomyCatalog } from "../rules/catalog.js";
 import type { RuleMetadata } from "../rules/taxonomy.js";
 import {
   cctpDomain26Rule,
-  noWrappedUsdcOnArcRule
+  noWrappedUsdcOnArcRule,
+  relayerUsesUsdcForGasRule
 } from "../../rules/bridge/index.js";
 import type { Rule } from "../rules/index.js";
 
 export type SupportedFindingV2AdapterRuleId =
   | "bridge/CCTP_DOMAIN_26"
-  | "bridge/NO_WRAPPED_USDC_ON_ARC";
+  | "bridge/NO_WRAPPED_USDC_ON_ARC"
+  | "bridge/RELAYER_USES_USDC_FOR_GAS";
 
 export interface PatternFindingV2AdapterSpecification {
   readonly ruleId: SupportedFindingV2AdapterRuleId;
@@ -27,6 +29,7 @@ export interface PatternFindingV2AdapterSpecification {
 
 interface AdapterSemantics {
   readonly rule: Rule;
+  readonly supportedExtensions: readonly string[];
   readonly confidenceReason: string;
   readonly patternId: string;
   readonly detectorDiscriminator: string;
@@ -55,18 +58,7 @@ function buildApprovedSpecification(
     ruleId,
     definition: defineLegacyRuleV2(semantics.rule, metadata, {
       engines: ["text-pattern"],
-      supportedExtensions: [
-        ".js",
-        ".json",
-        ".jsx",
-        ".md",
-        ".mdx",
-        ".sol",
-        ".ts",
-        ".tsx",
-        ".yaml",
-        ".yml"
-      ],
+      supportedExtensions: semantics.supportedExtensions,
       locationPrecision: "file",
       parserRequirements: []
     }),
@@ -188,6 +180,18 @@ function getAdapterSemantics(
     case "bridge/CCTP_DOMAIN_26":
       return {
         rule: cctpDomain26Rule,
+        supportedExtensions: [
+          ".js",
+          ".json",
+          ".jsx",
+          ".md",
+          ".mdx",
+          ".sol",
+          ".ts",
+          ".tsx",
+          ".yaml",
+          ".yml"
+        ],
         patternId: "bridge.cctp-domain.non-26",
         detectorDiscriminator: "cctp-domain-non-26",
         confidenceReason:
@@ -198,6 +202,18 @@ function getAdapterSemantics(
     case "bridge/NO_WRAPPED_USDC_ON_ARC":
       return {
         rule: noWrappedUsdcOnArcRule,
+        supportedExtensions: [
+          ".js",
+          ".json",
+          ".jsx",
+          ".md",
+          ".mdx",
+          ".sol",
+          ".ts",
+          ".tsx",
+          ".yaml",
+          ".yml"
+        ],
         patternId: "bridge.wrapped-usdc.arc-route",
         detectorDiscriminator: "wrapped-usdc-arc-route",
         confidenceReason:
@@ -205,8 +221,22 @@ function getAdapterSemantics(
         remediationSummary:
           "Use canonical Arc USDC through the intended bridge route, and remove Arc-side USDC.e, wUSDC, or bridged-USDC asset mappings."
       };
-    default:
+    case "bridge/RELAYER_USES_USDC_FOR_GAS":
+      return {
+        rule: relayerUsesUsdcForGasRule,
+        supportedExtensions: [".js", ".jsx", ".ts", ".tsx"],
+        patternId: "bridge.relayer-gas-token.eth-on-arc",
+        detectorDiscriminator: "relayer-gas-token-eth-on-arc",
+        confidenceReason:
+          "Bounded text-pattern detection finds a literal ETH relayer gas-token value in directly owned Arc JavaScript or TypeScript object configuration, but does not resolve imported or computed values, infer ambiguous ownership, or verify relayer balances at runtime.",
+        remediationSummary:
+          "Check relayer funding and gas-token config; Arc relayer gas should be modeled as USDC rather than ETH."
+      };
+    default: {
+      const unsupportedRuleId: never = ruleId;
+      void unsupportedRuleId;
       throw new TypeError("FindingV2 adapter rule ID is unsupported");
+    }
   }
 }
 
@@ -223,7 +253,8 @@ function isSupportedRuleId(
 ): value is SupportedFindingV2AdapterRuleId {
   return (
     value === "bridge/CCTP_DOMAIN_26" ||
-    value === "bridge/NO_WRAPPED_USDC_ON_ARC"
+    value === "bridge/NO_WRAPPED_USDC_ON_ARC" ||
+    value === "bridge/RELAYER_USES_USDC_FOR_GAS"
   );
 }
 

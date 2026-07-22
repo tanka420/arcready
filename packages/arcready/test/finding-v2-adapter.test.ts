@@ -33,12 +33,25 @@ import {
 import { createRuleContext, type Rule } from "../core/rules/index.js";
 import {
   cctpDomain26Rule,
-  noWrappedUsdcOnArcRule
+  noWrappedUsdcOnArcRule,
+  relayerUsesUsdcForGasRule
 } from "../rules/bridge/index.js";
 import { DEFAULT_CONFIG } from "../src/index.js";
 import * as publicApi from "../src/index.js";
 
 const tempDirs: string[] = [];
+const existingSupportedExtensions = [
+  ".js",
+  ".json",
+  ".jsx",
+  ".md",
+  ".mdx",
+  ".sol",
+  ".ts",
+  ".tsx",
+  ".yaml",
+  ".yml"
+] as const;
 
 const cases = [
   {
@@ -49,9 +62,9 @@ const cases = [
     negative:
       "export const ARC_DOMAIN = 26; // Arc CCTP depositForBurn attestation",
     title: "CCTP domain 26",
-    taxonomy: "experimental-compatibility",
     impact: "blocker",
     rulePacks: ["bridge-cctp", "core-compatibility"],
+    supportedExtensions: existingSupportedExtensions,
     patternId: "bridge.cctp-domain.non-26",
     discriminator: "cctp-domain-non-26",
     confidenceReason:
@@ -71,15 +84,35 @@ const cases = [
     negative:
       "export const route = { chain: 'Arc Testnet', bridge: true, token: 'USDC' };",
     title: "No wrapped USDC on Arc",
-    taxonomy: "experimental-compatibility",
     impact: "required-change",
     rulePacks: ["bridge-cctp"],
+    supportedExtensions: existingSupportedExtensions,
     patternId: "bridge.wrapped-usdc.arc-route",
     discriminator: "wrapped-usdc-arc-route",
     confidenceReason:
       "Text-pattern detection finds wrapped-USDC terminology in an Arc bridge-related file but cannot prove destination-chain deployment or exclude multichain source context.",
     remediation:
       "Use canonical Arc USDC through the intended bridge route, and remove Arc-side USDC.e, wUSDC, or bridged-USDC asset mappings.",
+    documentation: {
+      title: "How to: Add Arc to Your Bridge Protocol",
+      url: "https://docs.arc.io/integrate/infrastructure/bridges"
+    }
+  },
+  {
+    rule: relayerUsesUsdcForGasRule,
+    ruleId: "bridge/RELAYER_USES_USDC_FOR_GAS" as const,
+    positive: 'const arcRelayer = {\n  relayerGasToken: "ETH"\n};',
+    negative: 'const arcRelayer = {\n  relayerGasToken: "USDC"\n};',
+    title: "Relayer uses USDC for gas",
+    impact: "required-change",
+    rulePacks: ["bridge-cctp", "indexer-infrastructure"],
+    supportedExtensions: [".js", ".jsx", ".ts", ".tsx"],
+    patternId: "bridge.relayer-gas-token.eth-on-arc",
+    discriminator: "relayer-gas-token-eth-on-arc",
+    confidenceReason:
+      "Bounded text-pattern detection finds a literal ETH relayer gas-token value in directly owned Arc JavaScript or TypeScript object configuration, but does not resolve imported or computed values, infer ambiguous ownership, or verify relayer balances at runtime.",
+    remediation:
+      "Check relayer funding and gas-token config; Arc relayer gas should be modeled as USDC rather than ETH.",
     documentation: {
       title: "How to: Add Arc to Your Bridge Protocol",
       url: "https://docs.arc.io/integrate/infrastructure/bridges"
@@ -102,12 +135,23 @@ describe("FindingV2 adapter specifications", () => {
     expect(specification.definition.rule.name).toBe(entry.title);
     expect(specification.definition.metadata).toMatchObject({
       id: entry.ruleId,
-      taxonomy: entry.taxonomy,
+      taxonomy: "experimental-compatibility",
       impact: entry.impact,
       category: "bridge",
       maturity: "prototype",
       defaultConfidence: "medium",
-      rulePacks: entry.rulePacks
+      rulePacks: entry.rulePacks,
+      recommendedDefaultEnabled: true,
+      recommendedCiFailureEligible: false
+    });
+    expect(specification.definition.metadata.documentation).toEqual(
+      expect.arrayContaining([expect.objectContaining(entry.documentation)])
+    );
+    expect(specification.definition.capabilities).toEqual({
+      engines: ["text-pattern"],
+      supportedExtensions: entry.supportedExtensions,
+      locationPrecision: "file",
+      parserRequirements: []
     });
     expect(specification.patternId).toBe(entry.patternId);
     expect(specification.detectorDiscriminator).toBe(entry.discriminator);
@@ -128,19 +172,39 @@ describe("FindingV2 adapter specifications", () => {
   });
 
   it.each([
-    ["patternId", "changed.pattern"],
-    ["detectorDiscriminator", "changed-discriminator"],
-    ["confidenceReason", "Changed reason"],
-    ["remediationSummary", "Changed remediation"]
-  ] as const)("rejects an unapproved %s", (field, value) => {
-    const specification = getFindingV2AdapterSpecification(
-      "bridge/CCTP_DOMAIN_26"
-    );
+    ["bridge/CCTP_DOMAIN_26", "patternId", "changed.pattern"],
+    ["bridge/CCTP_DOMAIN_26", "detectorDiscriminator", "changed-discriminator"],
+    ["bridge/CCTP_DOMAIN_26", "confidenceReason", "Changed reason"],
+    ["bridge/CCTP_DOMAIN_26", "remediationSummary", "Changed remediation"],
+    ["bridge/RELAYER_USES_USDC_FOR_GAS", "patternId", "changed.pattern"],
+    ["bridge/RELAYER_USES_USDC_FOR_GAS", "detectorDiscriminator", "changed-discriminator"],
+    ["bridge/RELAYER_USES_USDC_FOR_GAS", "confidenceReason", "Changed reason"],
+    ["bridge/RELAYER_USES_USDC_FOR_GAS", "remediationSummary", "Changed remediation"]
+  ] as const)("rejects an unapproved %s %s", (ruleId, field, value) => {
+    const specification = getFindingV2AdapterSpecification(ruleId);
 
     expect(() =>
       validatePatternFindingV2AdapterSpecification({
         ...specification,
         [field]: value
+      })
+    ).toThrow(/not approved/);
+  });
+
+  it("rejects altered relayer supported extensions", () => {
+    const specification = getFindingV2AdapterSpecification(
+      "bridge/RELAYER_USES_USDC_FOR_GAS"
+    );
+    expect(() =>
+      validatePatternFindingV2AdapterSpecification({
+        ...specification,
+        definition: {
+          ...specification.definition,
+          capabilities: {
+            ...specification.definition.capabilities,
+            supportedExtensions: [".js", ".json", ".jsx", ".ts", ".tsx"]
+          }
+        }
       })
     ).toThrow(/not approved/);
   });
@@ -412,7 +476,7 @@ describe("real detector FindingV2 adaptation", () => {
       ruleId: entry.ruleId,
       title: entry.title,
       classification: {
-        taxonomy: entry.taxonomy,
+        taxonomy: "experimental-compatibility",
         impact: entry.impact,
         category: "bridge",
         maturity: "prototype",
@@ -438,6 +502,12 @@ describe("real detector FindingV2 adaptation", () => {
     expect(finding?.evidence[0]).not.toHaveProperty("excerpt");
     expect(JSON.stringify(finding)).not.toContain(entry.positive);
     expect(() => validateFindingV2(finding)).not.toThrow();
+    const repeated = adaptDetectorOccurrenceV2({
+      occurrence,
+      specification: getFindingV2AdapterSpecification(entry.ruleId),
+      resolveLocation: createRepositoryLocationResolver(projectRoot)
+    });
+    expect(exactFingerprint(repeated.findings[0])).toBe(exactFingerprint(finding));
   });
 
   it.each(cases)("preserves a real negative $ruleId completed occurrence", async (entry) => {
@@ -506,17 +576,15 @@ describe("fingerprint stability and duplicate handling", () => {
     );
   });
 
-  it("uses different fingerprints for selected rules on the same file", () => {
-    const cctp = adaptManual("bridge/CCTP_DOMAIN_26", [
-      createLegacyFinding("bridge/CCTP_DOMAIN_26", "src/bridge.ts")
-    ]);
-    const wrapped = adaptManual("bridge/NO_WRAPPED_USDC_ON_ARC", [
-      createLegacyFinding("bridge/NO_WRAPPED_USDC_ON_ARC", "src/bridge.ts")
-    ]);
-
-    expect(exactFingerprint(cctp.findings[0])).not.toBe(
-      exactFingerprint(wrapped.findings[0])
+  it("uses different fingerprints for all selected rules on the same file", () => {
+    const fingerprints = cases.map(({ ruleId }) =>
+      exactFingerprint(
+        adaptManual(ruleId, [createLegacyFinding(ruleId, "src/bridge.ts")])
+          .findings[0]
+      )
     );
+
+    expect(new Set(fingerprints).size).toBe(3);
   });
 
   it("does not use legacy message or severity in the fingerprint", () => {
@@ -537,19 +605,19 @@ describe("fingerprint stability and duplicate handling", () => {
     );
   });
 
-  it("ignores a runtime severity override for classification and fingerprint", async () => {
+  it.each([cases[0], cases[2]])(
+    "ignores a runtime severity override for $ruleId classification and fingerprint",
+    async (entry) => {
     const normal = await executeRealDetector(
-      cctpDomain26Rule,
-      cases[0].positive
+      entry.rule,
+      entry.positive
     );
     const overridden = await executeRealDetector(
-      cctpDomain26Rule,
-      cases[0].positive,
+      entry.rule,
+      entry.positive,
       "warning"
     );
-    const specification = getFindingV2AdapterSpecification(
-      "bridge/CCTP_DOMAIN_26"
-    );
+    const specification = getFindingV2AdapterSpecification(entry.ruleId);
     const first = adaptDetectorOccurrenceV2({
       occurrence: normal.occurrence,
       specification,
@@ -565,10 +633,12 @@ describe("fingerprint stability and duplicate handling", () => {
     expect(second.findings[0]?.classification).toEqual(
       first.findings[0]?.classification
     );
+    expect(second.findings[0]?.confidence).toEqual(first.findings[0]?.confidence);
     expect(exactFingerprint(second.findings[0])).toBe(
       exactFingerprint(first.findings[0])
     );
-  });
+    }
+  );
 
   it("gives duplicate selected occurrences identical fingerprints", async () => {
     const projectRoot = createTempProject();
@@ -887,7 +957,8 @@ function asAdaptableOccurrence(
     occurrence.execution !== "completed" ||
     occurrence.scheduling !== "scheduled" ||
     (ruleId !== "bridge/CCTP_DOMAIN_26" &&
-      ruleId !== "bridge/NO_WRAPPED_USDC_ON_ARC")
+      ruleId !== "bridge/NO_WRAPPED_USDC_ON_ARC" &&
+      ruleId !== "bridge/RELAYER_USES_USDC_FOR_GAS")
   ) {
     throw new TypeError("Expected a completed selected-rule occurrence");
   }

@@ -302,11 +302,7 @@ function validateInput(input: unknown): asserts input is AdaptDetectorOccurrence
     ["kind", "id"],
     "FindingV2 adapter rule identity"
   );
-  if (
-    input.occurrence.rule.kind !== "rule-id" ||
-    (input.occurrence.rule.id !== "bridge/CCTP_DOMAIN_26" &&
-      input.occurrence.rule.id !== "bridge/NO_WRAPPED_USDC_ON_ARC")
-  ) {
+  if (input.occurrence.rule.kind !== "rule-id") {
     throw new TypeError("FindingV2 adapter rule identity is unsupported");
   }
   if (input.occurrence.rule.id !== input.specification.ruleId) {

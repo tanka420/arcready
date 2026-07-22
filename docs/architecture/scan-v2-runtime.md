@@ -43,6 +43,7 @@ The first canonical slice contains exactly these rules in this order:
 ```text
 0  bridge/CCTP_DOMAIN_26
 1  bridge/NO_WRAPPED_USDC_ON_ARC
+2  bridge/RELAYER_USES_USDC_FOR_GAS
 ```
 
 Each executable rule comes from its approved FindingV2 adapter specification.
@@ -50,8 +51,8 @@ The runtime checks the tuple ID, specification ID, executable rule ID,
 occurrence identity, and instrumentation identity at their shared selection
 index.
 
-The other 16 known rules are not executed. Running all 18 while adapting only
-two would make canonical coverage ambiguous and silently omit unsupported
+The other 15 known rules are not executed. Running all 18 while adapting only
+three would make canonical coverage ambiguous and silently omit unsupported
 results. Adding a rule to this runtime therefore requires an approved adapter
 and a later explicit slice change; there is no mutable adapter or rule
 registry.
@@ -167,7 +168,7 @@ legacy projection. Its finding values and references, instrumentation,
 selection indexes, read attempts, diagnostics, and execution order remain
 unchanged. `runRules` and `executeRules` are unchanged.
 
-The runtime requires exactly two structured occurrences and two instrumentation
+The runtime requires exactly three structured occurrences and three instrumentation
 outcomes. Selection indexes, safe rule identities, scheduling, execution state,
 and normalized finding counts must align. A mismatch is an internal invariant
 failure.
@@ -245,7 +246,7 @@ the supplied diagnostic order.
 The runtime calls the existing `deriveCoverageV2` with discovery and rule
 instrumentation. It does not change CoverageV2.
 
-`selectedOccurrences` is exactly two. Disabled, scheduled, completed, failed,
+`selectedOccurrences` is exactly three. Disabled, scheduled, completed, failed,
 emitting, non-emitting, and normalized detector finding counts describe actual
 occurrences. Normalized detector finding count is an execution fact, not an
 adapted FindingV2 count. Adapter rejection does not retroactively change it.

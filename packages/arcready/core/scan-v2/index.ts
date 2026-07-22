@@ -35,7 +35,8 @@ import { buildScanResultV2 } from "../scan-result-v2/index.js";
 
 const CANONICAL_RULE_IDS = [
   "bridge/CCTP_DOMAIN_26",
-  "bridge/NO_WRAPPED_USDC_ON_ARC"
+  "bridge/NO_WRAPPED_USDC_ON_ARC",
+  "bridge/RELAYER_USES_USDC_FOR_GAS"
 ] as const;
 
 export interface RunInternalScanV2Options {

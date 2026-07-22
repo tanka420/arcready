@@ -183,10 +183,11 @@ This leaves the default legacy output unchanged and emits the exact
 ```
 
 The experimental runtime currently executes only
-`bridge/CCTP_DOMAIN_26` and `bridge/NO_WRAPPED_USDC_ON_ARC`. Analysis and
-applicability remain unknown. Exit code `0` means a valid document was
-produced, not that the repository is compatible: findings and recoverable
-diagnostics are observational, and canonical enforcement is deferred.
+`bridge/CCTP_DOMAIN_26`, `bridge/NO_WRAPPED_USDC_ON_ARC`, and
+`bridge/RELAYER_USES_USDC_FOR_GAS`. Analysis and applicability remain unknown.
+Exit code `0` means a valid document was produced, not that the repository is
+compatible: findings and recoverable diagnostics are observational, and
+canonical enforcement is deferred.
 
 ## What ArcReady Does Not Do
 
