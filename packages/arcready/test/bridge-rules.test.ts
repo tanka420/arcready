@@ -123,6 +123,150 @@ describe("bridge rules", () => {
     ).resolves.toEqual([]);
   });
 
+  it.each([
+    [
+      "inline named map",
+      "const DOMAIN = 7;\nconst cctpDomains = { arc: DOMAIN };"
+    ],
+    [
+      "multiline named map",
+      "const DOMAIN = 7;\nconst cctpDomains = {\n  arc: DOMAIN\n};"
+    ],
+    [
+      "exported binding",
+      "export const DOMAIN = 7;\nconst cctpDomains = { arc: DOMAIN };"
+    ],
+    [
+      "direct CCTP property",
+      "const DOMAIN = 7;\nconst config = { ARC_CCTP_DOMAIN: DOMAIN };"
+    ],
+    [
+      "compatibility property",
+      "const DOMAIN = 7;\nconst config = { ARC_DOMAIN: DOMAIN };"
+    ],
+    [
+      "independent bindings",
+      "const FIRST = 26;\nconst SECOND = 7;\nconst first = { cctpDomains: { arc: FIRST } };\nconst second = { cctpDomains: { arc: SECOND } };"
+    ],
+    [
+      "inert declaration comments",
+      "const /* declaration */ DOMAIN /* name */ = /* value */ 7;\nconst cctpDomains = { arc: DOMAIN };"
+    ],
+    [
+      "fake declarations beside a live binding",
+      "const text = 'const DOMAIN = 26;';\n// const DOMAIN = 26;\nconst DOMAIN = 7;\nconst cctpDomains = { arc: DOMAIN };"
+    ],
+    [
+      "member assignment beside a binding",
+      "const DOMAIN = 7;\nobject.DOMAIN = 26;\nconst cctpDomains = { arc: DOMAIN };"
+    ],
+    [
+      "equality and arrow syntax beside a binding",
+      "const DOMAIN = 7;\nconst strict = DOMAIN === 26;\nconst loose = DOMAIN == 26;\nconst fn = DOMAIN => DOMAIN;\nconst cctpDomains = { arc: DOMAIN };"
+    ]
+  ])(
+    "CCTP_DOMAIN_26 resolves an earlier const for %s",
+    async (_name, source) => {
+      expect(
+        await runBridgeRule(cctpDomain26Rule, `Arc CCTP bridge\n${source}`)
+      ).toHaveLength(1);
+    }
+  );
+  it.each([
+    [
+      "correct literal",
+      "const DOMAIN = 26;\nconst cctpDomains = { arc: DOMAIN };"
+    ],
+    ["let", "let DOMAIN = 7;\nconst cctpDomains = { arc: DOMAIN };"],
+    ["var", "var DOMAIN = 7;\nconst cctpDomains = { arc: DOMAIN };"],
+    [
+      "forward reference",
+      "const cctpDomains = { arc: DOMAIN };\nconst DOMAIN = 7;"
+    ],
+    [
+      "different duplicate",
+      "const DOMAIN = 7;\nconst DOMAIN = 26;\nconst cctpDomains = { arc: DOMAIN };"
+    ],
+    [
+      "equal duplicate",
+      "const DOMAIN = 7;\nconst DOMAIN = 7;\nconst cctpDomains = { arc: DOMAIN };"
+    ],
+    [
+      "conflicting let",
+      "const DOMAIN = 7;\nlet DOMAIN = 26;\nconst cctpDomains = { arc: DOMAIN };"
+    ],
+    [
+      "conflicting var",
+      "const DOMAIN = 7;\nvar DOMAIN = 26;\nconst cctpDomains = { arc: DOMAIN };"
+    ],
+    [
+      "local conflict",
+      "const DOMAIN = 7;\nfunction example() {\n  const DOMAIN = 26;\n}\nconst cctpDomains = { arc: DOMAIN };"
+    ],
+    [
+      "reassignment",
+      "const DOMAIN = 7;\nDOMAIN = 26;\nconst cctpDomains = { arc: DOMAIN };"
+    ],
+    [
+      "multiline reassignment",
+      "const DOMAIN = 7;\nDOMAIN\n  = 26;\nconst cctpDomains = { arc: DOMAIN };"
+    ],
+    [
+      "multiline conflicting declaration",
+      "const DOMAIN = 7;\nlet\n  DOMAIN\n  = 26;\nconst cctpDomains = { arc: DOMAIN };"
+    ],
+    [
+      "identifier chain",
+      "const A = B;\nconst B = 7;\nconst cctpDomains = { arc: A };"
+    ],
+    [
+      "import",
+      'import { DOMAIN } from "./constants";\nconst cctpDomains = { arc: DOMAIN };'
+    ],
+    [
+      "call",
+      "const DOMAIN = getDomain();\nconst cctpDomains = { arc: DOMAIN };"
+    ],
+    [
+      "arithmetic",
+      "const DOMAIN = 6 + 1;\nconst cctpDomains = { arc: DOMAIN };"
+    ],
+    [
+      "conditional",
+      "const DOMAIN = enabled ? 7 : 26;\nconst cctpDomains = { arc: DOMAIN };"
+    ],
+    [
+      "template",
+      "const DOMAIN = `${domain}`;\nconst cctpDomains = { arc: DOMAIN };"
+    ],
+    [
+      "case mismatch",
+      "const Domain = 7;\nconst cctpDomains = { arc: DOMAIN };"
+    ],
+    [
+      "multi-declarator",
+      "const DOMAIN = 7, OTHER = 8;\nconst cctpDomains = { arc: DOMAIN };"
+    ],
+    [
+      "local declaration",
+      "function example() {\n  const DOMAIN = 7;\n  return { cctpDomains: { arc: DOMAIN } };\n}"
+    ],
+    [
+      "ambiguous map",
+      "const DOMAIN = 7;\nconst cctpDomains = { arc: DOMAIN, arc: DOMAIN };"
+    ]
+  ])("CCTP_DOMAIN_26 keeps resolver boundary %s", async (_name, source) => {
+    expect(
+      await runBridgeRule(cctpDomain26Rule, `Arc CCTP bridge\n${source}`)
+    ).toEqual([]);
+  });
+  it("CCTP_DOMAIN_26 does not resolve a YAML identifier scalar", async () => {
+    const source = "chain: Arc\nbridge: CCTP\ncctpDomains:\n  arc: DOMAIN";
+    expect(
+      await runBridgeRule(cctpDomain26Rule, source, {}, "config.yaml")
+    ).toEqual([]);
+  });
+
   it("CCTP_DOMAIN_26 flags a directly indented YAML domain map", async () => {
     const findings = await runBridgeRule(
       cctpDomain26Rule,
@@ -575,10 +719,6 @@ describe("bridge rules", () => {
     [
       "block terminator before documentation",
       "/* Arc CCTP preface\n*/ **Bad CCTP map:** cctpDomains = { arc: 7 }"
-    ],
-    [
-      "deferred identifier resolution",
-      "Arc CCTP bridge\nconst WRONG_ARC_DOMAIN = 7;\nconst cctpDomains = { arc: WRONG_ARC_DOMAIN };"
     ],
     ["invalid colon declaration", "Arc CCTP bridge\nconst ARC_CCTP_DOMAIN: 7;"],
     [
