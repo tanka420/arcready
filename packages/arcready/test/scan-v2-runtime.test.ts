@@ -139,6 +139,20 @@ describe("private ScanResultV2 runtime", () => {
     validateCompleteResult(result);
   });
 
+  it("adapts one-hop CCTP resolution without changing its contract", async () => {
+    const resolved = await scanProject({
+      "src/cctp.ts":
+        "Arc CCTP bridge\nconst DOMAIN = 7;\nconst cctpDomains = { arc: DOMAIN };\n"
+    });
+    const direct = await scanProject({ "src/cctp.ts": cctpSource });
+
+    assertCctpRuntime(resolved, "src/cctp.ts", 1);
+    expect(exactFingerprint(resolved.findings[0])).toBe(
+      exactFingerprint(direct.findings[0])
+    );
+    validateCompleteResult(resolved);
+  });
+
   it.each([
     [
       "a named map with inert braces and Unicode",

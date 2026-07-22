@@ -10,6 +10,9 @@ import {
 const SUGGESTED_FIX =
   "Check the CCTP domain map and set the Arc domain value to 26 wherever Arc routes are configured.";
 
+type LiteralBinding = readonly [string, number];
+type LiteralBindings = ReadonlyMap<string, LiteralBinding>;
+
 export const cctpDomain26Rule: Rule = {
   id: "bridge/CCTP_DOMAIN_26",
   name: "CCTP domain 26",
@@ -42,6 +45,7 @@ function hasWrongArcDomain(filePath: string, content: string): boolean {
   const yaml = /\.ya?ml$/i.test(filePath);
   const masked = maskInert(content, yaml);
   if (yaml) return hasWrongYaml(masked);
+  const bindings = collectLiteralBindings(masked);
 
   const declaration =
     /^[\t ]*(?:export\s+const|const|let|var)\s+ARC(?:_CCTP)?_DOMAIN\s*=\s*(\d+)\s*;[\t ]*(?=\r?$)/gim;
@@ -55,28 +59,29 @@ function hasWrongArcDomain(filePath: string, content: string): boolean {
     if (!prefix.endsWith(",") && match[1] !== "26") return true;
   }
   for (const match of masked.matchAll(
-    /([,{])\s*ARC(?:_CCTP)?_DOMAIN\s*:\s*(\d+)\s*(?=[,}])/gi
+    /([,{])\s*ARC(?:_CCTP)?_DOMAIN\s*:\s*(\d+|[A-Za-z_$][A-Za-z0-9_$]*)\s*(?=[,}])/gi
   )) {
-    if (hasObjectOwner(masked, match.index ?? 0) && match[2] !== "26") {
-      return true;
+    if (hasObjectOwner(masked, match.index ?? 0)) {
+      const valueIndex = (match.index ?? 0) + match[0].lastIndexOf(match[2]);
+      if (wrongValue(match[2], valueIndex, bindings)) return true;
     }
   }
-  return hasWrongNamedMap(masked);
+  return hasWrongNamedMap(masked, bindings);
 }
 
-function hasWrongNamedMap(content: string): boolean {
+function hasWrongNamedMap(content: string, bindings: LiteralBindings): boolean {
   for (const pattern of [
     /^[\t ]*const\s+cctpDomains\s*=\s*\{/gim,
     /^[\t ]*cctpDomains\s*=\s*\{/gim
   ]) {
     for (const match of content.matchAll(pattern)) {
-      if (wrongMapCandidate(content, match, false)) return true;
+      if (wrongMapCandidate(content, match, false, bindings)) return true;
     }
   }
   for (const match of content.matchAll(/([,{])\s*cctpDomains\s*:\s*\{/gi)) {
     if (
       hasObjectOwner(content, match.index ?? 0) &&
-      wrongMapCandidate(content, match, true)
+      wrongMapCandidate(content, match, true, bindings)
     ) {
       return true;
     }
@@ -87,7 +92,8 @@ function hasWrongNamedMap(content: string): boolean {
 function wrongMapCandidate(
   content: string,
   match: RegExpMatchArray,
-  member: boolean
+  member: boolean,
+  bindings: LiteralBindings
 ): boolean {
   const start = (match.index ?? 0) + match[0].length;
   const end = content.indexOf("}", start);
@@ -98,15 +104,59 @@ function wrongMapCandidate(
   const terminal = member
     ? /^(?:\s*,|\s*}\s*;?[\t ]*(?:\r?\n|$)|\s*}[\t ]*$)/
     : /^(?:\s*;[\t ]*(?:\r?\n|$)|[\t ]*$)/;
-  return terminal.test(suffix) && wrongArcMember(body);
+  return terminal.test(suffix) && wrongArcMember(body, start, bindings);
 }
 
-function wrongArcMember(body: string): boolean {
+function wrongArcMember(body: string, at = 0, map?: LiteralBindings): boolean {
   const members = [...body.matchAll(/(?:^|,)\s*arc\s*:/gi)];
   if (members.length !== 1) return false;
   const start = (members[0].index ?? 0) + members[0][0].length;
-  const value = /^\s*(\d+)\s*(?=,|$)/.exec(body.slice(start));
-  return value !== null && value[1] !== "26";
+  const value = /^\s*(\d+|[A-Za-z_$][A-Za-z0-9_$]*)\s*(?=,|$)/.exec(
+    body.slice(start)
+  );
+  if (value === null) return false;
+  const valueIndex = at + start + value[0].lastIndexOf(value[1]);
+  return wrongValue(value[1], valueIndex, map);
+}
+
+function wrongValue(value: string, at: number, map?: LiteralBindings): boolean {
+  if (/^\d+$/.test(value)) return value !== "26";
+  const binding = map?.get(value);
+  return binding !== undefined && binding[1] < at && binding[0] !== "26";
+}
+
+function collectLiteralBindings(content: string): Map<string, LiteralBinding> {
+  const declaration =
+    /^[\t ]*(?:export[\t ]+)?const[\t ]+([A-Za-z_$][A-Za-z0-9_$]*)[\t ]*=[\t ]*(\d+)[\t ]*;[\t ]*(?=\r?$)/gm;
+  const candidates = new Map<string, LiteralBinding>();
+  const topLevelLines = new Set<number>([0]);
+  let depth = 0;
+  for (let index = 0; index < content.length; index += 1) {
+    if (content[index] === "{") depth += 1;
+    if (content[index] === "}" && --depth < 0) return new Map();
+    if (content[index] === "\n" && depth === 0) topLevelLines.add(index + 1);
+  }
+  if (depth !== 0) return new Map();
+  for (const match of content.matchAll(declaration)) {
+    if (topLevelLines.has(match.index ?? 0) && !candidates.has(match[1])) {
+      candidates.set(match[1], [
+        match[2],
+        (match.index ?? 0) + match[0].length
+      ]);
+    }
+  }
+  for (const [name] of candidates) {
+    const escaped = name.replaceAll("$", "\\$");
+    const declarations = content.match(
+      new RegExp(`(?<![$\\w])(?:const|let|var)\\s+${escaped}(?![$\\w])`, "g")
+    );
+    const assignments = content.match(
+      new RegExp(`(?<![.$\\w])${escaped}\\s*=(?!=|>)`, "g")
+    );
+    if (declarations?.length !== 1 || assignments?.length !== 1)
+      candidates.delete(name);
+  }
+  return candidates;
 }
 
 function hasObjectOwner(content: string, index: number): boolean {
