@@ -29,10 +29,8 @@ describe("validation fixtures", () => {
   it("bridge-bad triggers bridge validation", async () => {
     const { report } = await runScan(pathToFixture("bridge-bad"));
 
-    expect(
-      hasFinding(report, "bridge/BRIDGE_CONFIRMATIONS_ONE") ||
-        hasFinding(report, "bridge/RELAYER_USES_USDC_FOR_GAS")
-    ).toBe(true);
+    expect(hasFinding(report, "bridge/BRIDGE_CONFIRMATIONS_ONE")).toBe(true);
+    expect(hasFinding(report, "bridge/RELAYER_USES_USDC_FOR_GAS")).toBe(true);
     expect(report.status).toBe("fail");
   });
 
