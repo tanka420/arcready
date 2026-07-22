@@ -1,219 +1,241 @@
 # ArcReady Roadmap
 
-ArcReady is currently release-ready for the `v0.3.0` rule quality hardening release.
+**Status:** Active roadmap after C04B  
+**Last reviewed:** 2026-07-22
 
-The MVP proves the core foundation:
+ArcReady is an Arc-specific, repository-level static compatibility analyzer for projects being ported from Ethereum or other EVM environments to Arc.
 
-* CLI scanner
-* Arc-specific rule packs
-* terminal, JSON, Markdown, and HTML reports
-* local composite GitHub Action
-* validation fixtures
-* fixture validation script
-* passing test suite
-
-The next phase is focused on improving quality, usability, and distribution readiness without adding unnecessary infrastructure.
+The project has moved beyond the original v0.3 rule-hardening release scope. The current engineering focus is to improve evidence quality, expand the canonical FindingV2 slice beyond bridge configuration, and introduce bounded semantic analysis only where it creates clear user value.
 
 ## Guiding Principles
 
 ArcReady should remain:
 
-* Arc-specific
-* local-first
-* CI-friendly
-* open-source-first
-* low-infrastructure
-* conservative in rule detection
-* useful without a hosted backend
+- Arc-specific;
+- local-first;
+- CI-friendly;
+- open-source-first;
+- low-infrastructure;
+- conservative and fail-closed when evidence is ambiguous;
+- useful without a hosted backend;
+- driven by official Arc and Circle documentation;
+- explicit about confidence, limitations, and advice versus compatibility impact.
 
-ArcReady should not become a SaaS dashboard, telemetry tool, generic multi-chain linter, or hosted monitoring service in the near term.
+ArcReady should not become a generic multi-chain linter, Solidity security auditor, hosted monitoring service, or SaaS dashboard in the near term.
 
-## v0.3 Rule Quality Hardening
+## Completed Product Foundation
 
-The v0.3 phase is release-ready as a quality-focused npm and GitHub Action release.
+The existing product foundation includes:
 
-Completed release-ready scope:
+- TypeScript and Node.js CLI scanning;
+- wallet, bridge, and App Kit rule packs;
+- terminal, JSON, Markdown, and HTML legacy reports;
+- installable npm package shape;
+- external composite GitHub Action usage;
+- validation fixtures and package smoke tests;
+- automated GitHub Actions CI and repository verification;
+- 18 active legacy static rules after placeholder cleanup;
+- rule taxonomy, maturity, confidence, documentation support, and detector-limitation metadata;
+- cross-preset regression coverage;
+- deterministic private FindingV2, CoverageV2, ScanResultV2, and `json-v2` contracts.
 
-* removed placeholder/internal no-op rules from public API and default presets
-* improved wallet rule precision and false-positive handling
-* improved bridge rule precision and false-positive handling
-* improved App Kit static integration-pattern rule precision
-* added cross-preset regression coverage
-* improved finding messages and suggestions across all 18 active rules
-* prepared GitHub Action usage for `tanka420/arcready@v0.3.0`
+## Completed Canonical Bridge Slice
 
-Still out of scope for this release:
+C04 completed the first bounded canonical compatibility slice.
 
-* live Arc RPC checks
-* Circle API checks
-* on-chain simulation
-* bridge runtime simulation
-* real App Kit runtime testing
-* SaaS, dashboards, databases, authentication, or telemetry
-* GitHub Marketplace publication
+The private `json-v2` runtime now selects exactly these three rules in stable order:
 
-## v0.2 Goals
+1. `bridge/CCTP_DOMAIN_26`
+2. `bridge/NO_WRAPPED_USDC_ON_ARC`
+3. `bridge/RELAYER_USES_USDC_FOR_GAS`
 
-The v0.2 phase should focus on making ArcReady more useful for real users and easier to adopt.
+For this slice, ArcReady now has:
 
-### 1. Improve Rule Precision
+- hardened detectors with bounded Arc ownership;
+- approved FindingV2 adapter specifications;
+- truthful per-rule capabilities for new adapters;
+- deterministic fingerprints and output ordering;
+- lifecycle and coverage instrumentation;
+- schema-validated machine-readable output;
+- package and built-CLI validation;
+- preserved legacy scan behavior.
 
-Goal:
+`json-v2` remains observational. It does not yet change process exit behavior or legacy scoring, reporters, presets, and `failOn` behavior.
 
-Reduce false positives and make rule findings more reliable.
+## Current Product Limits
 
-Scope:
+The current implementation is still primarily text-pattern and structured-literal analysis.
 
-* Review wallet rules v1
-* Review bridge rules v1
-* Review App Kit rules v1
-* Add more good/bad fixture coverage
-* Improve finding messages and suggested fixes
-* Keep rules conservative and explainable
+Known limits include:
 
-Non-goals:
+- no general TypeScript or Solidity AST pipeline;
+- no import, symbol, or cross-file value resolution;
+- no general control-flow or data-flow analysis;
+- file-level canonical locations rather than precise line and column regions;
+- no SARIF, baseline, or suppression workflow;
+- limited framework-aware ownership for wallet, provider, transaction, and UI configuration;
+- no runtime RPC, Circle API, on-chain, or simulation checks.
 
-* No runtime RPC checks
-* No live bridge simulation
-* No generic multi-chain abstraction
+These limits are intentional. New infrastructure should be added only when a prioritized rule cannot be made reliable with a smaller bounded design.
 
-Related issue:
+## Rule Development Governance
 
-* Improve rule precision for wallet checks
+The active sequencing and disposition for completed and deferred rules is maintained in:
 
-### 2. Add More Arc App Kit Examples
+```text
+docs/rule-development-backlog.md
+```
 
-Goal:
+The backlog distinguishes:
 
-Make App Kit validation easier to understand through practical examples.
+- `Complete`;
+- `Build`;
+- `Research`;
+- `Advice-only`;
+- `Replace`;
+- `Retire`.
 
-Scope:
+Legacy presence does not imply canonical eligibility. A rule should not enter the canonical FindingV2 slice until its official-document premise, Arc applicability, static evidence, confidence, capabilities, and fail-closed behavior are all defensible.
 
-* Add more App Kit fixture examples
-* Document correct and incorrect chain identifier usage
-* Document capability guard examples
-* Improve Unified Balance UX examples
-* Keep examples small and easy to scan
+The policy source of truth remains:
 
-Non-goals:
+```text
+docs/rule-catalog.md
+packages/arcready/core/rules/catalog.ts
+```
 
-* No full sample dApp
-* No hosted frontend
-* No backend service
+## Near-Term Engineering Roadmap
 
-Related issue:
-
-* Add more Arc App Kit integration examples
-
-### 3. Prepare npm Package Publishing
-
-Goal:
-
-Prepare ArcReady for installable CLI usage through npm.
-
-Scope:
-
-* Review package metadata
-* Confirm `bin` entry works after package install
-* Review package `files` output
-* Add npm publish checklist
-* Run npm dry-run validation
-* Confirm generated `dist/` package shape
-
-Non-goals:
-
-* Do not publish until package shape is reviewed
-* No monetization
-* No SaaS
-* No telemetry
-
-Related issue:
-
-* Prepare npm package publishing
-
-### 4. External GitHub Action Usage
+### C05A — Harden `wallet/ARC_CHAIN_METADATA`
 
 Goal:
 
-Prepare the composite GitHub Action for external repository usage.
+Reliably identify an Arc-owned chain configuration and detect incorrect applicable Arc metadata without borrowing evidence from Ethereum or sibling networks.
 
-Status:
+Priority evidence:
 
-Completed for `v0.2.0`. External GitHub Action usage validated with `uses: tanka420/arcready@v0.2.0` against known-good and known-bad fixtures. This does not include deeper Arc integration, live RPC checks, runtime simulation, rule hardening, or GitHub Marketplace publication.
-
-Scope:
-
-* Review action metadata
-* Decide final public action usage format
-* Confirm report artifact behavior
-* Document required permissions
-* Add usage examples for external repositories
-* Make sure the external action uses the published npm CLI instead of local workspace behavior
+- Arc Testnet chain ID `5042002`;
+- Arc-owned RPC configuration;
+- Arc-owned explorer configuration;
+- bounded chain-object ownership;
+- common JavaScript and TypeScript chain-definition shapes.
 
 Non-goals:
 
-* No PR comment bot in v0.2
-* No hosted service
-* No telemetry
-* No marketplace launch until packaging is stable
+- no generic chain registry framework;
+- no live RPC validation;
+- no broad repository-wide keyword association;
+- no FindingV2 expansion in the same detector-hardening milestone.
 
-Related issue:
+### C05B — Add canonical FindingV2 support for `wallet/ARC_CHAIN_METADATA`
 
-* Prepare external GitHub Action usage
+Goal:
 
-## Later Ideas
+Expand the canonical slice beyond bridge rules while preserving deterministic selection, private API boundaries, and observational `json-v2` behavior.
 
-These are possible future directions, but not part of the immediate v0.2 focus.
+C05B should begin only after C05A detector precision is approved.
 
-### More Rule Packs
+### C06A — Harden `wallet/WALLET_NATIVE_USDC_DISPLAY`
 
-Potential future presets:
+Goal:
 
-* indexer
-* stablecoin payments
-* onboarding flow
-* contract deployment checks
+Attach native-currency evidence to a trusted Arc-owned wallet or chain configuration and detect ETH-native assumptions without flagging valid Ethereum sibling configuration or internal EVM terminology.
 
-### Better Reports
+This milestone should reuse or align with the ownership model proven in C05A rather than create an independent Arc-context heuristic.
 
-Possible improvements:
+### C06B — Research the native-versus-ERC-20 USDC amount model
 
-* richer HTML report
-* report screenshots for README
-* optional SARIF output
-* machine-readable rule metadata
+Goal:
 
-### External Adoption
+Design a high-value semantic slice for Arc's native USDC and ERC-20 USDC interfaces, including amount conversion, balance interpretation, and duplicate presentation risks.
 
-Possible future steps:
+This work may justify bounded AST or value-flow analysis. It should not be forced into the current regex architecture.
 
-* npm publish
-* GitHub Marketplace publish
-* example integration in a sample repo
-* short validation walkthrough video
-* Arc ecosystem announcement
+### C07 — Arc transaction-submission ownership
 
-## Explicit Non-goals
+Goal:
 
-The following are intentionally out of scope for the near-term roadmap:
+Associate a submitted transaction with an Arc provider or chain context.
 
-* hosted dashboard
-* database
-* auth
-* telemetry
-* SaaS workspace
-* plugin marketplace
-* runtime bridge simulation
-* generic multi-chain abstraction
-* paid plans
-* user accounts
+This capability is a prerequisite for reliable blob-transaction and transaction-specific gas or fee checks.
+
+### C08 — CCTP attestation control-flow analysis
+
+Goal:
+
+Distinguish expected pending `404` polling from terminal failures and invalid request parameters.
+
+Do not canonicalize the current low-confidence keyword detector before control-flow evidence exists.
+
+### C09 — Shared Solidity `PREVRANDAO` value-dependency analysis
+
+Goal:
+
+Replace duplicate wallet and bridge keyword detectors with one semantic rule that proves `PREVRANDAO` influences randomness, selection, or another behavior that fails when the value is always zero on Arc.
+
+Unsupported blanket `mixHash` equivalence should not be carried forward.
+
+### C10 — Versioned App Kit integration analysis
+
+Goal:
+
+Model App Kit chain identifiers and operation, token, adapter, and supported-chain compatibility using official versioned APIs and support tables.
+
+Do not continue hardening the deprecated generic capability-guard detector.
+
+## Distribution and Release Track
+
+The v0.3 package and GitHub Action remain release-ready from the rule-quality-hardening phase.
+
+Creating or updating a tag and GitHub Release is a maintainer distribution decision and may proceed independently of the C05 engineering sequence after verifying:
+
+- package metadata and package contents;
+- installable CLI behavior;
+- external GitHub Action references;
+- release notes that accurately distinguish legacy output from private observational `json-v2` work;
+- current CI on the chosen release commit.
+
+Release work should not block core compatibility development, and core milestones should not silently change an already selected release commit.
+
+## Later Product Capabilities
+
+Potential later work includes:
+
+- precise line and column locations;
+- source excerpts with privacy and stability safeguards;
+- SARIF output;
+- baseline and suppression workflows;
+- indexer ordering analysis;
+- deterministic-finality and unnecessary reorg-handling analysis;
+- native-value and USDC event reconciliation;
+- richer HTML reporting;
+- example repositories and adoption walkthroughs.
+
+These items should be prioritized only when they support proven user workflows or unlock a high-value compatibility rule.
+
+## Explicit Non-Goals
+
+The following remain out of scope for the near-term roadmap:
+
+- hosted dashboard;
+- database;
+- authentication;
+- telemetry;
+- SaaS workspace;
+- plugin marketplace;
+- paid plans;
+- user accounts;
+- generic multi-chain abstraction;
+- runtime bridge simulation;
+- on-chain verification as a substitute for static evidence;
+- broad analyzer infrastructure without a prioritized rule use case.
 
 ## Current Recommended Next Step
 
-The next practical work item should be:
+The next engineering milestone is:
 
 ```text
-Create the v0.3.0 git tag and GitHub Release after maintainer approval.
+C05A — Harden wallet/ARC_CHAIN_METADATA
 ```
 
-This keeps ArcReady useful as a static CI quality gate without expanding into runtime checks or hosted infrastructure.
+Before implementation, prepare a planning-only review that verifies the current detector, supported file shapes, Arc ownership model, false-positive boundaries, official-document claims, fixture gaps, complexity budget, and validation matrix.
