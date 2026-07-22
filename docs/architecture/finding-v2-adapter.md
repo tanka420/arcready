@@ -2,19 +2,20 @@
 
 ## Boundary
 
-PR 4D2B adds the first private legacy-to-FindingV2 adapter slice. It supports
+The private legacy-to-FindingV2 adapter slice supports
 exactly these detector rules:
 
 - `bridge/CCTP_DOMAIN_26`
 - `bridge/NO_WRAPPED_USDC_ON_ARC`
+- `bridge/RELAYER_USES_USDC_FOR_GAS`
 
 They were selected because each detector emits at most one finding per rule and
 file, identifies one affected file, has approved catalog documentation, and can
 support truthful file-level pattern evidence without changing detector output.
 
-The adapter is not publicly exported and is not connected to `runScan`,
-`ScanResultV2`, the CLI, reporters, scoring, status, presets, configuration, or
-the GitHub Action.
+The adapter is not publicly exported. It is used by the private canonical
+ScanResultV2 runtime and its opt-in json-v2 CLI projection, without changing
+`runScan`, reporters, scoring, status, presets, or the GitHub Action.
 
 ## Input and provenance
 
@@ -49,9 +50,10 @@ The adapter-specific values are:
 |---|---|---|
 | `bridge/CCTP_DOMAIN_26` | `bridge.cctp-domain.non-26` | `cctp-domain-non-26` |
 | `bridge/NO_WRAPPED_USDC_ON_ARC` | `bridge.wrapped-usdc.arc-route` | `wrapped-usdc-arc-route` |
+| `bridge/RELAYER_USES_USDC_FOR_GAS` | `bridge.relayer-gas-token.eth-on-arc` | `relayer-gas-token-eth-on-arc` |
 
 Specifications additionally carry the approved rule-specific confidence reason
-and remediation summary. Confidence basis is `adapter`; both catalog confidence
+and remediation summary. Confidence basis is `adapter`; all three catalog confidence
 levels are `medium`. Remove-or-replace and other unsupported taxonomy states
 cannot produce a specification for this adapter.
 
@@ -63,7 +65,7 @@ approved definition exactly. Caller-substituted classification, documentation,
 confidence metadata, rule packs, or execution capabilities are rejected even
 when they are otherwise valid Contract v2 values. Pattern ID, detector
 discriminator, confidence reason, and remediation summary are likewise locked
-to the two approved rule specifications. This is an integrity comparison, not
+to the approved rule specifications. This is an integrity comparison, not
 a claim of runtime immutability or deep freezing.
 
 ## Location policy
@@ -123,8 +125,8 @@ order, time, and fallback information do not affect fingerprints.
 Within one adapter invocation, every member of a duplicate fingerprint group is
 rejected and one `FINDING_V2_DUPLICATE_FINGERPRINT` diagnostic is emitted at the
 first member's detector-relative position. There is no first-wins or last-wins
-deduplication. Cross-occurrence duplicate detection remains the responsibility
-of PR 4C2B before `ScanResultV2` construction.
+deduplication. The private canonical runtime handles cross-occurrence duplicate
+detection before `ScanResultV2` construction.
 
 ## Diagnostics and partial adaptation
 
@@ -147,13 +149,10 @@ throw rather than being converted to warnings.
 
 ## Known limitations and next step
 
-Both detectors remain text-pattern based. CCTP domain detection cannot resolve
+All three detectors remain text-pattern based. CCTP domain detection cannot resolve
 computed maps or distinguish every Arc numeric property. Wrapped-USDC detection
 cannot prove destination-chain deployment or eliminate all multichain source
-contexts. Findings intentionally contain no source excerpts or region-level
-locations.
-
-Runtime ScanResultV2 aggregation is not implemented here. PR 4C2B is the next
-vertical-slice step: it will aggregate occurrence outputs, handle exact
-fingerprint collisions across occurrences, and build the internal
-`ScanResultV2` while preserving the legacy runtime.
+contexts. Relayer gas-token detection is bounded to directly owned Arc
+JavaScript or TypeScript object configuration and does not resolve imported or
+computed values, ambiguous ownership, or runtime balances. Findings intentionally
+contain no source excerpts or region-level locations.

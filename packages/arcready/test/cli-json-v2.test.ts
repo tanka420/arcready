@@ -21,14 +21,19 @@ import { runScan } from "../src/report.js";
 
 const CCTP_RULE_ID = "bridge/CCTP_DOMAIN_26";
 const WRAPPED_RULE_ID = "bridge/NO_WRAPPED_USDC_ON_ARC";
+const RELAYER_RULE_ID = "bridge/RELAYER_USES_USDC_FOR_GAS";
 const CCTP_SOURCE = "Arc CCTP bridge\nconst ARC_CCTP_DOMAIN = 7;\n";
 const WRAPPED_SOURCE =
   'export const route = { chain: "Arc Testnet", bridge: true, token: "USDC.e" };\n';
+const RELAYER_BAD_SOURCE = 'const arcRelayer = { relayerGasToken: "ETH" };\n';
+const RELAYER_SAFE_SOURCE = 'const arcRelayer = { relayerGasToken: "USDC" };\n';
 const SAFE_SOURCE =
-  "Arc CCTP bridge\nconst ARC_CCTP_DOMAIN = 26;\nconst asset = 'USDC';\n";
+  `Arc CCTP bridge\nconst ARC_CCTP_DOMAIN = 26;\nconst asset = 'USDC';\n${RELAYER_SAFE_SOURCE}`;
+const ALL_BAD_SOURCE = `${CCTP_SOURCE}${WRAPPED_SOURCE}${RELAYER_BAD_SOURCE}`;
 const CONFLICT_MESSAGE =
   "--json-v2 cannot be combined with --format, --out, or --fail-on\n";
 const temporaryRoots: string[] = [];
+const repoRoot = join(import.meta.dirname, "..", "..", "..");
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -84,36 +89,46 @@ describe("json-v2 option-role inspection", () => {
 
 describe("json-v2 CLI interface", () => {
   it.each([
-    ["CCTP", { "src/cctp.ts": CCTP_SOURCE }, [CCTP_RULE_ID]],
-    ["wrapped USDC", { "src/route.ts": WRAPPED_SOURCE }, [WRAPPED_RULE_ID]],
+    ["C01/C08 structured relayer-only ETH", RELAYER_BAD_SOURCE, [RELAYER_RULE_ID], 1, 2],
+    ["C02 structured relayer USDC", RELAYER_SAFE_SOURCE, [], 0, 3],
+    ["C03 prose-only ETH funding", "fund the Arc relayer with ETH\n", [], 0, 3],
     [
-      "both canonical rules",
-      { "src/bridge.ts": `${CCTP_SOURCE}${WRAPPED_SOURCE}` },
-      [CCTP_RULE_ID, WRAPPED_RULE_ID]
+      "C04 isolated Ethereum ETH and Arc USDC siblings",
+      'const relayers = { ethereum: { relayerGasToken: "ETH" }, arc: { relayerGasToken: "USDC" } };\n',
+      [], 0, 3
     ],
-    ["negative", { "src/bridge.ts": SAFE_SOURCE }, []]
-  ])("emits a validated result for a %s repository", async (_name, files, ruleIds) => {
-    const execution = await executeJsonV2(files);
-    const result = JSON.parse(execution.stdout);
-
-    expect(execution.code).toBe(0);
-    expect(execution.stderr).toBe("");
-    expect(new Set(result.findings.map(({ ruleId }: { ruleId: string }) => ruleId))).toEqual(
-      new Set(ruleIds)
+    [
+      "C05 ambiguous duplicate Arc owner",
+      'const config = { arc: { relayerGasToken: "ETH" }, arc: { relayerGasToken: "USDC" } };\n',
+      [], 0, 3
+    ],
+    ["C06 CCTP-only bad project", CCTP_SOURCE, [CCTP_RULE_ID], 1, 2],
+    ["C07 wrapped-USDC-only bad project", WRAPPED_SOURCE, [WRAPPED_RULE_ID], 1, 2],
+    ["C09 all three bad patterns", ALL_BAD_SOURCE, [CCTP_RULE_ID, WRAPPED_RULE_ID, RELAYER_RULE_ID], 3, 0],
+    ["negative", SAFE_SOURCE, [], 0, 3]
+  ] as const)("emits a validated result for a %s repository", async (
+    _name, source, ruleIds, normalizedFindings, completedWithNoFindings
+  ) => {
+    assertJsonV2Execution(
+      await executeJsonV2({ "src/bridge.ts": source }),
+      ruleIds,
+      [0, 3, 3, normalizedFindings, completedWithNoFindings, normalizedFindings, 3]
     );
-    expect(result.coverage.ruleExecution.counts.selectedOccurrences).toBe(2);
-    expect(result.coverage.analysis).toEqual({
-      state: "unknown",
-      applicability: "unknown",
-      reason: "analysis-acknowledgements-unavailable"
-    });
-    validateScanResultV2(result);
+  });
+
+  it("C10 returns only the relayer finding for the real bridge-bad fixture", async () => {
+    const execution = await executeAtRoot(
+      ["scan", "--json-v2"],
+      join(repoRoot, "fixtures", "bridge-bad")
+    );
+    assertJsonV2Execution(execution, [RELAYER_RULE_ID], [0, 3, 3, 1, 2, 1, 3]);
   });
 
   it("preserves the exact JSON document boundary and deterministic bytes", async () => {
     const files = {
       "src/z-cctp.ts": CCTP_SOURCE,
-      "src/a-route.ts": WRAPPED_SOURCE
+      "src/a-route.ts": WRAPPED_SOURCE,
+      "src/m-relayer.ts": RELAYER_BAD_SOURCE
     };
     const first = await executeJsonV2(files);
     const second = await executeJsonV2(files);
@@ -193,22 +208,31 @@ describe("json-v2 configuration", () => {
     ).toBeGreaterThan(0);
   });
 
-  it("respects one and two supported off overrides", async () => {
-    const files = { "src/bridge.ts": `${CCTP_SOURCE}${WRAPPED_SOURCE}` };
-    const oneOff = await executeJsonV2(files, {
-      rules: { [CCTP_RULE_ID]: "off" }
-    });
-    const bothOff = await executeJsonV2(files, {
+  it("C11 disables a bad relayer rule independently", async () => {
+    const execution = await executeJsonV2(
+      { "src/relayer.ts": RELAYER_BAD_SOURCE },
+      { rules: { [RELAYER_RULE_ID]: "off" } }
+    );
+    assertJsonV2Execution(execution, [], [1, 2, 2, 0, 2, 0, 2]);
+  });
+
+  it("preserves the existing two-rule off combination inside the three-rule slice", async () => {
+    const execution = await executeJsonV2({ "src/bridge.ts": ALL_BAD_SOURCE }, {
       rules: { [CCTP_RULE_ID]: "off", [WRAPPED_RULE_ID]: "off" }
     });
+    assertJsonV2Execution(execution, [RELAYER_RULE_ID], [2, 1, 1, 1, 0, 1, 1]);
+  });
 
-    expect(JSON.parse(oneOff.stdout).findings.map(({ ruleId }: { ruleId: string }) => ruleId)).toEqual([
-      WRAPPED_RULE_ID
-    ]);
-    expect(JSON.parse(bothOff.stdout).findings).toEqual([]);
-    expect(
-      JSON.parse(bothOff.stdout).coverage.ruleExecution.counts.disabledOccurrences
-    ).toBe(2);
+  it("C12 disables all three canonical rules", async () => {
+    const execution = await executeJsonV2(
+      { "src/bridge.ts": ALL_BAD_SOURCE },
+      { rules: {
+        [CCTP_RULE_ID]: "off",
+        [WRAPPED_RULE_ID]: "off",
+        [RELAYER_RULE_ID]: "off"
+      } }
+    );
+    assertJsonV2Execution(execution, [], [3, 0, 0, 0, 0, 0, 0]);
   });
 
   it("keeps canonical classification and fingerprint independent of severity", async () => {
@@ -237,7 +261,7 @@ describe("json-v2 configuration", () => {
 
     expect(execution.code).toBe(0);
     expect(execution.stderr).toBe("");
-    expect(result.coverage.ruleExecution.counts.selectedOccurrences).toBe(2);
+    expect(result.coverage.ruleExecution.counts.selectedOccurrences).toBe(3);
     expect(result.findings.map(({ ruleId }: { ruleId: string }) => ruleId)).toEqual([
       CCTP_RULE_ID
     ]);
@@ -428,10 +452,46 @@ async function execute(
       `${JSON.stringify(config, null, 2)}\n`
     );
   }
+  return executeAtRoot(argv, cwd);
+}
+
+async function executeAtRoot(argv: string[], cwd: string): Promise<Execution> {
   const stdout: string[] = [];
   const stderr: string[] = [];
   const code = await runCli(argv, createIo(cwd, stdout, stderr));
   return { code, cwd, stdout: stdout.join(""), stderr: stderr.join("") };
+}
+
+function assertJsonV2Execution(
+  execution: Execution,
+  ruleIds: readonly string[],
+  expected: readonly [number, number, number, number, number, number, number]
+): void {
+  const result = JSON.parse(execution.stdout);
+  const [disabled, scheduled, completed, withFindings, withoutFindings, normalized, reads] = expected;
+  expect(execution.code).toBe(0);
+  expect(execution.stderr).toBe("");
+  expect(new Set(result.findings.map(({ ruleId }: { ruleId: string }) => ruleId))).toEqual(
+    new Set(ruleIds)
+  );
+  expect(result.coverage.ruleExecution.counts).toMatchObject({
+    selectedOccurrences: 3,
+    disabledOccurrences: disabled,
+    scheduledOccurrences: scheduled,
+    completedOccurrences: completed,
+    failedOccurrences: 0,
+    completedWithFindingsOccurrences: withFindings,
+    completedWithNoFindingsOccurrences: withoutFindings,
+    normalizedDetectorFindings: normalized
+  });
+  expect(result.coverage.evidence.ruleContextReads.attempts).toBe(reads);
+  expect(result.coverage.analysis).toEqual({
+    state: "unknown",
+    applicability: "unknown",
+    reason: "analysis-acknowledgements-unavailable"
+  });
+  expect(result.diagnostics).toEqual([]);
+  validateScanResultV2(result);
 }
 
 function createProject(files: Record<string, string>): string {

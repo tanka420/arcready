@@ -204,8 +204,8 @@ function validateJsonV2Execution(
   if (result.contractVersion !== "2.0") {
     throw new Error("Expected json-v2 contractVersion 2.0");
   }
-  if (result.coverage?.ruleExecution?.counts?.selectedOccurrences !== 2) {
-    throw new Error("Expected json-v2 to select exactly two rule occurrences");
+  if (result.coverage?.ruleExecution?.counts?.selectedOccurrences !== 3) {
+    throw new Error("Expected json-v2 to select exactly three rule occurrences");
   }
   if (!result.findings?.some(({ ruleId }) => ruleId === "bridge/CCTP_DOMAIN_26")) {
     throw new Error("Expected a CCTP_DOMAIN_26 FindingV2");
