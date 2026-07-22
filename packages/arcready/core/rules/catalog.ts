@@ -435,10 +435,10 @@ export const ruleTaxonomyCatalog = [
       }
     ],
     rationale:
-      "Incorrect applicable network metadata can connect a wallet to the wrong network, but the current regex cannot reliably isolate the Arc chain object.",
+      "Incorrect applicable network metadata can connect a wallet to the wrong network; bounded object-local scanning makes direct literal contradictions actionable without borrowing sibling context.",
     detectorLimitations: [
-      "Multichain files may legitimately contain Ethereum names and endpoints.",
-      "Computed or imported metadata can evade literal matching."
+      "The bounded detector supports plain .js and .ts configuration files containing const, defineChain, and one-direct-Arc-child objects while isolating multichain siblings.",
+      "It declines imports, computed metadata, JSON, arrays, deep wrappers, spreads, duplicate or conflicting fields, and malformed candidates; its explicit Ethereum endpoint list leaves unknown custom endpoints silent."
     ],
     deprecated: false
   },

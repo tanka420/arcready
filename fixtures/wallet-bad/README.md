@@ -1,3 +1,3 @@
 # wallet-bad
 
-Minimal wallet fixture that should trigger Arc finality validation.
+Minimal wallet fixture that should trigger Arc chain-metadata and finality validation.

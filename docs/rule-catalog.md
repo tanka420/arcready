@@ -10,7 +10,7 @@ ArcReady does not perform live Arc RPC checks, Circle API checks, on-chain trans
 
 | Preset | Rule ID | Severity | Purpose |
 | --- | --- | --- | --- |
-| Wallet | `wallet/ARC_CHAIN_METADATA` | Critical | Checks Arc wallet chain metadata for Arc chain ID and Arc-specific RPC/explorer settings. |
+| Wallet | `wallet/ARC_CHAIN_METADATA` | Critical | Checks bounded Arc-owned chain objects for literal chain ID errors and explicit Ethereum RPC/explorer endpoints. |
 | Wallet | `wallet/WALLET_NATIVE_USDC_DISPLAY` | Critical | Checks whether Arc native asset, gas-token, or fee-token display appears to use ETH instead of USDC. |
 | Wallet | `wallet/NO_ETH_GAS_LABEL` | Critical | Checks Arc wallet fee UI text for ETH or gwei gas labels. |
 | Wallet | `wallet/ONE_CONFIRMATION_FINAL` | Critical | Checks Arc wallet transaction flows for Ethereum-style multi-confirmation waits. |
@@ -35,7 +35,7 @@ ArcReady does not perform live Arc RPC checks, Circle API checks, on-chain trans
 
 - Preset: Wallet
 - Severity: Critical
-- What it detects: Arc-related wallet chain config that appears to omit Arc Testnet chain ID `5042002`, or mixes Arc metadata with obvious non-Arc RPC/explorer settings.
+- What it detects: Arc-owned `const` and `defineChain` objects in plain `.js` and `.ts` configuration files with a missing or incorrect direct literal chain ID, or same-object RPC/explorer URLs explicitly tied to Ethereum mainnet, Sepolia, or Holesky.
 - Why it matters: Incorrect chain metadata can send users, RPC calls, or explorer links toward the wrong network context.
 - Example bad pattern:
 
@@ -47,8 +47,8 @@ ArcReady does not perform live Arc RPC checks, Circle API checks, on-chain trans
   };
   ```
 
-- Suggested fix: Verify the Arc wallet chain config uses chain ID `5042002`, Arc RPC/explorer metadata, and USDC native asset display.
-- Static-analysis limitation: ArcReady checks source/config patterns; it does not call RPC endpoints or verify live chain metadata.
+- Suggested fix: Set the object's `id` or `chainId` to `5042002` (or EIP-3085 string `"0x4CF4B2"`) and replace explicit Ethereum endpoints with Arc-serving RPC or `https://testnet.arcscan.app` explorer metadata. Managed and custom Arc RPC providers are valid.
+- Static-analysis limitation: The bounded detector supports plain `.js` and `.ts` configuration files and isolates direct multichain siblings, but declines JSX/TSX, imports, computed metadata, standalone JSON, arrays, deep wrappers, spreads, duplicate or conflicting fields, and malformed candidates. Its bounded explicit-Ethereum endpoint list leaves unknown custom endpoints silent and does not call RPC endpoints.
 
 ### WALLET_NATIVE_USDC_DISPLAY
 
