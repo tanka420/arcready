@@ -11,9 +11,14 @@ The canonical runtime currently executes exactly:
 - `bridge/CCTP_DOMAIN_26`
 - `bridge/NO_WRAPPED_USDC_ON_ARC`
 - `bridge/RELAYER_USES_USDC_FOR_GAS`
+- `wallet/ARC_CHAIN_METADATA`
 
 Its analysis state and applicability remain `unknown` because rule-specific
 analysis acknowledgements are not available.
+
+Coverage reports `selectedOccurrences: 4`. The exact selected IDs and order
+remain a private tuple; JSON adds no selected-rule list. Four of 18 known
+inventory rules execute, leaving 14 outside the canonical slice.
 
 ## Interface and exclusivity
 
@@ -89,6 +94,10 @@ it directly to the runtime. Existing `paths`, `exclude`, and supported-rule
 `off` overrides are respected. Non-`off` overrides retain existing detector
 normalization behavior without changing canonical classification or
 fingerprints.
+
+The wallet adapter observes plain `.js` and `.ts` only. One file-level
+specification covers four detector messages, and different messages for the
+same file retain the same exact fingerprint.
 
 Unsupported rule overrides remain inert. Configured and detected presets are
 context only. Configured reporters produce no json-v2 output, and configured

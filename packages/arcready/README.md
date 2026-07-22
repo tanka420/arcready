@@ -88,9 +88,11 @@ This leaves the default legacy output unchanged and emits the exact
 }
 ```
 
-The experimental runtime currently executes only
-`bridge/CCTP_DOMAIN_26`, `bridge/NO_WRAPPED_USDC_ON_ARC`, and
-`bridge/RELAYER_USES_USDC_FOR_GAS`. Analysis and applicability remain unknown.
+The experimental runtime currently executes exactly four rules in stable order:
+`bridge/CCTP_DOMAIN_26`, `bridge/NO_WRAPPED_USDC_ON_ARC`,
+`bridge/RELAYER_USES_USDC_FOR_GAS`, and `wallet/ARC_CHAIN_METADATA`. The JSON
+exposes `selectedOccurrences: 4`, while the selected rule IDs remain a private
+runtime tuple. Analysis and applicability remain unknown.
 Exit code `0` means a valid document was produced, not that the repository is
 compatible: findings and recoverable diagnostics are observational, and
 canonical enforcement is deferred.

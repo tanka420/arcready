@@ -8,6 +8,7 @@ exactly these detector rules:
 - `bridge/CCTP_DOMAIN_26`
 - `bridge/NO_WRAPPED_USDC_ON_ARC`
 - `bridge/RELAYER_USES_USDC_FOR_GAS`
+- `wallet/ARC_CHAIN_METADATA`
 
 They were selected because each detector emits at most one finding per rule and
 file, identifies one affected file, has approved catalog documentation, and can
@@ -51,11 +52,19 @@ The adapter-specific values are:
 | `bridge/CCTP_DOMAIN_26` | `bridge.cctp-domain.non-26` | `cctp-domain-non-26` |
 | `bridge/NO_WRAPPED_USDC_ON_ARC` | `bridge.wrapped-usdc.arc-route` | `wrapped-usdc-arc-route` |
 | `bridge/RELAYER_USES_USDC_FOR_GAS` | `bridge.relayer-gas-token.eth-on-arc` | `relayer-gas-token-eth-on-arc` |
+| `wallet/ARC_CHAIN_METADATA` | `wallet.arc-chain-metadata.incompatible` | `arc-chain-metadata-incompatible` |
 
 Specifications additionally carry the approved rule-specific confidence reason
-and remediation summary. Confidence basis is `adapter`; all three catalog confidence
+and remediation summary. Confidence basis is `adapter`; all four catalog confidence
 levels are `medium`. Remove-or-replace and other unsupported taxonomy states
 cannot produce a specification for this adapter.
+
+The wallet rule uses one rule-level specification for its four legacy messages:
+missing or incorrect direct literal chain ID, explicit Ethereum RPC, and
+Etherscan explorer. Its capabilities are exactly `.js` and `.ts`,
+`text-pattern`, file-level precision, and no parser requirements. The legacy
+message preserves the outcome; no issue-specific pattern or discriminator is
+added.
 
 Contract v2 structural validation alone is not sufficient for specification
 approval. Validation rebuilds the current approved specification and requires
@@ -121,6 +130,8 @@ The adapter creates `arcready/exact-location/v1` fingerprints from only:
 
 Selection index, detector index, message, severity, source content, execution
 order, time, and fallback information do not affect fingerprints.
+Different wallet messages for the same normalized file therefore share one
+exact fingerprint, while different files have different fingerprints.
 
 Within one adapter invocation, every member of a duplicate fingerprint group is
 rejected and one `FINDING_V2_DUPLICATE_FINGERPRINT` diagnostic is emitted at the
@@ -149,10 +160,13 @@ throw rather than being converted to warnings.
 
 ## Known limitations and next step
 
-All three detectors remain text-pattern based. CCTP domain detection cannot resolve
+All four detectors remain text-pattern based. CCTP domain detection cannot resolve
 computed maps or distinguish every Arc numeric property. Wrapped-USDC detection
 cannot prove destination-chain deployment or eliminate all multichain source
 contexts. Relayer gas-token detection is bounded to directly owned Arc
 JavaScript or TypeScript object configuration and does not resolve imported or
-computed values, ambiguous ownership, or runtime balances. Findings intentionally
-contain no source excerpts or region-level locations.
+computed values, ambiguous ownership, or runtime balances. Arc chain metadata
+is bounded to plain `.js` and `.ts` Arc-owned objects and does not resolve
+imports, computed metadata, array-wrapped chain objects, deep wrappers,
+ambiguous fields, malformed syntax, or runtime endpoints. Findings
+intentionally contain no source excerpts or region-level locations.

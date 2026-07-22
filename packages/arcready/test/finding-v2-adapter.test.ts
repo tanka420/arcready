@@ -27,15 +27,15 @@ import {
 } from "../core/findings-v2/specifications.js";
 import type { Finding } from "../core/findings/index.js";
 import type { FailedRuleOccurrenceExecutionResult } from "../core/rules/execution-result.js";
-import {
-  executeRulesStructured
-} from "../core/rules/instrumentation.js";
+import { ruleTaxonomyCatalog } from "../core/rules/catalog.js";
+import { executeRulesStructured } from "../core/rules/instrumentation.js";
 import { createRuleContext, type Rule } from "../core/rules/index.js";
 import {
   cctpDomain26Rule,
   noWrappedUsdcOnArcRule,
   relayerUsesUsdcForGasRule
 } from "../rules/bridge/index.js";
+import { arcChainMetadataRule } from "../rules/wallet/index.js";
 import { DEFAULT_CONFIG } from "../src/index.js";
 import * as publicApi from "../src/index.js";
 
@@ -62,6 +62,7 @@ const cases = [
     negative:
       "export const ARC_DOMAIN = 26; // Arc CCTP depositForBurn attestation",
     title: "CCTP domain 26",
+    category: "bridge",
     impact: "blocker",
     rulePacks: ["bridge-cctp", "core-compatibility"],
     supportedExtensions: existingSupportedExtensions,
@@ -84,6 +85,7 @@ const cases = [
     negative:
       "export const route = { chain: 'Arc Testnet', bridge: true, token: 'USDC' };",
     title: "No wrapped USDC on Arc",
+    category: "bridge",
     impact: "required-change",
     rulePacks: ["bridge-cctp"],
     supportedExtensions: existingSupportedExtensions,
@@ -104,6 +106,7 @@ const cases = [
     positive: 'const arcRelayer = {\n  relayerGasToken: "ETH"\n};',
     negative: 'const arcRelayer = {\n  relayerGasToken: "USDC"\n};',
     title: "Relayer uses USDC for gas",
+    category: "bridge",
     impact: "required-change",
     rulePacks: ["bridge-cctp", "indexer-infrastructure"],
     supportedExtensions: [".js", ".jsx", ".ts", ".tsx"],
@@ -117,7 +120,52 @@ const cases = [
       title: "How to: Add Arc to Your Bridge Protocol",
       url: "https://docs.arc.io/integrate/infrastructure/bridges"
     }
+  },
+  {
+    rule: arcChainMetadataRule,
+    ruleId: "wallet/ARC_CHAIN_METADATA" as const,
+    positive: "const arcTestnet = { id: 1, name: 'Arc Testnet' };",
+    negative:
+      "const arcTestnet = { id: 5042002, name: 'Arc Testnet', rpcUrls: ['https://rpc.testnet.arc.network'] };",
+    title: "Arc chain metadata",
+    category: "wallet",
+    impact: "blocker",
+    rulePacks: ["core-compatibility", "wallet"],
+    supportedExtensions: [".js", ".ts"],
+    patternId: "wallet.arc-chain-metadata.incompatible",
+    discriminator: "arc-chain-metadata-incompatible",
+    confidenceReason:
+      "Bounded object-local scanning finds a missing or incorrect direct literal Arc Testnet chain ID, or an explicit Ethereum RPC or Etherscan URL, in an Arc-owned plain JavaScript or TypeScript chain object. It does not resolve imports, computed metadata, array-wrapped chain objects, deep wrappers, ambiguous fields, malformed syntax, or runtime endpoint behavior.",
+    remediation:
+      "Set the Arc chain object's id or chainId to Arc Testnet 5042002, using 0x4CF4B2 where EIP-3085 requires a hexadecimal string; use Arc-serving RPC metadata; and use https://testnet.arcscan.app for the Arc Testnet explorer. Managed and custom Arc RPC providers remain valid.",
+    documentation: {
+      title: "How to: Add Arc to a Wallet",
+      url: "https://docs.arc.io/integrate/wallets"
+    }
   }
+] as const;
+
+const walletMessageCases = [
+  [
+    "missing ID",
+    "const arcTestnet = { name: 'Arc Testnet', rpcUrls: ['https://rpc.testnet.arc.network'] };",
+    "Arc-owned chain metadata is missing a direct literal Arc Testnet chain ID."
+  ],
+  [
+    "incorrect ID",
+    "const arcTestnet = { id: 1, name: 'Arc Testnet' };",
+    "Arc-owned chain metadata uses a direct literal chain ID other than Arc Testnet 5042002."
+  ],
+  [
+    "Ethereum RPC",
+    "const chain = { id: 5042002, rpcUrls: ['https://cloudflare-eth.com'] };",
+    "Arc-owned chain metadata contains an RPC URL for Ethereum mainnet, Sepolia, or Holesky."
+  ],
+  [
+    "Etherscan explorer",
+    "const chain = { id: 5042002, blockExplorerUrls: ['https://sepolia.etherscan.io'] };",
+    "Arc-owned chain metadata contains an Etherscan URL for Ethereum mainnet, Sepolia, or Holesky."
+  ]
 ] as const;
 
 afterEach(() => {
@@ -127,41 +175,49 @@ afterEach(() => {
 });
 
 describe("FindingV2 adapter specifications", () => {
-  it.each(cases)("builds the approved $ruleId specification from catalog metadata", (entry) => {
-    const specification = getFindingV2AdapterSpecification(entry.ruleId);
+  it.each(cases)(
+    "builds the approved $ruleId specification from catalog metadata",
+    (entry) => {
+      const specification = getFindingV2AdapterSpecification(entry.ruleId);
 
-    expect(specification.ruleId).toBe(entry.ruleId);
-    expect(specification.definition.rule).toBe(entry.rule);
-    expect(specification.definition.rule.name).toBe(entry.title);
-    expect(specification.definition.metadata).toMatchObject({
-      id: entry.ruleId,
-      taxonomy: "experimental-compatibility",
-      impact: entry.impact,
-      category: "bridge",
-      maturity: "prototype",
-      defaultConfidence: "medium",
-      rulePacks: entry.rulePacks,
-      recommendedDefaultEnabled: true,
-      recommendedCiFailureEligible: false
-    });
-    expect(specification.definition.metadata.documentation).toEqual(
-      expect.arrayContaining([expect.objectContaining(entry.documentation)])
-    );
-    expect(specification.definition.capabilities).toEqual({
-      engines: ["text-pattern"],
-      supportedExtensions: entry.supportedExtensions,
-      locationPrecision: "file",
-      parserRequirements: []
-    });
-    expect(specification.patternId).toBe(entry.patternId);
-    expect(specification.detectorDiscriminator).toBe(entry.discriminator);
-    expect(specification.confidenceReason).toBe(entry.confidenceReason);
-    expect(specification.remediationSummary).toBe(entry.remediation);
-    expect(() => validateRuleDefinitionV2(specification.definition)).not.toThrow();
-    expect(() =>
-      validatePatternFindingV2AdapterSpecification(specification)
-    ).not.toThrow();
-  });
+      expect(specification.ruleId).toBe(entry.ruleId);
+      expect(specification.definition.rule).toBe(entry.rule);
+      expect(specification.definition.rule.name).toBe(entry.title);
+      expect(specification.definition.metadata).toMatchObject({
+        id: entry.ruleId,
+        taxonomy: "experimental-compatibility",
+        impact: entry.impact,
+        category: entry.category,
+        maturity: "prototype",
+        defaultConfidence: "medium",
+        rulePacks: entry.rulePacks,
+        recommendedDefaultEnabled: true,
+        recommendedCiFailureEligible: false
+      });
+      expect(specification.definition.metadata.documentation).toEqual(
+        expect.arrayContaining([expect.objectContaining(entry.documentation)])
+      );
+      expect(specification.definition.metadata).toEqual(
+        ruleTaxonomyCatalog.find(({ id }) => id === entry.ruleId)
+      );
+      expect(specification.definition.capabilities).toEqual({
+        engines: ["text-pattern"],
+        supportedExtensions: entry.supportedExtensions,
+        locationPrecision: "file",
+        parserRequirements: []
+      });
+      expect(specification.patternId).toBe(entry.patternId);
+      expect(specification.detectorDiscriminator).toBe(entry.discriminator);
+      expect(specification.confidenceReason).toBe(entry.confidenceReason);
+      expect(specification.remediationSummary).toBe(entry.remediation);
+      expect(() =>
+        validateRuleDefinitionV2(specification.definition)
+      ).not.toThrow();
+      expect(() =>
+        validatePatternFindingV2AdapterSpecification(specification)
+      ).not.toThrow();
+    }
+  );
 
   it("rejects every unsupported rule ID", () => {
     expect(() =>
@@ -177,9 +233,25 @@ describe("FindingV2 adapter specifications", () => {
     ["bridge/CCTP_DOMAIN_26", "confidenceReason", "Changed reason"],
     ["bridge/CCTP_DOMAIN_26", "remediationSummary", "Changed remediation"],
     ["bridge/RELAYER_USES_USDC_FOR_GAS", "patternId", "changed.pattern"],
-    ["bridge/RELAYER_USES_USDC_FOR_GAS", "detectorDiscriminator", "changed-discriminator"],
+    [
+      "bridge/RELAYER_USES_USDC_FOR_GAS",
+      "detectorDiscriminator",
+      "changed-discriminator"
+    ],
     ["bridge/RELAYER_USES_USDC_FOR_GAS", "confidenceReason", "Changed reason"],
-    ["bridge/RELAYER_USES_USDC_FOR_GAS", "remediationSummary", "Changed remediation"]
+    [
+      "bridge/RELAYER_USES_USDC_FOR_GAS",
+      "remediationSummary",
+      "Changed remediation"
+    ],
+    ["wallet/ARC_CHAIN_METADATA", "patternId", "changed.pattern"],
+    [
+      "wallet/ARC_CHAIN_METADATA",
+      "detectorDiscriminator",
+      "changed-discriminator"
+    ],
+    ["wallet/ARC_CHAIN_METADATA", "confidenceReason", "Changed reason"],
+    ["wallet/ARC_CHAIN_METADATA", "remediationSummary", "Changed remediation"]
   ] as const)("rejects an unapproved %s %s", (ruleId, field, value) => {
     const specification = getFindingV2AdapterSpecification(ruleId);
 
@@ -203,6 +275,24 @@ describe("FindingV2 adapter specifications", () => {
           capabilities: {
             ...specification.definition.capabilities,
             supportedExtensions: [".js", ".json", ".jsx", ".ts", ".tsx"]
+          }
+        }
+      })
+    ).toThrow(/not approved/);
+  });
+
+  it("rejects altered wallet supported extensions", () => {
+    const specification = getFindingV2AdapterSpecification(
+      "wallet/ARC_CHAIN_METADATA"
+    );
+    expect(() =>
+      validatePatternFindingV2AdapterSpecification({
+        ...specification,
+        definition: {
+          ...specification.definition,
+          capabilities: {
+            ...specification.definition.capabilities,
+            supportedExtensions: [".js", ".jsx", ".ts"]
           }
         }
       })
@@ -352,21 +442,26 @@ describe("cross-platform repository location resolver", () => {
     ["src\\.\\bridge.ts", "src/bridge.ts"],
     ["C:\\repo\\src\\bridge.ts", "src/bridge.ts"],
     ["c:/repo/src/bridge.ts", "src/bridge.ts"]
-  ])("normalizes Windows-root path %s independent of the host", (input, expected) => {
-    expect(createRepositoryLocationResolver("C:\\repo")(input)).toEqual({
-      status: "resolved",
-      location: { path: expected }
-    });
-  });
+  ])(
+    "normalizes Windows-root path %s independent of the host",
+    (input, expected) => {
+      expect(createRepositoryLocationResolver("C:\\repo")(input)).toEqual({
+        status: "resolved",
+        location: { path: expected }
+      });
+    }
+  );
 
   it("normalizes a native absolute path inside a temporary project", () => {
     const projectRoot = createTempProject();
     const absolutePath = join(projectRoot, "src", "bridge.ts");
 
-    expect(createRepositoryLocationResolver(projectRoot)(absolutePath)).toEqual({
-      status: "resolved",
-      location: { path: "src/bridge.ts" }
-    });
+    expect(createRepositoryLocationResolver(projectRoot)(absolutePath)).toEqual(
+      {
+        status: "resolved",
+        location: { path: "src/bridge.ts" }
+      }
+    );
   });
 
   it("rejects a POSIX project-root prefix collision", () => {
@@ -380,9 +475,7 @@ describe("cross-platform repository location resolver", () => {
 
   it("rejects a Windows project-root prefix collision", () => {
     expect(
-      createRepositoryLocationResolver("C:\\repo")(
-        "C:\\repository\\file.ts"
-      )
+      createRepositoryLocationResolver("C:\\repo")("C:\\repository\\file.ts")
     ).toEqual({
       status: "rejected",
       reason: "outside-project-root"
@@ -430,7 +523,9 @@ describe("cross-platform repository location resolver", () => {
   });
 
   it("rejects POSIX absolute input under a Windows root", () => {
-    expect(createRepositoryLocationResolver("C:\\repo")("/repo/file.ts")).toEqual({
+    expect(
+      createRepositoryLocationResolver("C:\\repo")("/repo/file.ts")
+    ).toEqual({
       status: "rejected",
       reason: "drive-mismatch"
     });
@@ -446,9 +541,8 @@ describe("cross-platform repository location resolver", () => {
   );
 
   it("emits a file-level canonical location without a region", () => {
-    const resolution = createRepositoryLocationResolver("/repo")(
-      "src/bridge.ts"
-    );
+    const resolution =
+      createRepositoryLocationResolver("/repo")("src/bridge.ts");
     expect(resolution.status).toBe("resolved");
     if (resolution.status === "resolved") {
       expect(resolution.location).toEqual({ path: "src/bridge.ts" });
@@ -458,77 +552,119 @@ describe("cross-platform repository location resolver", () => {
 });
 
 describe("real detector FindingV2 adaptation", () => {
-  it.each(cases)("adapts a real positive $ruleId detector occurrence", async (entry) => {
-    const { projectRoot, occurrence } = await executeRealDetector(
-      entry.rule,
-      entry.positive
-    );
-    const result = adaptDetectorOccurrenceV2({
-      occurrence,
-      specification: getFindingV2AdapterSpecification(entry.ruleId),
-      resolveLocation: createRepositoryLocationResolver(projectRoot)
-    });
+  it.each(cases)(
+    "adapts a real positive $ruleId detector occurrence",
+    async (entry) => {
+      const { projectRoot, occurrence } = await executeRealDetector(
+        entry.rule,
+        entry.positive
+      );
+      const result = adaptDetectorOccurrenceV2({
+        occurrence,
+        specification: getFindingV2AdapterSpecification(entry.ruleId),
+        resolveLocation: createRepositoryLocationResolver(projectRoot)
+      });
 
-    expect(result.diagnostics).toEqual([]);
-    expect(result.findings).toHaveLength(1);
-    const finding = result.findings[0];
-    expect(finding).toMatchObject({
-      ruleId: entry.ruleId,
-      title: entry.title,
-      classification: {
-        taxonomy: "experimental-compatibility",
-        impact: entry.impact,
-        category: "bridge",
-        maturity: "prototype",
-        rulePacks: entry.rulePacks
-      },
-      confidence: {
-        level: "medium",
-        basis: "adapter",
-        reason: entry.confidenceReason
-      },
-      primaryLocation: { path: "src/fixture.ts" },
-      relatedLocations: [],
-      evidence: [
-        {
-          kind: "pattern-match",
-          patternId: entry.patternId,
-          location: { path: "src/fixture.ts" }
-        }
-      ],
-      remediation: { summary: entry.remediation },
-      documentation: [entry.documentation]
-    });
-    expect(finding?.evidence[0]).not.toHaveProperty("excerpt");
-    expect(JSON.stringify(finding)).not.toContain(entry.positive);
-    expect(() => validateFindingV2(finding)).not.toThrow();
-    const repeated = adaptDetectorOccurrenceV2({
-      occurrence,
-      specification: getFindingV2AdapterSpecification(entry.ruleId),
-      resolveLocation: createRepositoryLocationResolver(projectRoot)
-    });
-    expect(exactFingerprint(repeated.findings[0])).toBe(exactFingerprint(finding));
-  });
+      expect(result.diagnostics).toEqual([]);
+      expect(result.findings).toHaveLength(1);
+      const finding = result.findings[0];
+      expect(finding).toMatchObject({
+        ruleId: entry.ruleId,
+        title: entry.title,
+        classification: {
+          taxonomy: "experimental-compatibility",
+          impact: entry.impact,
+          category: entry.category,
+          maturity: "prototype",
+          rulePacks: entry.rulePacks
+        },
+        confidence: {
+          level: "medium",
+          basis: "adapter",
+          reason: entry.confidenceReason
+        },
+        primaryLocation: { path: "src/fixture.ts" },
+        relatedLocations: [],
+        evidence: [
+          {
+            kind: "pattern-match",
+            patternId: entry.patternId,
+            location: { path: "src/fixture.ts" }
+          }
+        ],
+        remediation: { summary: entry.remediation },
+        documentation: [entry.documentation]
+      });
+      expect(finding?.evidence[0]).not.toHaveProperty("excerpt");
+      expect(JSON.stringify(finding)).not.toContain(entry.positive);
+      expect(() => validateFindingV2(finding)).not.toThrow();
+      const repeated = adaptDetectorOccurrenceV2({
+        occurrence,
+        specification: getFindingV2AdapterSpecification(entry.ruleId),
+        resolveLocation: createRepositoryLocationResolver(projectRoot)
+      });
+      expect(exactFingerprint(repeated.findings[0])).toBe(
+        exactFingerprint(finding)
+      );
+    }
+  );
 
-  it.each(cases)("preserves a real negative $ruleId completed occurrence", async (entry) => {
-    const { projectRoot, occurrence } = await executeRealDetector(
-      entry.rule,
-      entry.negative
-    );
-    const result = adaptDetectorOccurrenceV2({
-      occurrence,
-      specification: getFindingV2AdapterSpecification(entry.ruleId),
-      resolveLocation: createRepositoryLocationResolver(projectRoot)
-    });
+  it.each(walletMessageCases)(
+    "adapts the real wallet detector's %s message with one specification",
+    async (_issue, source, message) => {
+      const { projectRoot, occurrence } = await executeRealDetector(
+        arcChainMetadataRule,
+        source
+      );
+      const result = adaptDetectorOccurrenceV2({
+        occurrence,
+        specification: getFindingV2AdapterSpecification(
+          "wallet/ARC_CHAIN_METADATA"
+        ),
+        resolveLocation: createRepositoryLocationResolver(projectRoot)
+      });
 
-    expect(occurrence.detectorFindings).toEqual([]);
-    expect(result).toEqual({ findings: [], diagnostics: [] });
-  });
+      expect(result.diagnostics).toEqual([]);
+      expect(result.findings).toHaveLength(1);
+      expect(result.findings[0]).toMatchObject({
+        ruleId: "wallet/ARC_CHAIN_METADATA",
+        message,
+        primaryLocation: { path: "src/fixture.ts" },
+        relatedLocations: [],
+        evidence: [
+          {
+            kind: "pattern-match",
+            patternId: "wallet.arc-chain-metadata.incompatible",
+            location: { path: "src/fixture.ts" }
+          }
+        ]
+      });
+      expect(result.findings[0]?.primaryLocation).not.toHaveProperty("region");
+      expect(result.findings[0]?.evidence[0]).not.toHaveProperty("excerpt");
+      expect(() => validateFindingV2(result.findings[0])).not.toThrow();
+    }
+  );
+
+  it.each(cases)(
+    "preserves a real negative $ruleId completed occurrence",
+    async (entry) => {
+      const { projectRoot, occurrence } = await executeRealDetector(
+        entry.rule,
+        entry.negative
+      );
+      const result = adaptDetectorOccurrenceV2({
+        occurrence,
+        specification: getFindingV2AdapterSpecification(entry.ruleId),
+        resolveLocation: createRepositoryLocationResolver(projectRoot)
+      });
+
+      expect(occurrence.detectorFindings).toEqual([]);
+      expect(result).toEqual({ findings: [], diagnostics: [] });
+    }
+  );
 
   it("makes failed fallback occurrences structurally incompatible", () => {
-    expectTypeOf<FailedRuleOccurrenceExecutionResult>().not.toMatchTypeOf<
-      AdaptableCompletedRuleOccurrenceV2
-    >();
+    expectTypeOf<FailedRuleOccurrenceExecutionResult>().not.toMatchTypeOf<AdaptableCompletedRuleOccurrenceV2>();
   });
 
   it("does not expose the adapter from the public API", () => {
@@ -584,7 +720,7 @@ describe("fingerprint stability and duplicate handling", () => {
       )
     );
 
-    expect(new Set(fingerprints).size).toBe(3);
+    expect(new Set(fingerprints).size).toBe(4);
   });
 
   it("does not use legacy message or severity in the fingerprint", () => {
@@ -592,7 +728,11 @@ describe("fingerprint stability and duplicate handling", () => {
       "bridge/CCTP_DOMAIN_26",
       "src/bridge.ts"
     );
-    const changed = { ...original, message: "Changed display text", severity: "info" as const };
+    const changed = {
+      ...original,
+      message: "Changed display text",
+      severity: "info" as const
+    };
     const first = adaptManual("bridge/CCTP_DOMAIN_26", [original]);
     const second = adaptManual("bridge/CCTP_DOMAIN_26", [changed]);
 
@@ -605,44 +745,89 @@ describe("fingerprint stability and duplicate handling", () => {
     );
   });
 
+  it("uses the same wallet fingerprint for different issue messages on one file", () => {
+    const original = createLegacyFinding(
+      "wallet/ARC_CHAIN_METADATA",
+      "src/wallet.ts"
+    );
+    const first = adaptManual("wallet/ARC_CHAIN_METADATA", [
+      {
+        ...original,
+        message:
+          "Arc-owned chain metadata is missing a direct literal Arc Testnet chain ID."
+      }
+    ]);
+    const second = adaptManual("wallet/ARC_CHAIN_METADATA", [
+      {
+        ...original,
+        message:
+          "Arc-owned chain metadata contains an Etherscan URL for Ethereum mainnet, Sepolia, or Holesky."
+      }
+    ]);
+
+    expect(exactFingerprint(first.findings[0])).toBe(
+      exactFingerprint(second.findings[0])
+    );
+  });
+
+  it("uses different wallet fingerprints for different files", () => {
+    const first = adaptManual("wallet/ARC_CHAIN_METADATA", [
+      createLegacyFinding("wallet/ARC_CHAIN_METADATA", "src/first.ts")
+    ]);
+    const second = adaptManual("wallet/ARC_CHAIN_METADATA", [
+      createLegacyFinding("wallet/ARC_CHAIN_METADATA", "src/second.ts")
+    ]);
+
+    expect(exactFingerprint(first.findings[0])).not.toBe(
+      exactFingerprint(second.findings[0])
+    );
+  });
+
   it.each([cases[0], cases[2]])(
     "ignores a runtime severity override for $ruleId classification and fingerprint",
     async (entry) => {
-    const normal = await executeRealDetector(
-      entry.rule,
-      entry.positive
-    );
-    const overridden = await executeRealDetector(
-      entry.rule,
-      entry.positive,
-      "warning"
-    );
-    const specification = getFindingV2AdapterSpecification(entry.ruleId);
-    const first = adaptDetectorOccurrenceV2({
-      occurrence: normal.occurrence,
-      specification,
-      resolveLocation: createRepositoryLocationResolver(normal.projectRoot)
-    });
-    const second = adaptDetectorOccurrenceV2({
-      occurrence: overridden.occurrence,
-      specification,
-      resolveLocation: createRepositoryLocationResolver(overridden.projectRoot)
-    });
+      const normal = await executeRealDetector(entry.rule, entry.positive);
+      const overridden = await executeRealDetector(
+        entry.rule,
+        entry.positive,
+        "warning"
+      );
+      const specification = getFindingV2AdapterSpecification(entry.ruleId);
+      const first = adaptDetectorOccurrenceV2({
+        occurrence: normal.occurrence,
+        specification,
+        resolveLocation: createRepositoryLocationResolver(normal.projectRoot)
+      });
+      const second = adaptDetectorOccurrenceV2({
+        occurrence: overridden.occurrence,
+        specification,
+        resolveLocation: createRepositoryLocationResolver(
+          overridden.projectRoot
+        )
+      });
 
-    expect(overridden.occurrence.detectorFindings[0]?.severity).toBe("warning");
-    expect(second.findings[0]?.classification).toEqual(
-      first.findings[0]?.classification
-    );
-    expect(second.findings[0]?.confidence).toEqual(first.findings[0]?.confidence);
-    expect(exactFingerprint(second.findings[0])).toBe(
-      exactFingerprint(first.findings[0])
-    );
+      expect(overridden.occurrence.detectorFindings[0]?.severity).toBe(
+        "warning"
+      );
+      expect(second.findings[0]?.classification).toEqual(
+        first.findings[0]?.classification
+      );
+      expect(second.findings[0]?.confidence).toEqual(
+        first.findings[0]?.confidence
+      );
+      expect(exactFingerprint(second.findings[0])).toBe(
+        exactFingerprint(first.findings[0])
+      );
     }
   );
 
   it("gives duplicate selected occurrences identical fingerprints", async () => {
     const projectRoot = createTempProject();
-    const filePath = writeFixture(projectRoot, "src/fixture.ts", cases[0].positive);
+    const filePath = writeFixture(
+      projectRoot,
+      "src/fixture.ts",
+      cases[0].positive
+    );
     const context = createBridgeContext(projectRoot, filePath);
     const result = await executeRulesStructured(
       [cctpDomain26Rule, cctpDomain26Rule],
@@ -708,7 +893,8 @@ describe("adaptation diagnostics and partial outcomes", () => {
       name: "missing",
       files: [],
       code: "FINDING_V2_LOCATION_MISSING",
-      message: "Detector finding cannot be adapted because it has no source file."
+      message:
+        "Detector finding cannot be adapted because it has no source file."
     },
     {
       name: "ambiguous",
@@ -754,7 +940,9 @@ describe("adaptation diagnostics and partial outcomes", () => {
     ]);
     expect(() => validateScanDiagnosticV2(result.diagnostics[0])).not.toThrow();
     expect(JSON.stringify(result.diagnostics)).not.toContain("C:\\secret");
-    expect(JSON.stringify(result.diagnostics)).not.toContain("secret source content");
+    expect(JSON.stringify(result.diagnostics)).not.toContain(
+      "secret source content"
+    );
     expect(JSON.stringify(result.diagnostics)).not.toContain("stack");
     expect(JSON.stringify(result.diagnostics)).not.toContain("fallback");
   });
@@ -767,10 +955,9 @@ describe("adaptation diagnostics and partial outcomes", () => {
       createLegacyFinding("bridge/CCTP_DOMAIN_26", "src/last.ts")
     ]);
 
-    expect(result.findings.map((finding) => finding.primaryLocation?.path)).toEqual([
-      "src/first.ts",
-      "src/last.ts"
-    ]);
+    expect(
+      result.findings.map((finding) => finding.primaryLocation?.path)
+    ).toEqual(["src/first.ts", "src/last.ts"]);
     expect(result.diagnostics.map(({ code }) => code)).toEqual([
       "FINDING_V2_LOCATION_MISSING",
       "FINDING_V2_LOCATION_UNREPRESENTABLE"
@@ -789,10 +976,9 @@ describe("adaptation diagnostics and partial outcomes", () => {
       createLegacyFinding("bridge/CCTP_DOMAIN_26", "src/last.ts")
     ]);
 
-    expect(result.findings.map((finding) => finding.primaryLocation?.path)).toEqual([
-      "src/first.ts",
-      "src/last.ts"
-    ]);
+    expect(
+      result.findings.map((finding) => finding.primaryLocation?.path)
+    ).toEqual(["src/first.ts", "src/last.ts"]);
     expect(result.diagnostics.map(({ code }) => code)).toEqual([
       "FINDING_V2_DUPLICATE_FINGERPRINT"
     ]);
@@ -840,7 +1026,7 @@ describe("adapter invariant failures", () => {
       name: "unsupported identity",
       occurrence: {
         selectionIndex: 0,
-        rule: { kind: "rule-id", id: "wallet/ARC_CHAIN_METADATA" },
+        rule: { kind: "rule-id", id: "wallet/NO_BLOB_TX_ON_ARC" },
         scheduling: "scheduled",
         execution: "completed",
         detectorFindings: []
@@ -886,6 +1072,54 @@ describe("adapter invariant failures", () => {
     ).toThrow(/files must be an array/);
   });
 
+  it("rejects an invalid legacy message through FindingV2 validation", () => {
+    const finding = createLegacyFinding(
+      "wallet/ARC_CHAIN_METADATA",
+      "src/wallet.ts"
+    );
+    expect(() =>
+      adaptManual("wallet/ARC_CHAIN_METADATA", [{ ...finding, message: "" }])
+    ).toThrow(/FindingV2 message/);
+  });
+
+  it("uses approved wallet canonical fields instead of legacy display metadata", () => {
+    const original = createLegacyFinding(
+      "wallet/ARC_CHAIN_METADATA",
+      "src/wallet.ts"
+    );
+    const result = adaptManual("wallet/ARC_CHAIN_METADATA", [
+      {
+        ...original,
+        severity: "info",
+        preset: "app-kit",
+        docs: "caller-doc-slug",
+        suggestedFix: "caller remediation"
+      }
+    ]);
+    const finding = result.findings[0];
+
+    expect(finding).toMatchObject({
+      classification: {
+        category: "wallet",
+        impact: "blocker",
+        rulePacks: ["core-compatibility", "wallet"]
+      },
+      confidence: { level: "medium", basis: "adapter" },
+      remediation: {
+        summary:
+          "Set the Arc chain object's id or chainId to Arc Testnet 5042002, using 0x4CF4B2 where EIP-3085 requires a hexadecimal string; use Arc-serving RPC metadata; and use https://testnet.arcscan.app for the Arc Testnet explorer. Managed and custom Arc RPC providers remain valid."
+      },
+      documentation: [
+        {
+          title: "How to: Add Arc to a Wallet",
+          url: "https://docs.arc.io/integrate/wallets"
+        }
+      ]
+    });
+    expect(JSON.stringify(finding)).not.toContain("caller-doc-slug");
+    expect(JSON.stringify(finding)).not.toContain("caller remediation");
+  });
+
   it.each([
     { status: "resolved", location: { path: "/absolute/secret.ts" } },
     { status: "rejected", reason: "unknown" },
@@ -907,8 +1141,9 @@ describe("adapter invariant failures", () => {
       createLegacyFinding("bridge/CCTP_DOMAIN_26", "src/bridge.ts")
     ]);
     const occurrenceSnapshot = JSON.stringify(occurrence);
-    const specificationSnapshot = JSON.stringify(specification, (_key, value) =>
-      typeof value === "function" ? "[function]" : value
+    const specificationSnapshot = JSON.stringify(
+      specification,
+      (_key, value) => (typeof value === "function" ? "[function]" : value)
     );
 
     adaptDetectorOccurrenceV2({
@@ -950,15 +1185,19 @@ async function executeRealDetector(
 }
 
 function asAdaptableOccurrence(
-  occurrence: Awaited<ReturnType<typeof executeRulesStructured>>["occurrences"][number]
+  occurrence: Awaited<
+    ReturnType<typeof executeRulesStructured>
+  >["occurrences"][number]
 ): AdaptableCompletedRuleOccurrenceV2 {
-  const ruleId = occurrence.rule.kind === "rule-id" ? occurrence.rule.id : undefined;
+  const ruleId =
+    occurrence.rule.kind === "rule-id" ? occurrence.rule.id : undefined;
   if (
     occurrence.execution !== "completed" ||
     occurrence.scheduling !== "scheduled" ||
     (ruleId !== "bridge/CCTP_DOMAIN_26" &&
       ruleId !== "bridge/NO_WRAPPED_USDC_ON_ARC" &&
-      ruleId !== "bridge/RELAYER_USES_USDC_FOR_GAS")
+      ruleId !== "bridge/RELAYER_USES_USDC_FOR_GAS" &&
+      ruleId !== "wallet/ARC_CHAIN_METADATA")
   ) {
     throw new TypeError("Expected a completed selected-rule occurrence");
   }

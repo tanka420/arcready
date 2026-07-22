@@ -11,12 +11,14 @@ import {
   noWrappedUsdcOnArcRule,
   relayerUsesUsdcForGasRule
 } from "../../rules/bridge/index.js";
+import { arcChainMetadataRule } from "../../rules/wallet/index.js";
 import type { Rule } from "../rules/index.js";
 
 export type SupportedFindingV2AdapterRuleId =
   | "bridge/CCTP_DOMAIN_26"
   | "bridge/NO_WRAPPED_USDC_ON_ARC"
-  | "bridge/RELAYER_USES_USDC_FOR_GAS";
+  | "bridge/RELAYER_USES_USDC_FOR_GAS"
+  | "wallet/ARC_CHAIN_METADATA";
 
 export interface PatternFindingV2AdapterSpecification {
   readonly ruleId: SupportedFindingV2AdapterRuleId;
@@ -103,7 +105,9 @@ export function validatePatternFindingV2AdapterSpecification(
     throw new TypeError("FindingV2 adapter taxonomy is unsupported");
   }
   if (value.definition.metadata.defaultConfidence !== "medium") {
-    throw new TypeError("Selected FindingV2 adapter rules require medium confidence");
+    throw new TypeError(
+      "Selected FindingV2 adapter rules require medium confidence"
+    );
   }
   if (value.definition.metadata.documentation.length === 0) {
     throw new TypeError("FindingV2 adapter documentation is required");
@@ -113,10 +117,14 @@ export function validatePatternFindingV2AdapterSpecification(
     try {
       url = new URL(reference.url);
     } catch {
-      throw new TypeError("FindingV2 adapter documentation URL must be absolute");
+      throw new TypeError(
+        "FindingV2 adapter documentation URL must be absolute"
+      );
     }
     if (url.protocol !== "http:" && url.protocol !== "https:") {
-      throw new TypeError("FindingV2 adapter documentation URL must use HTTP or HTTPS");
+      throw new TypeError(
+        "FindingV2 adapter documentation URL must use HTTP or HTTPS"
+      );
     }
   }
 
@@ -232,6 +240,17 @@ function getAdapterSemantics(
         remediationSummary:
           "Check relayer funding and gas-token config; Arc relayer gas should be modeled as USDC rather than ETH."
       };
+    case "wallet/ARC_CHAIN_METADATA":
+      return {
+        rule: arcChainMetadataRule,
+        supportedExtensions: [".js", ".ts"],
+        patternId: "wallet.arc-chain-metadata.incompatible",
+        detectorDiscriminator: "arc-chain-metadata-incompatible",
+        confidenceReason:
+          "Bounded object-local scanning finds a missing or incorrect direct literal Arc Testnet chain ID, or an explicit Ethereum RPC or Etherscan URL, in an Arc-owned plain JavaScript or TypeScript chain object. It does not resolve imports, computed metadata, array-wrapped chain objects, deep wrappers, ambiguous fields, malformed syntax, or runtime endpoint behavior.",
+        remediationSummary:
+          "Set the Arc chain object's id or chainId to Arc Testnet 5042002, using 0x4CF4B2 where EIP-3085 requires a hexadecimal string; use Arc-serving RPC metadata; and use https://testnet.arcscan.app for the Arc Testnet explorer. Managed and custom Arc RPC providers remain valid."
+      };
     default: {
       const unsupportedRuleId: never = ruleId;
       void unsupportedRuleId;
@@ -240,7 +259,9 @@ function getAdapterSemantics(
   }
 }
 
-function findCatalogMetadata(ruleId: SupportedFindingV2AdapterRuleId): RuleMetadata {
+function findCatalogMetadata(
+  ruleId: SupportedFindingV2AdapterRuleId
+): RuleMetadata {
   const metadata = ruleTaxonomyCatalog.find((entry) => entry.id === ruleId);
   if (metadata === undefined) {
     throw new TypeError(`Missing approved catalog metadata for ${ruleId}`);
@@ -254,7 +275,8 @@ function isSupportedRuleId(
   return (
     value === "bridge/CCTP_DOMAIN_26" ||
     value === "bridge/NO_WRAPPED_USDC_ON_ARC" ||
-    value === "bridge/RELAYER_USES_USDC_FOR_GAS"
+    value === "bridge/RELAYER_USES_USDC_FOR_GAS" ||
+    value === "wallet/ARC_CHAIN_METADATA"
   );
 }
 

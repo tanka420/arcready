@@ -36,7 +36,8 @@ import { buildScanResultV2 } from "../scan-result-v2/index.js";
 const CANONICAL_RULE_IDS = [
   "bridge/CCTP_DOMAIN_26",
   "bridge/NO_WRAPPED_USDC_ON_ARC",
-  "bridge/RELAYER_USES_USDC_FOR_GAS"
+  "bridge/RELAYER_USES_USDC_FOR_GAS",
+  "wallet/ARC_CHAIN_METADATA"
 ] as const;
 
 export interface RunInternalScanV2Options {
@@ -96,7 +97,10 @@ export async function runInternalScanV2(
   const adapterDiagnostics: ScanDiagnosticV2[] = [];
   let globalOrder = 0;
 
-  for (const [selectionIndex, occurrence] of structuredRun.execution.occurrences.entries()) {
+  for (const [
+    selectionIndex,
+    occurrence
+  ] of structuredRun.execution.occurrences.entries()) {
     if (occurrence.scheduling === "disabled") {
       continue;
     }
@@ -167,7 +171,9 @@ export function assembleInternalScanV2Diagnostics(
     !Array.isArray(buckets.adaptation) ||
     !Array.isArray(buckets.collisions)
   ) {
-    throw new TypeError("Internal ScanResultV2 diagnostic buckets must be arrays");
+    throw new TypeError(
+      "Internal ScanResultV2 diagnostic buckets must be arrays"
+    );
   }
 
   return [
@@ -301,8 +307,13 @@ function validateStructuredRunAlignment(
     }
 
     if (occurrence.scheduling === "disabled") {
-      if (outcome.scheduling !== "disabled" || outcome.execution !== "not-run") {
-        throw new TypeError("Canonical disabled rule lifecycle alignment failed");
+      if (
+        outcome.scheduling !== "disabled" ||
+        outcome.execution !== "not-run"
+      ) {
+        throw new TypeError(
+          "Canonical disabled rule lifecycle alignment failed"
+        );
       }
       continue;
     }
@@ -311,10 +322,14 @@ function validateStructuredRunAlignment(
       outcome.scheduling !== "scheduled" ||
       outcome.execution !== occurrence.execution ||
       (occurrence.execution === "completed" &&
-        outcome.normalizedFindingCount !== occurrence.detectorFindings.length) ||
-      (occurrence.execution === "failed" && outcome.normalizedFindingCount !== 0)
+        outcome.normalizedFindingCount !==
+          occurrence.detectorFindings.length) ||
+      (occurrence.execution === "failed" &&
+        outcome.normalizedFindingCount !== 0)
     ) {
-      throw new TypeError("Canonical scheduled rule lifecycle alignment failed");
+      throw new TypeError(
+        "Canonical scheduled rule lifecycle alignment failed"
+      );
     }
   }
 }
@@ -354,7 +369,9 @@ function createCollisionDiagnostic(
   return diagnostic;
 }
 
-function validateCandidate(value: unknown): asserts value is InternalCanonicalFindingCandidateV2 {
+function validateCandidate(
+  value: unknown
+): asserts value is InternalCanonicalFindingCandidateV2 {
   assertPlainRecord(value, "Canonical finding candidate");
   assertOnlyKeys(
     value,
@@ -362,7 +379,10 @@ function validateCandidate(value: unknown): asserts value is InternalCanonicalFi
     "Canonical finding candidate"
   );
   validateFindingV2(value.finding);
-  assertNonNegativeSafeInteger(value.selectionIndex, "Canonical selection index");
+  assertNonNegativeSafeInteger(
+    value.selectionIndex,
+    "Canonical selection index"
+  );
   assertNonNegativeSafeInteger(
     value.adapterFindingIndex,
     "Canonical adapter finding index"
@@ -379,8 +399,13 @@ function validateInternalOptions(
     ["projectRoot", "config"],
     "Internal ScanResultV2 options"
   );
-  if (typeof value.projectRoot !== "string" || value.projectRoot.trim().length === 0) {
-    throw new TypeError("Internal ScanResultV2 projectRoot must be a non-empty string");
+  if (
+    typeof value.projectRoot !== "string" ||
+    value.projectRoot.trim().length === 0
+  ) {
+    throw new TypeError(
+      "Internal ScanResultV2 projectRoot must be a non-empty string"
+    );
   }
   if (!("config" in value)) {
     throw new TypeError("Internal ScanResultV2 config is required");

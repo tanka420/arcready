@@ -36,6 +36,9 @@ import {
   runInternalScanV2,
   type InternalCanonicalFindingCandidateV2
 } from "../core/scan-v2/index.js";
+import { appKitRules } from "../rules/app-kit/index.js";
+import { bridgeRules } from "../rules/bridge/index.js";
+import { walletRules } from "../rules/wallet/index.js";
 import { DEFAULT_CONFIG, runScan } from "../src/index.js";
 
 const repoRoot = join(import.meta.dirname, "..", "..", "..");
@@ -43,12 +46,11 @@ const temporaryRoots: string[] = [];
 const cctpSource = "Arc CCTP bridge\nconst ARC_CCTP_DOMAIN = 7;\n";
 const wrappedSource =
   'export const route = { chain: "Arc Testnet", bridge: true, token: "USDC.e" };\n';
-const relayerBadSource =
-  'const arcRelayer = { relayerGasToken: "ETH" };\n';
-const relayerSafeSource =
-  'const arcRelayer = { relayerGasToken: "USDC" };\n';
-const safeSource =
-  `Arc CCTP bridge\nconst ARC_CCTP_DOMAIN = 26;\nconst asset = 'USDC';\n${relayerSafeSource}`;
+const relayerBadSource = 'const arcRelayer = { relayerGasToken: "ETH" };\n';
+const relayerSafeSource = 'const arcRelayer = { relayerGasToken: "USDC" };\n';
+const walletBadSource = "const arcTestnet = { id: 1, name: 'Arc Testnet' };\n";
+const safeSource = `Arc CCTP bridge\nconst ARC_CCTP_DOMAIN = 26;\nconst asset = 'USDC';\n${relayerSafeSource}`;
+const allBadSource = `${cctpSource}${wrappedSource}${relayerBadSource}${walletBadSource}`;
 
 afterEach(() => {
   for (const root of temporaryRoots.splice(0)) {
@@ -63,7 +65,9 @@ describe("structured and instrumented rule execution seam", () => {
     const rule = createRule("bridge/test", async (context) => {
       executions += 1;
       await context.readFile(join(projectRoot, "src", "input.ts"));
-      return [legacyFinding("bridge/test", join(projectRoot, "src", "input.ts"))];
+      return [
+        legacyFinding("bridge/test", join(projectRoot, "src", "input.ts"))
+      ];
     });
 
     const result = await runRulesStructuredInstrumented(
@@ -101,7 +105,9 @@ describe("structured and instrumented rule execution seam", () => {
       createContext(projectRoot, [file])
     );
 
-    expect(legacy.findings).toEqual(projectLegacyFindings(structured.execution));
+    expect(legacy.findings).toEqual(
+      projectLegacyFindings(structured.execution)
+    );
     expect(legacy.instrumentation).toEqual(structured.instrumentation);
   });
 
@@ -133,9 +139,68 @@ describe("structured and instrumented rule execution seam", () => {
     );
     expect(result.execution.occurrences[0]?.execution).toBe("failed");
   });
+
+  it("keeps a failed wallet occurrence out of the completed adapter boundary", async () => {
+    const projectRoot = createProject({});
+    const result = await runRulesStructuredInstrumented(
+      [
+        createRule("wallet/ARC_CHAIN_METADATA", () => {
+          throw new Error("private wallet failure");
+        })
+      ],
+      createContext(projectRoot, [])
+    );
+    const occurrence = result.execution.occurrences[0];
+
+    expect(occurrence).toMatchObject({
+      rule: { kind: "rule-id", id: "wallet/ARC_CHAIN_METADATA" },
+      scheduling: "scheduled",
+      execution: "failed"
+    });
+    expect(result.instrumentation.rules[0]).toMatchObject({
+      rule: { kind: "rule-id", id: "wallet/ARC_CHAIN_METADATA" },
+      execution: "failed",
+      normalizedFindingCount: 0
+    });
+    expect(() =>
+      adaptDetectorOccurrenceV2({
+        occurrence,
+        specification: getFindingV2AdapterSpecification(
+          "wallet/ARC_CHAIN_METADATA"
+        ),
+        resolveLocation: createRepositoryLocationResolver(projectRoot)
+      } as Parameters<typeof adaptDetectorOccurrenceV2>[0])
+    ).toThrow(/fallbackFinding|completed scheduled occurrence/);
+  });
 });
 
 describe("private ScanResultV2 runtime", () => {
+  it("locks the four-rule canonical tuple and known inventory boundary", () => {
+    const source = readFileSync(
+      join(repoRoot, "packages", "arcready", "core", "scan-v2", "index.ts"),
+      "utf8"
+    );
+    const tuple = /const CANONICAL_RULE_IDS = \[([\s\S]*?)\] as const;/.exec(
+      source
+    );
+    if (tuple === null)
+      throw new Error("Expected the private canonical rule tuple");
+    const ruleIds = [...tuple[1].matchAll(/"([^"]+)"/g)].map(
+      (match) => match[1]
+    );
+    const knownRules = [...walletRules, ...bridgeRules, ...appKitRules];
+
+    expect(ruleIds).toEqual([
+      "bridge/CCTP_DOMAIN_26",
+      "bridge/NO_WRAPPED_USDC_ON_ARC",
+      "bridge/RELAYER_USES_USDC_FOR_GAS",
+      "wallet/ARC_CHAIN_METADATA"
+    ]);
+    expect(knownRules).toHaveLength(18);
+    expect(new Set(knownRules.map(({ id }) => id)).size).toBe(18);
+    expect(knownRules.length - ruleIds.length).toBe(14);
+  });
+
   it("returns one validated CCTP FindingV2", async () => {
     const result = await scanProject({ "src/cctp.ts": cctpSource });
 
@@ -219,9 +284,9 @@ describe("private ScanResultV2 runtime", () => {
       "bridge/NO_WRAPPED_USDC_ON_ARC"
     ]);
     expect(result.coverage.ruleExecution.counts).toMatchObject({
-      selectedOccurrences: 3,
-      scheduledOccurrences: 3,
-      completedOccurrences: 3,
+      selectedOccurrences: 4,
+      scheduledOccurrences: 4,
+      completedOccurrences: 4,
       failedOccurrences: 0,
       normalizedDetectorFindings: 1
     });
@@ -234,7 +299,29 @@ describe("private ScanResultV2 runtime", () => {
     expect(result.findings.map(({ ruleId }) => ruleId)).toEqual([
       "bridge/RELAYER_USES_USDC_FOR_GAS"
     ]);
-    expect(result.findings[0]?.primaryLocation).toEqual({ path: "src/relayer.ts" });
+    expect(result.findings[0]?.primaryLocation).toEqual({
+      path: "src/relayer.ts"
+    });
+    validateCompleteResult(result);
+  });
+
+  it("returns one validated wallet FindingV2 for wallet-only input", async () => {
+    const result = await scanProject({ "src/wallet.ts": walletBadSource });
+
+    expect(result.findings.map(({ ruleId }) => ruleId)).toEqual([
+      "wallet/ARC_CHAIN_METADATA"
+    ]);
+    expect(result.findings[0]?.primaryLocation).toEqual({
+      path: "src/wallet.ts"
+    });
+    expect(result.coverage.ruleExecution.counts).toMatchObject({
+      selectedOccurrences: 4,
+      scheduledOccurrences: 4,
+      completedOccurrences: 4,
+      completedWithFindingsOccurrences: 1,
+      completedWithNoFindingsOccurrences: 3,
+      normalizedDetectorFindings: 1
+    });
     validateCompleteResult(result);
   });
 
@@ -259,7 +346,37 @@ describe("private ScanResultV2 runtime", () => {
     validateCompleteResult(result);
   });
 
-  it("adapts all three supported rules from one file", async () => {
+  it("adapts all four supported rules from one file", async () => {
+    const result = await scanProject({ "src/integration.ts": allBadSource });
+
+    expect(new Set(result.findings.map(({ ruleId }) => ruleId))).toEqual(
+      new Set([
+        "bridge/CCTP_DOMAIN_26",
+        "bridge/NO_WRAPPED_USDC_ON_ARC",
+        "bridge/RELAYER_USES_USDC_FOR_GAS",
+        "wallet/ARC_CHAIN_METADATA"
+      ])
+    );
+    expect(
+      result.coverage.ruleExecution.counts.normalizedDetectorFindings
+    ).toBe(4);
+  });
+
+  it("adapts all four supported rules from separate files", async () => {
+    const result = await scanProject({
+      "src/z-cctp.ts": cctpSource,
+      "src/a-route.ts": wrappedSource,
+      "src/m-relayer.ts": relayerBadSource,
+      "src/wallet.ts": walletBadSource
+    });
+
+    expect(result.findings).toHaveLength(4);
+    expect(result.findings.map(exactFingerprint)).toEqual(
+      [...result.findings.map(exactFingerprint)].sort(compareCodeUnits)
+    );
+  });
+
+  it("keeps bridge-only findings separate from the wallet rule", async () => {
     const result = await scanProject({
       "src/bridge.ts": `${cctpSource}${wrappedSource}${relayerBadSource}`
     });
@@ -271,22 +388,17 @@ describe("private ScanResultV2 runtime", () => {
         "bridge/RELAYER_USES_USDC_FOR_GAS"
       ])
     );
-    expect(result.coverage.ruleExecution.counts.normalizedDetectorFindings).toBe(
-      3
-    );
-  });
-
-  it("adapts all three supported rules from separate files", async () => {
-    const result = await scanProject({
-      "src/z-cctp.ts": cctpSource,
-      "src/a-route.ts": wrappedSource,
-      "src/m-relayer.ts": relayerBadSource
+    expect(
+      result.findings.some(
+        ({ ruleId }) => ruleId === "wallet/ARC_CHAIN_METADATA"
+      )
+    ).toBe(false);
+    expect(result.coverage.ruleExecution.counts).toMatchObject({
+      selectedOccurrences: 4,
+      completedWithFindingsOccurrences: 3,
+      completedWithNoFindingsOccurrences: 1,
+      normalizedDetectorFindings: 3
     });
-
-    expect(result.findings).toHaveLength(3);
-    expect(result.findings.map(exactFingerprint)).toEqual(
-      [...result.findings.map(exactFingerprint)].sort(compareCodeUnits)
-    );
   });
 
   it("returns zero findings for correct relayer USDC without claiming analysis", async () => {
@@ -299,10 +411,10 @@ describe("private ScanResultV2 runtime", () => {
       reason: "analysis-acknowledgements-unavailable"
     });
     expect(result.coverage.ruleExecution.counts).toMatchObject({
-      selectedOccurrences: 3,
-      scheduledOccurrences: 3,
-      completedOccurrences: 3,
-      completedWithNoFindingsOccurrences: 3
+      selectedOccurrences: 4,
+      scheduledOccurrences: 4,
+      completedOccurrences: 4,
+      completedWithNoFindingsOccurrences: 4
     });
   });
 
@@ -318,12 +430,12 @@ describe("private ScanResultV2 runtime", () => {
       )
     ).toBe(false);
     expect(result.coverage.ruleExecution.counts).toMatchObject({
-      selectedOccurrences: 3,
+      selectedOccurrences: 4,
       disabledOccurrences: 0,
-      scheduledOccurrences: 3,
-      completedOccurrences: 3,
+      scheduledOccurrences: 4,
+      completedOccurrences: 4,
       failedOccurrences: 0,
-      completedWithNoFindingsOccurrences: 3,
+      completedWithNoFindingsOccurrences: 4,
       normalizedDetectorFindings: 0
     });
     validateCompleteResult(result);
@@ -347,9 +459,9 @@ describe("private ScanResultV2 runtime", () => {
       )
     ).toBe(false);
     expect(result.coverage.ruleExecution.counts).toMatchObject({
-      selectedOccurrences: 3,
-      scheduledOccurrences: 3,
-      completedOccurrences: 3,
+      selectedOccurrences: 4,
+      scheduledOccurrences: 4,
+      completedOccurrences: 4,
       failedOccurrences: 0,
       normalizedDetectorFindings: 0
     });
@@ -363,17 +475,15 @@ describe("private ScanResultV2 runtime", () => {
     });
 
     expect(
-      result.findings.some(
-        ({ ruleId }) => ruleId === "bridge/CCTP_DOMAIN_26"
-      )
+      result.findings.some(({ ruleId }) => ruleId === "bridge/CCTP_DOMAIN_26")
     ).toBe(false);
     expect(result.coverage.ruleExecution.counts).toMatchObject({
-      selectedOccurrences: 3,
+      selectedOccurrences: 4,
       disabledOccurrences: 0,
-      scheduledOccurrences: 3,
-      completedOccurrences: 3,
+      scheduledOccurrences: 4,
+      completedOccurrences: 4,
       failedOccurrences: 0,
-      completedWithNoFindingsOccurrences: 3
+      completedWithNoFindingsOccurrences: 4
     });
     expect(
       result.coverage.ruleExecution.counts.normalizedDetectorFindings
@@ -406,8 +516,7 @@ describe("private ScanResultV2 runtime", () => {
   it("does not adapt CCTP examples from Markdown", async () => {
     const result = await scanProject(
       {
-        "docs/migration.md":
-          "# Arc CCTP migration\n\nconst ARC_DOMAIN = 7;\n"
+        "docs/migration.md": "# Arc CCTP migration\n\nconst ARC_DOMAIN = 7;\n"
       },
       { paths: ["docs"] }
     );
@@ -423,26 +532,28 @@ describe("private ScanResultV2 runtime", () => {
     });
 
     expect(result.coverage.ruleExecution.counts).toMatchObject({
-      selectedOccurrences: 3,
+      selectedOccurrences: 4,
       disabledOccurrences: 0,
-      scheduledOccurrences: 3,
-      completedOccurrences: 3,
+      scheduledOccurrences: 4,
+      completedOccurrences: 4,
       failedOccurrences: 0,
       completedWithFindingsOccurrences: 1,
-      completedWithNoFindingsOccurrences: 2,
+      completedWithNoFindingsOccurrences: 3,
       normalizedDetectorFindings: 1
     });
     expect(result.findings.map(({ ruleId }) => ruleId)).toEqual([
       "bridge/RELAYER_USES_USDC_FOR_GAS"
     ]);
-    expect(result.findings.some(({ ruleId }) => ruleId === "bridge/BRIDGE_CONFIRMATIONS_ONE")).toBe(
-      false
-    );
+    expect(
+      result.findings.some(
+        ({ ruleId }) => ruleId === "bridge/BRIDGE_CONFIRMATIONS_ONE"
+      )
+    ).toBe(false);
     expect(result.diagnostics).toEqual([]);
     validateScanResultV2(result);
   });
 
-  it("always selects three rules regardless of configured and detected presets", async () => {
+  it("always selects four rules regardless of configured and detected presets", async () => {
     const result = await scanProject(
       {
         "src/mixed.ts":
@@ -454,32 +565,38 @@ describe("private ScanResultV2 runtime", () => {
       }
     );
 
-    expect(result.coverage.ruleExecution.counts.selectedOccurrences).toBe(3);
-    expect(result.coverage.ruleExecution.counts.completedOccurrences).toBe(3);
+    expect(result.coverage.ruleExecution.counts.selectedOccurrences).toBe(4);
+    expect(result.coverage.ruleExecution.counts.completedOccurrences).toBe(4);
     expect(result.findings).toEqual([]);
   });
 
   it.each([
     "bridge/CCTP_DOMAIN_26",
     "bridge/NO_WRAPPED_USDC_ON_ARC",
-    "bridge/RELAYER_USES_USDC_FOR_GAS"
-  ] as const)("allows an off override to disable %s", async (disabledRuleId) => {
-    const result = await scanProject(
-      { "src/bridge.ts": `${cctpSource}${wrappedSource}${relayerBadSource}` },
-      { rules: { [disabledRuleId]: "off" } }
-    );
+    "bridge/RELAYER_USES_USDC_FOR_GAS",
+    "wallet/ARC_CHAIN_METADATA"
+  ] as const)(
+    "allows an off override to disable %s",
+    async (disabledRuleId) => {
+      const result = await scanProject(
+        { "src/integration.ts": allBadSource },
+        { rules: { [disabledRuleId]: "off" } }
+      );
 
-    expect(result.findings.map(({ ruleId }) => ruleId)).not.toContain(disabledRuleId);
-    expect(result.coverage.ruleExecution.counts).toMatchObject({
-      selectedOccurrences: 3,
-      disabledOccurrences: 1,
-      scheduledOccurrences: 2,
-      completedOccurrences: 2,
-      completedWithFindingsOccurrences: 2,
-      completedWithNoFindingsOccurrences: 0,
-      normalizedDetectorFindings: 2
-    });
-  });
+      expect(result.findings.map(({ ruleId }) => ruleId)).not.toContain(
+        disabledRuleId
+      );
+      expect(result.coverage.ruleExecution.counts).toMatchObject({
+        selectedOccurrences: 4,
+        disabledOccurrences: 1,
+        scheduledOccurrences: 3,
+        completedOccurrences: 3,
+        completedWithFindingsOccurrences: 3,
+        completedWithNoFindingsOccurrences: 0,
+        normalizedDetectorFindings: 3
+      });
+    }
+  );
 
   it("leaves the relayer scheduled when the existing two rules are off", async () => {
     const result = await scanProject(
@@ -496,29 +613,33 @@ describe("private ScanResultV2 runtime", () => {
       "bridge/RELAYER_USES_USDC_FOR_GAS"
     ]);
     expect(result.coverage.ruleExecution.counts).toMatchObject({
-      selectedOccurrences: 3,
+      selectedOccurrences: 4,
       disabledOccurrences: 2,
-      scheduledOccurrences: 1,
-      completedOccurrences: 1,
+      scheduledOccurrences: 2,
+      completedOccurrences: 2,
       completedWithFindingsOccurrences: 1,
+      completedWithNoFindingsOccurrences: 1,
       normalizedDetectorFindings: 1
     });
   });
 
-  it("allows off overrides to disable all three canonical rules", async () => {
+  it("allows off overrides to disable all four canonical rules", async () => {
     const result = await scanProject(
-      { "src/bridge.ts": `${cctpSource}${wrappedSource}${relayerBadSource}` },
-      { rules: {
-        "bridge/CCTP_DOMAIN_26": "off",
-        "bridge/NO_WRAPPED_USDC_ON_ARC": "off",
-        "bridge/RELAYER_USES_USDC_FOR_GAS": "off"
-      } }
+      { "src/integration.ts": allBadSource },
+      {
+        rules: {
+          "bridge/CCTP_DOMAIN_26": "off",
+          "bridge/NO_WRAPPED_USDC_ON_ARC": "off",
+          "bridge/RELAYER_USES_USDC_FOR_GAS": "off",
+          "wallet/ARC_CHAIN_METADATA": "off"
+        }
+      }
     );
 
     expect(result.findings).toEqual([]);
     expect(result.coverage.ruleExecution.counts).toMatchObject({
-      selectedOccurrences: 3,
-      disabledOccurrences: 3,
+      selectedOccurrences: 4,
+      disabledOccurrences: 4,
       scheduledOccurrences: 0,
       completedOccurrences: 0,
       normalizedDetectorFindings: 0
@@ -534,7 +655,9 @@ describe("private ScanResultV2 runtime", () => {
     });
     const overridden = await runInternalScanV2({
       projectRoot,
-      config: createConfig({ rules: { "bridge/RELAYER_USES_USDC_FOR_GAS": "info" } })
+      config: createConfig({
+        rules: { "bridge/RELAYER_USES_USDC_FOR_GAS": "info" }
+      })
     });
 
     expect(overridden.findings[0]?.classification).toEqual(
@@ -572,7 +695,7 @@ describe("private ScanResultV2 runtime", () => {
     });
     const serialized = JSON.stringify(result);
 
-    expect(result.coverage.evidence.ruleContextReads.attempts).toBe(3);
+    expect(result.coverage.evidence.ruleContextReads.attempts).toBe(4);
     expect(serialized).not.toContain(projectRoot);
     expect(serialized).not.toContain("instrumentation");
   });
@@ -585,9 +708,9 @@ describe("private ScanResultV2 runtime", () => {
     });
     const config = createConfig();
 
-    expect(
+    expect(await runInternalScanV2({ projectRoot, config })).toEqual(
       await runInternalScanV2({ projectRoot, config })
-    ).toEqual(await runInternalScanV2({ projectRoot, config }));
+    );
   });
 
   it("uses canonical file order independently of file creation order", async () => {
@@ -669,7 +792,7 @@ describe("private ScanResultV2 runtime", () => {
     const result = await runInternalScanV2({ projectRoot, config });
 
     expect(result.findings).toHaveLength(1);
-    expect(result.coverage.ruleExecution.counts.selectedOccurrences).toBe(3);
+    expect(result.coverage.ruleExecution.counts.selectedOccurrences).toBe(4);
     expect(JSON.stringify(result)).not.toContain("futureNormalizedField");
     expect(JSON.stringify(result)).not.toContain("future-reporter");
   });
@@ -716,9 +839,7 @@ describe("FindingV2 adaptation boundaries", () => {
       occurrence: completedOccurrence([
         legacyFinding("bridge/CCTP_DOMAIN_26", files)
       ]),
-      specification: getFindingV2AdapterSpecification(
-        "bridge/CCTP_DOMAIN_26"
-      ),
+      specification: getFindingV2AdapterSpecification("bridge/CCTP_DOMAIN_26"),
       resolveLocation: createRepositoryLocationResolver(projectRoot)
     });
 
@@ -737,9 +858,7 @@ describe("FindingV2 adaptation boundaries", () => {
           join(projectRoot, "src", "valid.ts")
         )
       ]),
-      specification: getFindingV2AdapterSpecification(
-        "bridge/CCTP_DOMAIN_26"
-      ),
+      specification: getFindingV2AdapterSpecification("bridge/CCTP_DOMAIN_26"),
       resolveLocation: createRepositoryLocationResolver(projectRoot)
     });
 
@@ -754,9 +873,7 @@ describe("FindingV2 adaptation boundaries", () => {
 
     expect(() =>
       adaptDetectorOccurrenceV2({
-        occurrence: completedOccurrence([
-          malformed as unknown as Finding
-        ]),
+        occurrence: completedOccurrence([malformed as unknown as Finding]),
         specification: getFindingV2AdapterSpecification(
           "bridge/CCTP_DOMAIN_26"
         ),
@@ -909,14 +1026,9 @@ describe("runtime boundaries and diagnostic ordering", () => {
     const adaptationResult = adaptDetectorOccurrenceV2({
       occurrence: completedOccurrence([
         legacyFinding("bridge/CCTP_DOMAIN_26", []),
-        legacyFinding("bridge/CCTP_DOMAIN_26", [
-          "src/one.ts",
-          "src/two.ts"
-        ])
+        legacyFinding("bridge/CCTP_DOMAIN_26", ["src/one.ts", "src/two.ts"])
       ]),
-      specification: getFindingV2AdapterSpecification(
-        "bridge/CCTP_DOMAIN_26"
-      ),
+      specification: getFindingV2AdapterSpecification("bridge/CCTP_DOMAIN_26"),
       resolveLocation: createRepositoryLocationResolver(projectRoot)
     });
     const finding = await oneCanonicalFinding();
@@ -1079,9 +1191,7 @@ function createProject(files: Record<string, string>): string {
   return projectRoot;
 }
 
-function createConfig(
-  overrides: Partial<ArcReadyConfig> = {}
-): ArcReadyConfig {
+function createConfig(overrides: Partial<ArcReadyConfig> = {}): ArcReadyConfig {
   return {
     presets: [...(overrides.presets ?? ["bridge"])],
     paths: [...(overrides.paths ?? ["src"])],
@@ -1106,10 +1216,7 @@ function createContext(projectRoot: string, files: string[]) {
   });
 }
 
-function createRule(
-  id: string,
-  run: Rule["run"]
-): Rule {
+function createRule(id: string, run: Rule["run"]): Rule {
   return {
     id,
     name: id,
@@ -1121,7 +1228,10 @@ function createRule(
   };
 }
 
-function legacyFinding(ruleId: string, fileOrFiles: string | string[]): Finding {
+function legacyFinding(
+  ruleId: string,
+  fileOrFiles: string | string[]
+): Finding {
   return {
     ruleId,
     severity: "critical",
@@ -1151,9 +1261,9 @@ function assertCctpRuntime(
   normalizedDetectorFindings: 0 | 1
 ): void {
   expect(result.coverage.ruleExecution.counts).toMatchObject({
-    selectedOccurrences: 3,
-    scheduledOccurrences: 3,
-    completedOccurrences: 3,
+    selectedOccurrences: 4,
+    scheduledOccurrences: 4,
+    completedOccurrences: 4,
     failedOccurrences: 0,
     normalizedDetectorFindings
   });
