@@ -191,7 +191,7 @@ ArcReady does not perform live Arc RPC checks, Circle API checks, on-chain trans
 
 - Preset: Bridge
 - Severity: Critical
-- What it detects: Arc relayer funding or gas-token configuration that appears to assume ETH is used for gas.
+- What it detects: Bounded, directly owned Arc relayer gas-token configuration that uses ETH for gas.
 - Why it matters: Relayer setup should model Arc gas as USDC to avoid funding and operations mistakes.
 - Example bad pattern:
 
@@ -203,7 +203,7 @@ ArcReady does not perform live Arc RPC checks, Circle API checks, on-chain trans
   ```
 
 - Suggested fix: Check relayer funding and gas-token config; Arc relayer gas should be modeled as USDC rather than ETH.
-- Static-analysis limitation: ArcReady checks config and setup text; it does not inspect relayer balances or execute relayer jobs.
+- Static-analysis limitation: ArcReady checks direct JavaScript and TypeScript object-literal configuration; it does not resolve imported or computed values, inspect relayer balances, or execute relayer jobs.
 
 ### ATTESTATION_404_NOT_FATAL
 

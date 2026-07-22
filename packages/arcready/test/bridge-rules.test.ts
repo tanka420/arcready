@@ -1328,50 +1328,221 @@ describe("bridge rules", () => {
     ).resolves.toEqual([]);
   });
 
-  it("RELAYER_USES_USDC_FOR_GAS flags ETH relayer funding", async () => {
-    const findings = await runBridgeRule(
-      relayerUsesUsdcForGasRule,
-      "Arc relayer setup: fund with ETH before running the relay script."
-    );
-
-    expect(findings[0]).toMatchObject({
-      ruleId: "bridge/RELAYER_USES_USDC_FOR_GAS",
-      severity: "critical",
-      docs: "arc-usdc-gas",
-      message: expect.stringContaining("ETH is used for gas"),
-      suggestedFix: expect.stringContaining("USDC")
-    });
-  });
-
-  it("RELAYER_USES_USDC_FOR_GAS flags ETH relayer gas token config", async () => {
-    const findings = await runBridgeRule(
-      relayerUsesUsdcForGasRule,
-      "export const arcRelayer = { chain: 'Arc Testnet', relayerGasToken: 'ETH' };"
-    );
-
-    expect(findings[0]).toMatchObject({
-      ruleId: "bridge/RELAYER_USES_USDC_FOR_GAS",
-      severity: "critical",
-      docs: "arc-usdc-gas",
-      message: expect.stringContaining("ETH is used for gas"),
-      suggestedFix: expect.stringContaining("gas-token")
-    });
-  });
-
-  it("RELAYER_USES_USDC_FOR_GAS ignores guidance against ETH funding", async () => {
+  it.each([
+    ["Arc owner", 'const arcRelayer = { relayerGasToken: "ETH" };'],
+    [
+      "direct chain",
+      'export const config = { chain: "Arc Testnet", relayerGasToken: "ETH" };'
+    ],
+    [
+      "chain ID and generic field",
+      'const relayer = { chainId: 5042002, gasToken: "ETH" };'
+    ],
+    ["Arc child", 'const config = { arc: { relayerGasToken: "ETH" } };'],
+    [
+      "relayer child",
+      'const config = { relayer: { chain: "Arc", gasToken: "ETH" } };'
+    ],
+    [
+      "one wrong independent declaration",
+      'const ethereumRelayer = { chain: "Ethereum", relayerGasToken: "ETH" };\nconst arcRelayer = { relayerGasToken: "ETH" };'
+    ],
+    [
+      "wrong candidate after correct siblings",
+      'const config = { ethereum: { relayerGasToken: "ETH" }, arc: { relayerGasToken: "USDC" }, backupArcRelayer: { relayerGasToken: "ETH" } };'
+    ],
+    [
+      "multiline object",
+      'const arc_relayer = {\n  enabled: true,\n  retries: 3,\n  relayerGasToken: "eth"\n};'
+    ],
+    [
+      "inert text around candidate",
+      '// const arcRelayer = { relayerGasToken: "ETH" };\nconst note = "{ gasToken: ETH }";\nconst ARC_RELAYER = { name: "primary", relayerGasToken: "ETH" };'
+    ],
+    [
+      "trailing guidance",
+      'const arcRelayer = { relayerGasToken: "ETH" // do not use this\n};'
+    ],
+    [
+      "two wrong candidates",
+      'const arcRelayer = { relayerGasToken: "ETH" };\nconst arcRelay = { relayerGasToken: "ETH" };'
+    ]
+  ])("RELAYER_USES_USDC_FOR_GAS flags %s", async (_name, source) => {
     await expect(
-      runBridgeRule(
-        relayerUsesUsdcForGasRule,
-        "const chain = 'Arc Testnet';\n// Relayer setup: do not fund with ETH; use USDC for gas."
-      )
+      runBridgeRule(relayerUsesUsdcForGasRule, source)
+    ).resolves.toHaveLength(1);
+  });
+
+  it("RELAYER_USES_USDC_FOR_GAS preserves finding metadata", async () => {
+    const findings = await runBridgeRule(
+      relayerUsesUsdcForGasRule,
+      'const arcRelayer = { relayerGasToken: "ETH" };'
+    );
+    expect(findings).toEqual([
+      {
+        ruleId: "bridge/RELAYER_USES_USDC_FOR_GAS",
+        severity: "critical",
+        message: "Arc relayer funding appears to assume ETH is used for gas.",
+        files: ["src/fixture.ts"],
+        suggestedFix:
+          "Check relayer funding and gas-token config; Arc relayer gas should be modeled as USDC rather than ETH.",
+        docs: "arc-usdc-gas",
+        preset: "bridge"
+      }
+    ]);
+  });
+
+  it.each([
+    [
+      "correct explicit field",
+      'const arcRelayer = { relayerGasToken: "USDC" };'
+    ],
+    ["correct generic field", 'const arcRelayer = { gasToken: "USDC" };'],
+    [
+      "isolated chain siblings",
+      'const relayers = { ethereum: { relayerGasToken: "ETH" }, arc: { relayerGasToken: "USDC" } };'
+    ],
+    [
+      "source-chain ETH",
+      'const ethereumRelayer = { chain: "Ethereum", relayerGasToken: "ETH" };\nconst arcRoute = { chain: "Arc Testnet", token: "USDC" };'
+    ],
+    [
+      "wallet generic field",
+      'const arcWallet = { chain: "Arc", gasToken: "ETH" };'
+    ],
+    ["Arc child generic field", 'const config = { arc: { gasToken: "ETH" } };'],
+    ["feeToken alias", 'const arcRelayer = { feeToken: "ETH" };'],
+    ["nativeGasToken alias", 'const arcRelayer = { nativeGasToken: "ETH" };'],
+    [
+      "funding prose",
+      "Arc relayer setup: fund with ETH before running the relay."
+    ],
+    [
+      "guidance",
+      'const note = "Do not fund the Arc relayer with ETH; use USDC.";'
+    ],
+    [
+      "candidate string",
+      'const note = `const arcRelayer = { relayerGasToken: "ETH" };`;'
+    ],
+    ["line comment", '// const arcRelayer = { relayerGasToken: "ETH" };'],
+    ["block comment", '/* const arcRelayer = { relayerGasToken: "ETH" }; */'],
+    ["let declaration", 'let arcRelayer = { relayerGasToken: "ETH" };'],
+    ["var declaration", 'var arcRelayer = { relayerGasToken: "ETH" };'],
+    [
+      "duplicate explicit field",
+      'const arcRelayer = { relayerGasToken: "USDC", relayerGasToken: "ETH" };'
+    ],
+    [
+      "duplicate generic field",
+      'const arcRelayer = { gasToken: "USDC", gasToken: "ETH" };'
+    ],
+    [
+      "both token fields",
+      'const arcRelayer = { relayerGasToken: "ETH", gasToken: "ETH" };'
+    ],
+    [
+      "duplicate chain",
+      'const relayer = { chain: "Arc", chain: "Arc Testnet", gasToken: "ETH" };'
+    ],
+    [
+      "contradictory chain",
+      'const arcRelayer = { chain: "Ethereum", relayerGasToken: "ETH" };'
+    ],
+    [
+      "candidate spread",
+      'const arcRelayer = { ...base, relayerGasToken: "ETH" };'
+    ],
+    [
+      "envelope spread",
+      'const config = { ...base, arc: { relayerGasToken: "ETH" } };'
+    ],
+    [
+      "duplicate Arc child wrong then correct",
+      'const config = { arc: { relayerGasToken: "ETH" }, arc: { relayerGasToken: "USDC" } };'
+    ],
+    [
+      "duplicate Arc child correct then wrong",
+      'const config = { arc: { relayerGasToken: "USDC" }, arc: { relayerGasToken: "ETH" } };'
+    ],
+    [
+      "quoted owner override",
+      'const config = { arc: { relayerGasToken: "ETH" }, "arc": { relayerGasToken: "USDC" } };'
+    ],
+    [
+      "computed parent ownership",
+      'const config = { [owner]: { relayerGasToken: "USDC" }, arc: { relayerGasToken: "ETH" } };'
+    ],
+    ["computed key", 'const arcRelayer = { [relayerGasToken]: "ETH" };'],
+    ["quoted key", 'const arcRelayer = { "relayerGasToken": "ETH" };'],
+    ["relevant shorthand", "const arcRelayer = { relayerGasToken };"],
+    ["identifier value", "const arcRelayer = { relayerGasToken: ETH };"],
+    [
+      "imported value",
+      'import { ETH } from "./tokens";\nconst arcRelayer = { relayerGasToken: ETH };'
+    ],
+    ["template value", "const arcRelayer = { relayerGasToken: `ETH` };"],
+    ["call value", "const arcRelayer = { relayerGasToken: token() };"],
+    [
+      "function-call object",
+      'configure({ chain: "Arc", relayerGasToken: "ETH" });'
+    ],
+    [
+      "array object",
+      'const configs = [{ chain: "Arc", relayerGasToken: "ETH" }];'
+    ],
+    ["member assignment", 'arcRelayer.relayerGasToken = "ETH";'],
+    [
+      "deep object",
+      'const config = { routes: { arc: { relayerGasToken: "ETH" } } };'
+    ],
+    ["method", 'const arcRelayer = { relayerGasToken() { return "ETH"; } };'],
+    [
+      "getter",
+      'const arcRelayer = { get relayerGasToken() { return "ETH"; } };'
+    ],
+    ["malformed object", 'const arcRelayer = { relayerGasToken: "ETH";'],
+    ["Arc substring", 'const archiveRelayer = { relayerGasToken: "ETH" };'],
+    ["parcel substring", 'const parcelRelayer = { relayerGasToken: "ETH" };'],
+    [
+      "no file-level ownership",
+      'const note = "Arc Testnet";\nconst relayer = { relayerGasToken: "ETH" };'
+    ]
+  ])("RELAYER_USES_USDC_FOR_GAS ignores %s", async (_name, source) => {
+    await expect(
+      runBridgeRule(relayerUsesUsdcForGasRule, source)
     ).resolves.toEqual([]);
   });
 
-  it("RELAYER_USES_USDC_FOR_GAS allows USDC relayer funding", async () => {
+  it.each(["md", "mdx", "json", "yaml", "yml", "sol"])(
+    "RELAYER_USES_USDC_FOR_GAS skips .%s files",
+    async (extension) => {
+      await expect(
+        runBridgeRule(
+          relayerUsesUsdcForGasRule,
+          'const arcRelayer = { relayerGasToken: "ETH" };',
+          {},
+          `src/fixture.${extension}`
+        )
+      ).resolves.toEqual([]);
+    }
+  );
+
+  it("RELAYER_USES_USDC_FOR_GAS supports severity overrides", async () => {
+    const findings = await runBridgeRule(
+      relayerUsesUsdcForGasRule,
+      'const arcRelayer = { relayerGasToken: "ETH" };',
+      { "bridge/RELAYER_USES_USDC_FOR_GAS": "warning" }
+    );
+    expect(findings[0]?.severity).toBe("warning");
+  });
+
+  it("RELAYER_USES_USDC_FOR_GAS supports disabling", async () => {
     await expect(
       runBridgeRule(
         relayerUsesUsdcForGasRule,
-        "Arc relayer setup: fund the relayer wallet with USDC for gas."
+        'const arcRelayer = { relayerGasToken: "ETH" };',
+        { "bridge/RELAYER_USES_USDC_FOR_GAS": "off" }
       )
     ).resolves.toEqual([]);
   });
