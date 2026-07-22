@@ -37,7 +37,8 @@ try {
       process.execPath,
       [join(packageRoot, "dist", "bin.js"), "scan", "--json-v2"],
       cliFixtureRoot
-    )
+    ),
+    true
   );
 
   run(
@@ -97,10 +98,7 @@ try {
 
   JSON.parse(jsonOutput);
   validateJsonV2Execution(
-    runCapturedNpx(
-      ["--no-install", "arcready", "scan", "--json-v2"],
-      smokeRoot
-    )
+    runCapturedNpx(["--no-install", "arcready", "scan", "--json-v2"], smokeRoot)
   );
   console.log("Package smoke test passed.");
 } finally {
@@ -164,13 +162,14 @@ function createJsonV2Fixture(): string {
   mkdirSync(join(root, "src"), { recursive: true });
   writeFileSync(
     join(root, "src", "bridge.ts"),
-    "Arc CCTP bridge\nconst ARC_CCTP_DOMAIN = 7;\n"
+    "Arc CCTP bridge\nconst ARC_CCTP_DOMAIN = 7;\nconst arcTestnet = { id: 1, name: 'Arc Testnet' };\n"
   );
   return root;
 }
 
 function validateJsonV2Execution(
-  execution: ReturnType<typeof runCaptured>
+  execution: ReturnType<typeof runCaptured>,
+  expectWalletFinding = false
 ): void {
   if (execution.error) {
     throw execution.error;
@@ -181,7 +180,9 @@ function validateJsonV2Execution(
     );
   }
   if (execution.stderr !== "") {
-    throw new Error(`Expected empty json-v2 stderr. Received:\n${execution.stderr}`);
+    throw new Error(
+      `Expected empty json-v2 stderr. Received:\n${execution.stderr}`
+    );
   }
   if (!execution.stdout.endsWith("\n") || execution.stdout.endsWith("\n\n")) {
     throw new Error("Expected json-v2 stdout to end with exactly one LF");
@@ -204,11 +205,21 @@ function validateJsonV2Execution(
   if (result.contractVersion !== "2.0") {
     throw new Error("Expected json-v2 contractVersion 2.0");
   }
-  if (result.coverage?.ruleExecution?.counts?.selectedOccurrences !== 3) {
-    throw new Error("Expected json-v2 to select exactly three rule occurrences");
+  if (result.coverage?.ruleExecution?.counts?.selectedOccurrences !== 4) {
+    throw new Error("Expected json-v2 to select exactly four rule occurrences");
   }
-  if (!result.findings?.some(({ ruleId }) => ruleId === "bridge/CCTP_DOMAIN_26")) {
+  if (
+    !result.findings?.some(({ ruleId }) => ruleId === "bridge/CCTP_DOMAIN_26")
+  ) {
     throw new Error("Expected a CCTP_DOMAIN_26 FindingV2");
+  }
+  if (
+    expectWalletFinding &&
+    !result.findings.some(
+      ({ ruleId }) => ruleId === "wallet/ARC_CHAIN_METADATA"
+    )
+  ) {
+    throw new Error("Expected an ARC_CHAIN_METADATA FindingV2");
   }
 }
 

@@ -1,6 +1,6 @@
 # ArcReady Roadmap
 
-**Status:** Active roadmap after C04B  
+**Status:** Active roadmap after C05B
 **Last reviewed:** 2026-07-22
 
 ArcReady is an Arc-specific, repository-level static compatibility analyzer for projects being ported from Ethereum or other EVM environments to Arc.
@@ -39,15 +39,19 @@ The existing product foundation includes:
 - cross-preset regression coverage;
 - deterministic private FindingV2, CoverageV2, ScanResultV2, and `json-v2` contracts.
 
-## Completed Canonical Bridge Slice
+## Completed Four-Rule Canonical Slice
 
-C04 completed the first bounded canonical compatibility slice.
+C04 completed the first bounded bridge slice, and C05 added the first wallet rule.
 
-The private `json-v2` runtime now selects exactly these three rules in stable order:
+The private `json-v2` runtime now selects exactly these four rules in stable order:
 
 1. `bridge/CCTP_DOMAIN_26`
 2. `bridge/NO_WRAPPED_USDC_ON_ARC`
 3. `bridge/RELAYER_USES_USDC_FOR_GAS`
+4. `wallet/ARC_CHAIN_METADATA`
+
+Four of 18 known inventory rules execute, leaving 14 outside the canonical
+slice. Coverage exposes `selectedOccurrences: 4`; IDs remain a private tuple.
 
 For this slice, ArcReady now has:
 
@@ -106,7 +110,7 @@ packages/arcready/core/rules/catalog.ts
 
 ## Near-Term Engineering Roadmap
 
-### C05A — Harden `wallet/ARC_CHAIN_METADATA`
+### C05A — Complete: Harden `wallet/ARC_CHAIN_METADATA`
 
 Goal:
 
@@ -127,13 +131,18 @@ Non-goals:
 - no broad repository-wide keyword association;
 - no FindingV2 expansion in the same detector-hardening milestone.
 
-### C05B — Add canonical FindingV2 support for `wallet/ARC_CHAIN_METADATA`
+C05A completed with bounded plain `.js` and `.ts` object-local scanning,
+multichain isolation, four stable messages, and fail-closed syntax handling.
+
+### C05B — Complete: Add canonical FindingV2 support for `wallet/ARC_CHAIN_METADATA`
 
 Goal:
 
 Expand the canonical slice beyond bridge rules while preserving deterministic selection, private API boundaries, and observational `json-v2` behavior.
 
-C05B should begin only after C05A detector precision is approved.
+C05B completed with one private file-level adapter specification,
+message-independent fingerprints, and observational json-v2 coverage. It added
+no enforcement or public export.
 
 ### C06A — Harden `wallet/WALLET_NATIVE_USDC_DISPLAY`
 
@@ -232,10 +241,10 @@ The following remain out of scope for the near-term roadmap:
 
 ## Current Recommended Next Step
 
-The next engineering milestone is:
+The next recommended engineering milestone is:
 
 ```text
-C05A — Harden wallet/ARC_CHAIN_METADATA
+C06A — Harden wallet/WALLET_NATIVE_USDC_DISPLAY
 ```
 
-Before implementation, prepare a planning-only review that verifies the current detector, supported file shapes, Arc ownership model, false-positive boundaries, official-document claims, fixture gaps, complexity budget, and validation matrix.
+C06 has not started, and `wallet/WALLET_NATIVE_USDC_DISPLAY` is not canonical.

@@ -6,7 +6,7 @@
 
 ## Purpose
 
-This document records which rules should be built, researched, kept as advice, replaced, or retired after the C04 bridge canonical slice.
+This document records which rules should be built, researched, kept as advice, replaced, or retired after the C05 four-rule canonical slice.
 
 It is not a commitment to canonicalize every legacy rule.
 
@@ -59,12 +59,12 @@ Active legacy status does not imply canonical eligibility.
 | `bridge/CCTP_DOMAIN_26` | Complete | P0 | High for bounded supported configuration shapes | Canonical | Detects Arc CCTP domain values that are not `26`. |
 | `bridge/NO_WRAPPED_USDC_ON_ARC` | Complete | P0 | High for bounded Arc-owned route objects | Canonical | Detects Arc-side wrapped-USDC mappings while preserving source-chain separation. |
 | `bridge/RELAYER_USES_USDC_FOR_GAS` | Complete | P0 | High for bounded JS/TS relayer configuration | Canonical | Detects literal ETH relayer gas-token configuration owned by Arc. |
+| `wallet/ARC_CHAIN_METADATA` | Complete | P0 | High for bounded Arc-owned JS/TS chain objects | Canonical | Uses one file-level adapter specification for four metadata outcomes. |
 
 ## Wallet Rules
 
 | Rule | Decision | Priority | Impact | Static detectability | Required analyzer or prerequisite | Canonical eligibility | Revisit trigger |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `wallet/ARC_CHAIN_METADATA` | Build | P0 | Blocker | Medium | Bounded Arc chain-object ownership across common chain metadata shapes | After hardening | Start C05A; prove chain ID, RPC, explorer, and ownership without cross-chain borrowing. |
 | `wallet/WALLET_NATIVE_USDC_DISPLAY` | Build | P0 | Required change | Medium | Reuse or align with trusted Arc chain-object ownership from `ARC_CHAIN_METADATA` | After hardening | Begin after C05A/C05B so native-currency evidence is attached to the correct Arc chain object. |
 | `wallet/NO_BLOB_TX_ON_ARC` | Research | P1 | Blocker | Low to medium | Arc transaction-submission ownership, structured transaction config, or AST-backed call analysis | After analyzer | Revisit when Arc provider or chain ownership can be connected to the actual submitted transaction. |
 | `wallet/PREVRANDAO_NOT_SUPPORTED` | Replace | P1 | Required change | Low | Solidity AST and value-dependency analysis | Legacy rule never; replacement after analyzer | Replace with one shared `PREVRANDAO` dependency rule and remove unsupported blanket `mixHash` equivalence. |
@@ -106,8 +106,8 @@ The 18 legacy rules do not define the complete product roadmap. New rules may de
 ## Recommended Sequence
 
 ```text
-C05A  Harden wallet/ARC_CHAIN_METADATA
-C05B  Add canonical FindingV2 support for ARC_CHAIN_METADATA
+C05A  Complete: harden wallet/ARC_CHAIN_METADATA
+C05B  Complete: add canonical FindingV2 support for ARC_CHAIN_METADATA
 
 C06A  Harden wallet/WALLET_NATIVE_USDC_DISPLAY
 C06B  Research and implement the native-versus-ERC20 USDC amount model
@@ -119,6 +119,11 @@ C10   Add versioned App Kit chain and capability analysis
 ```
 
 Advice-only rules should not interrupt this core sequence unless real user evidence demonstrates higher value.
+
+The private runtime now executes four of 18 known inventory rules and leaves 14
+outside the canonical slice. The next recommended milestone is C06A: harden
+`wallet/WALLET_NATIVE_USDC_DISPLAY`. C06 has not started, and that rule is not
+canonical.
 
 ## Governance Rules
 

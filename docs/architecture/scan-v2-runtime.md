@@ -1,8 +1,8 @@
 # Internal ScanResultV2 runtime
 
-PR 4C2B connects the existing private discovery, execution, FindingV2,
-CoverageV2, and ScanResultV2 foundations for the first time. It is a fixed
-vertical slice. It does not replace or modify the public legacy runtime.
+The private runtime connects discovery, execution, FindingV2, CoverageV2, and
+ScanResultV2 as a fixed observational slice. It does not replace the public
+legacy runtime.
 
 ## Private boundary
 
@@ -38,12 +38,13 @@ CoverageV2 construction.
 
 ## Fixed canonical rule slice
 
-The first canonical slice contains exactly these rules in this order:
+The canonical slice contains exactly these rules in this order:
 
 ```text
 0  bridge/CCTP_DOMAIN_26
 1  bridge/NO_WRAPPED_USDC_ON_ARC
 2  bridge/RELAYER_USES_USDC_FOR_GAS
+3  wallet/ARC_CHAIN_METADATA
 ```
 
 Each executable rule comes from its approved FindingV2 adapter specification.
@@ -51,11 +52,14 @@ The runtime checks the tuple ID, specification ID, executable rule ID,
 occurrence identity, and instrumentation identity at their shared selection
 index.
 
-The other 15 known rules are not executed. Running all 18 while adapting only
-three would make canonical coverage ambiguous and silently omit unsupported
+The other 14 known inventory rules are not executed. Running all 18 while
+adapting only four would make canonical coverage ambiguous and omit unsupported
 results. Adding a rule to this runtime therefore requires an approved adapter
 and a later explicit slice change; there is no mutable adapter or rule
 registry.
+
+The IDs and order remain a private tuple. ScanResultV2 exposes the selected
+occurrence count, not a selected-rule-ID list.
 
 Configured presets and detected presets do not widen or narrow selection.
 Project detection still runs so `RuleContext.detectedPresets` contains the real
@@ -168,7 +172,7 @@ legacy projection. Its finding values and references, instrumentation,
 selection indexes, read attempts, diagnostics, and execution order remain
 unchanged. `runRules` and `executeRules` are unchanged.
 
-The runtime requires exactly three structured occurrences and three instrumentation
+The runtime requires exactly four structured occurrences and four instrumentation
 outcomes. Selection indexes, safe rule identities, scheduling, execution state,
 and normalized finding counts must align. A mismatch is an internal invariant
 failure.
@@ -246,7 +250,7 @@ the supplied diagnostic order.
 The runtime calls the existing `deriveCoverageV2` with discovery and rule
 instrumentation. It does not change CoverageV2.
 
-`selectedOccurrences` is exactly three. Disabled, scheduled, completed, failed,
+`selectedOccurrences` is exactly four. Disabled, scheduled, completed, failed,
 emitting, non-emitting, and normalized detector finding counts describe actual
 occurrences. Normalized detector finding count is an execution fact, not an
 adapted FindingV2 count. Adapter rejection does not retroactively change it.
@@ -309,10 +313,8 @@ configuration objects, discovery results, execution results, adapter results,
 and instrumentation are not exposed or mutated. The complete normalized config
 snapshot shares no nested array or record references with the caller.
 
-## Deferred integration
+## Observational integration
 
-PR 4C2B does not change `runScan`, the CLI, reporters, GitHub Actions, public
-exports, or package contents. It does not implement ReportV2 or `json-v2`.
-
-The next vertical slice is PR 4E1: an internal or explicitly opt-in ReportV2 or
-`json-v2` projection over this validated private runtime.
+The opt-in `json-v2` CLI projects this runtime without changing `runScan`,
+legacy reporters, scoring, presets, GitHub Actions, or public exports. Valid
+documents exit `0` even with findings; canonical enforcement remains deferred.
