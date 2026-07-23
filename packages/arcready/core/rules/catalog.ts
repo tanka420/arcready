@@ -578,14 +578,14 @@ export const ruleTaxonomyCatalog = [
     maturity: "prototype",
     recommendedDefaultEnabled: true,
     recommendedCiFailureEligible: false,
-    appliesTo: ["chain-configuration", "wallet-ui"],
+    appliesTo: ["chain-configuration"],
     documentation: [
       {
         url: "https://docs.arc.io/integrate/wallets",
         title: "How to: Add Arc to a Wallet",
         publisher: "Arc",
         claim:
-          "Wallet integrations should identify and display USDC as Arc's native currency and gas token.",
+          "Arc chain metadata identifies USDC, rather than ETH, as Arc's native currency and gas token.",
         support: "direct",
         verifiedAt: VERIFIED_AT,
         network: "Arc Testnet",
@@ -593,10 +593,11 @@ export const ruleTaxonomyCatalog = [
       }
     ],
     rationale:
-      "Displaying ETH as Arc's native currency misrepresents balances and fees, but the current detector cannot reliably associate metadata with the Arc chain object.",
+      "Explicit ETH, Ethereum, or non-USDC native-currency labels on a bounded Arc-owned chain object misrepresent Arc's native asset; object-local ownership prevents Ethereum siblings from lending evidence.",
     detectorLimitations: [
-      "ETH metadata may belong to another chain in a shared configuration.",
-      "Imported, computed, or framework-provided native currency metadata can evade detection."
+      "The bounded detector supports plain .js and .ts direct objects, direct defineChain objects, and one direct Arc-named wrapper child.",
+      "Imports, computed metadata, arrays, deep wrappers, spreads, duplicate fields, malformed syntax, and runtime values remain unresolved.",
+      "The detector intentionally does not interpret decimals because native accounting and display precision depend on the integration surface."
     ],
     deprecated: false
   }

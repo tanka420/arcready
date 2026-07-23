@@ -144,13 +144,17 @@ C05B completed with one private file-level adapter specification,
 message-independent fingerprints, and observational json-v2 coverage. It added
 no enforcement or public export.
 
-### C06A — Harden `wallet/WALLET_NATIVE_USDC_DISPLAY`
+### C06A — Complete: Harden `wallet/WALLET_NATIVE_USDC_DISPLAY`
 
 Goal:
 
 Attach native-currency evidence to a trusted Arc-owned wallet or chain configuration and detect ETH-native assumptions without flagging valid Ethereum sibling configuration or internal EVM terminology.
 
-This milestone should reuse or align with the ownership model proven in C05A rather than create an independent Arc-context heuristic.
+C06A completed with a private scanner shared with C05A, bounded plain `.js`
+and `.ts` object ownership, direct native-currency name/symbol analysis,
+multichain isolation, and fail-closed syntax handling. Generic `gasToken`,
+`feeToken`, UI prose, decimals, balances, and amount flows remain out of scope.
+The rule remains outside the four-rule canonical runtime.
 
 ### C06B — Research the native-versus-ERC-20 USDC amount model
 
@@ -244,7 +248,8 @@ The following remain out of scope for the near-term roadmap:
 The next recommended engineering milestone is:
 
 ```text
-C06A — Harden wallet/WALLET_NATIVE_USDC_DISPLAY
+C06B — Research and implement the native-versus-ERC20 USDC amount model
 ```
 
-C06 has not started, and `wallet/WALLET_NATIVE_USDC_DISPLAY` is not canonical.
+C06A is complete, `wallet/WALLET_NATIVE_USDC_DISPLAY` remains non-canonical,
+and the private canonical runtime remains exactly four rules.

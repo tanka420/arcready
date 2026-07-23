@@ -18,6 +18,8 @@ Phase 3D cleanup note: finding messages and suggestions were improved across wal
 
 Phase 3E-1 release-candidate note: Phase 3 hardening is complete as an npm `arcready@0.3.0` release candidate, with 18 active static rules, placeholder cleanup, rule precision hardening, cross-preset regression coverage, and improved finding messages.
 
+C06A hardening note: `wallet/WALLET_NATIVE_USDC_DISPLAY` now reuses a private bounded Arc chain-object scanner with `wallet/ARC_CHAIN_METADATA`. It inspects only direct literal `nativeCurrency.name` and `nativeCurrency.symbol` in supported `.js` and `.ts` objects, isolates multichain siblings, removes generic gas-token and fee-token matching, and defers decimal and amount semantics to C06B.
+
 ArcReady has a useful rule foundation for v0.2.0. The active rules are Arc-specific in intent, have direct unit coverage, and are backed by smoke fixtures for wallet, bridge, and App Kit presets. The main v0.3.0 risk is not missing product breadth; it is rule precision. Most current rules rely on regex and line-level text matching, which is acceptable for an early static CI gate but creates false positive risk in comments, docs, unrelated helper code, split configuration files, and variable-derived values.
 
 The recommended next implementation order is:
@@ -33,8 +35,8 @@ Phase 3 should remain static and CLI-first. SaaS, dashboards, authentication, da
 
 | Rule ID | Exported symbol | Preset | Severity | Current detection | Tested in | Fixture coverage | Scope | Rating | Disposition |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `wallet/ARC_CHAIN_METADATA` | `arcChainMetadataRule` | wallet | critical | Arc-related chain config with missing Arc chain ID `5042002`, or obvious non-Arc RPC/explorer metadata. | `wallet-rules.test.ts`, `fixtures.test.ts` indirectly through good wallet pass. | `wallet-good` avoids it; `wallet-bad` does not target it. | Arc-specific | Good | Keep, then harden precision around multi-file and framework chain configs. |
-| `wallet/WALLET_NATIVE_USDC_DISPLAY` | `walletNativeUsdcDisplayRule` | wallet | critical | Arc wallet config that presents ETH/Ethereum as the native currency, gas token, or fee token instead of USDC. | `wallet-rules.test.ts` | `wallet-good` avoids it; no bad fixture target. | Arc-specific | Needs improvement | Keep, but narrow the broad ETH/native-token matching. |
+| `wallet/ARC_CHAIN_METADATA` | `arcChainMetadataRule` | wallet | critical | Bounded Arc-owned `.js` and `.ts` chain objects with missing or incorrect literal Arc IDs or explicit Ethereum RPC/explorer endpoints. | `wallet-rules.test.ts`, `fixtures.test.ts` | `wallet-good` avoids it; `wallet-bad` targets wrong chain metadata. | Arc-specific | Good | Preserve the bounded ownership and fail-closed contract. |
+| `wallet/WALLET_NATIVE_USDC_DISPLAY` | `walletNativeUsdcDisplayRule` | wallet | critical | Bounded Arc-owned chain objects with direct ETH/Ethereum native names or non-USDC literal symbols. | `wallet-rules.test.ts`, `fixtures.test.ts` | `wallet-good` avoids it; `wallet-bad` targets explicit ETH metadata. | Arc-specific | Good | Keep object-local; defer decimals and amount flows to C06B. |
 | `wallet/NO_ETH_GAS_LABEL` | `noEthGasLabelRule` | wallet | critical | Arc-related content that labels gas or fees as ETH/gwei. | `wallet-rules.test.ts` | `wallet-good` avoids it; no bad fixture target. | Arc-specific | Needs improvement | Keep, but reduce line-level false positives in comments, copy, and non-UI strings. |
 | `wallet/ONE_CONFIRMATION_FINAL` | `oneConfirmationFinalRule` | wallet | critical | Arc wallet flow waiting for more than one confirmation or showing generic confirming copy. | `wallet-rules.test.ts`, `fixtures.test.ts` | `wallet-bad` targets it; `wallet-good` avoids it. | Arc-specific | Needs improvement | Keep, but split numeric confirmation checks from UI-copy heuristics. |
 | `wallet/PREVRANDAO_NOT_SUPPORTED` | `prevrandaoNotSupportedRule` | wallet | critical | Arc-related wallet content using `block.prevrandao`, `PREVRANDAO`, or `mixHash`. | `wallet-rules.test.ts` | No dedicated bad fixture target. | Arc-specific / EVM-specific | Needs improvement | Keep, but require stronger usage context and avoid documentation/comment hits. |
@@ -82,7 +84,6 @@ These rules map to clear Arc-specific integration guidance and belong in ArcRead
 
 ## Rules That Need Precision Improvements
 
-- `wallet/WALLET_NATIVE_USDC_DISPLAY`: Broad ETH/native-token matching may catch unrelated explanatory text near an Arc chain object.
 - `wallet/NO_ETH_GAS_LABEL`: Line-level matching can flag comments, docs, tests, or non-user-facing strings.
 - `wallet/ONE_CONFIRMATION_FINAL`: Numeric confirmation detection is useful, but generic "confirming" copy is too broad for a critical finding.
 - `wallet/PREVRANDAO_NOT_SUPPORTED`: Should distinguish executable usage from references in docs, comments, or defensive checks.
@@ -99,7 +100,6 @@ These rules map to clear Arc-specific integration guidance and belong in ArcRead
 ## Rules That Need Better Fixtures
 
 - `wallet/ARC_CHAIN_METADATA`: Add fixtures for a real `defineChain` or wagmi/viem-style Arc chain object and a bad chain object copied from another network.
-- `wallet/WALLET_NATIVE_USDC_DISPLAY`: Add a bad fixture where only native currency metadata is wrong, without also triggering gas-label rules.
 - `wallet/NO_ETH_GAS_LABEL`: Add UI-copy fixtures that separate real user-facing labels from comments and test data.
 - `wallet/PREVRANDAO_NOT_SUPPORTED`: Add an executable randomness usage fixture and a non-finding documentation/comment fixture.
 - `wallet/NO_BLOB_TX_ON_ARC`: Add a fixture with blob transaction config and a non-finding fixture mentioning EIP-4844 in documentation.
@@ -157,7 +157,7 @@ Do not remove any export in this audit task.
 The existing fixtures are effective package and CLI smoke fixtures:
 
 - `wallet-good` is a compact Arc chain object with chain ID `5042002`, USDC native currency, Arc RPC/explorer metadata, and one confirmation.
-- `wallet-bad` is a compact Arc wallet flow with `confirmations: 3`, intentionally triggering `wallet/ONE_CONFIRMATION_FINAL`.
+- `wallet-bad` is a compact Arc wallet flow with a wrong chain ID, explicit ETH native-currency metadata, and `confirmations: 3`, intentionally triggering exactly three wallet findings without triggering the gas-label rule.
 - `bridge-good` includes CCTP domain `26`, one confirmation, canonical USDC, and USDC relayer gas language.
 - `bridge-bad` uses `finalityBlocks: 6` and ETH relayer setup text, intentionally triggering bridge validation.
 - `app-kit-good` uses `Arc_Testnet`, `ARC_RPC_URL`, capability checking, `minAmount`, and `maxFee`.

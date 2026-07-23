@@ -12,16 +12,17 @@ describe("validation fixtures", () => {
     expect(report.status).toBe("pass");
   });
 
-  it("wallet-bad triggers chain metadata and finality validation", async () => {
+  it("wallet-bad triggers chain metadata, native currency, and finality validation", async () => {
     const { report } = await runScan(pathToFixture("wallet-bad"));
 
     expect(report.findings.map(({ ruleId }) => ruleId).sort()).toEqual([
       "wallet/ARC_CHAIN_METADATA",
-      "wallet/ONE_CONFIRMATION_FINAL"
+      "wallet/ONE_CONFIRMATION_FINAL",
+      "wallet/WALLET_NATIVE_USDC_DISPLAY"
     ]);
-    expect(report.findings).toHaveLength(2);
-    expect(report.summary).toEqual({ critical: 2, warning: 0, info: 0 });
-    expect(report.score).toBe(50);
+    expect(report.findings).toHaveLength(3);
+    expect(report.summary).toEqual({ critical: 3, warning: 0, info: 0 });
+    expect(report.score).toBe(25);
     expect(report.status).toBe("fail");
   });
 

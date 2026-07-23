@@ -1137,7 +1137,7 @@ describe("runtime boundaries and diagnostic ordering", () => {
       join(repoRoot, "examples", "demo-projects", "fixed-arc-integration")
     );
 
-    expect(broken.report.findings).toHaveLength(17);
+    expect(broken.report.findings).toHaveLength(16);
     expect(fixed.report.findings).toHaveLength(0);
   });
 
