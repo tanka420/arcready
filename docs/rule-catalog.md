@@ -8,26 +8,27 @@ ArcReady does not perform live Arc RPC checks, Circle API checks, on-chain trans
 
 ## Summary table
 
-| Preset | Rule ID | Severity | Purpose |
-| --- | --- | --- | --- |
-| Wallet | `wallet/ARC_CHAIN_METADATA` | Critical | Checks bounded Arc-owned chain objects for literal chain ID errors and explicit Ethereum RPC/explorer endpoints. |
-| Wallet | `wallet/WALLET_NATIVE_USDC_DISPLAY` | Critical | Checks bounded Arc-owned chain objects for explicit ETH/Ethereum names or non-USDC native-currency symbols. |
-| Wallet | `wallet/NO_ETH_GAS_LABEL` | Critical | Checks Arc wallet fee UI text for ETH or gwei gas labels. |
-| Wallet | `wallet/ONE_CONFIRMATION_FINAL` | Critical | Checks Arc wallet transaction flows for Ethereum-style multi-confirmation waits. |
-| Wallet | `wallet/PREVRANDAO_NOT_SUPPORTED` | Critical | Checks Arc wallet code for active PREVRANDAO or mixHash assumptions. |
-| Wallet | `wallet/NO_BLOB_TX_ON_ARC` | Critical | Checks Arc wallet flows for EIP-4844 blob transaction assumptions. |
-| Bridge | `bridge/BRIDGE_CONFIRMATIONS_ONE` | Critical | Checks Arc bridge and relayer flows for more than one required confirmation. |
-| Bridge | `bridge/CCTP_DOMAIN_26` | Critical | Checks Arc CCTP domain configuration for domain `26`. |
-| Bridge | `bridge/NO_WRAPPED_USDC_ON_ARC` | Critical | Checks Arc bridge routes for wrapped or bridged USDC as the Arc-side asset. |
-| Bridge | `bridge/RELAYER_USES_USDC_FOR_GAS` | Critical | Checks Arc relayer funding and gas-token config for ETH gas assumptions. |
-| Bridge | `bridge/ATTESTATION_404_NOT_FATAL` | Critical | Checks CCTP attestation polling for fatal handling of retryable `404` responses. |
-| Bridge | `bridge/NO_PREVRANDAO_RELAY_SELECTION` | Critical | Checks Arc relay selection for PREVRANDAO or mixHash randomness assumptions. |
-| App Kit | `app-kit/APPKIT_CHAIN_IDENTIFIER_VALID` | Critical | Checks App Kit Arc chain identifiers for unsupported spellings. |
-| App Kit | `app-kit/APPKIT_CAPABILITY_SUPPORTED` | Warning | Deprecated, default-excluded detector with an unsupported generic capability-guard contract. |
-| App Kit | `app-kit/APPKIT_CUSTOM_RPC_RECOMMENDED` | Warning | Checks App Kit Arc Testnet usage for implicit or shared RPC configuration. |
-| App Kit | `app-kit/UB_DELEGATE_REQUIRED` | Warning | Checks Unified Balance spend flows that may need delegate wallet handling. |
-| App Kit | `app-kit/UB_FEE_EXPLANATION_PRESENT` | Warning | Checks Unified Balance confirmation UI for missing fee or received-amount context. |
-| App Kit | `app-kit/APPKIT_BRIDGE_MIN_AMOUNT_NOTE` | Warning | Deprecated, default-excluded detector for an unsupported universal Arc bridge-minimum assumption. |
+| Preset  | Rule ID                                 | Severity | Purpose                                                                                                                    |
+| ------- | --------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Wallet  | `wallet/ARC_CHAIN_METADATA`             | Critical | Checks bounded Arc-owned chain objects for literal chain ID errors and explicit Ethereum RPC/explorer endpoints.           |
+| Wallet  | `wallet/WALLET_NATIVE_USDC_DISPLAY`     | Critical | Checks bounded Arc-owned chain objects for explicit ETH/Ethereum names or non-USDC native-currency symbols.                |
+| Wallet  | `wallet/ARC_USDC_AMOUNT_CONVERSION`     | Critical | Checks proven Arc native and exact Arc USDC ERC-20 balance reads for direct 18-versus-6 decimal interpretation mismatches. |
+| Wallet  | `wallet/NO_ETH_GAS_LABEL`               | Critical | Checks Arc wallet fee UI text for ETH or gwei gas labels.                                                                  |
+| Wallet  | `wallet/ONE_CONFIRMATION_FINAL`         | Critical | Checks Arc wallet transaction flows for Ethereum-style multi-confirmation waits.                                           |
+| Wallet  | `wallet/PREVRANDAO_NOT_SUPPORTED`       | Critical | Checks Arc wallet code for active PREVRANDAO or mixHash assumptions.                                                       |
+| Wallet  | `wallet/NO_BLOB_TX_ON_ARC`              | Critical | Checks Arc wallet flows for EIP-4844 blob transaction assumptions.                                                         |
+| Bridge  | `bridge/BRIDGE_CONFIRMATIONS_ONE`       | Critical | Checks Arc bridge and relayer flows for more than one required confirmation.                                               |
+| Bridge  | `bridge/CCTP_DOMAIN_26`                 | Critical | Checks Arc CCTP domain configuration for domain `26`.                                                                      |
+| Bridge  | `bridge/NO_WRAPPED_USDC_ON_ARC`         | Critical | Checks Arc bridge routes for wrapped or bridged USDC as the Arc-side asset.                                                |
+| Bridge  | `bridge/RELAYER_USES_USDC_FOR_GAS`      | Critical | Checks Arc relayer funding and gas-token config for ETH gas assumptions.                                                   |
+| Bridge  | `bridge/ATTESTATION_404_NOT_FATAL`      | Critical | Checks CCTP attestation polling for fatal handling of retryable `404` responses.                                           |
+| Bridge  | `bridge/NO_PREVRANDAO_RELAY_SELECTION`  | Critical | Checks Arc relay selection for PREVRANDAO or mixHash randomness assumptions.                                               |
+| App Kit | `app-kit/APPKIT_CHAIN_IDENTIFIER_VALID` | Critical | Checks App Kit Arc chain identifiers for unsupported spellings.                                                            |
+| App Kit | `app-kit/APPKIT_CAPABILITY_SUPPORTED`   | Warning  | Deprecated, default-excluded detector with an unsupported generic capability-guard contract.                               |
+| App Kit | `app-kit/APPKIT_CUSTOM_RPC_RECOMMENDED` | Warning  | Checks App Kit Arc Testnet usage for implicit or shared RPC configuration.                                                 |
+| App Kit | `app-kit/UB_DELEGATE_REQUIRED`          | Warning  | Checks Unified Balance spend flows that may need delegate wallet handling.                                                 |
+| App Kit | `app-kit/UB_FEE_EXPLANATION_PRESENT`    | Warning  | Checks Unified Balance confirmation UI for missing fee or received-amount context.                                         |
+| App Kit | `app-kit/APPKIT_BRIDGE_MIN_AMOUNT_NOTE` | Warning  | Deprecated, default-excluded detector for an unsupported universal Arc bridge-minimum assumption.                          |
 
 ## Wallet preset
 
@@ -68,6 +69,16 @@ ArcReady does not perform live Arc RPC checks, Circle API checks, on-chain trans
 
 - Suggested fix: Set `nativeCurrency.symbol` to `"USDC"`. If `nativeCurrency.name` is `"ETH"` or `"Ethereum"`, replace it with a USDC-facing name such as `"USDC"` or `"USD Coin"`. Handle Arc native accounting precision and USDC display precision according to the integration surface.
 - Static-analysis limitation: The detector supports direct `const` objects, direct `defineChain` objects, and one direct Arc-named wrapper child. It rejects imports, computed metadata, arrays, deep wrappers, spreads, duplicate fields, malformed syntax, and runtime values. It does not inspect generic `gasToken`, `feeToken`, or UI prose, and intentionally leaves decimal analysis to the integration-surface-specific C06B work.
+
+### ARC_USDC_AMOUNT_CONVERSION
+
+- Preset: Wallet
+- Severity: Critical
+- Runtime status: Active legacy rule; non-canonical and excluded from FindingV2 and `json-v2`.
+- What it detects: Proven high-level `viem` and `ethers` native `getBalance` values interpreted directly with six decimals, and exact Arc USDC ERC-20 `balanceOf` values interpreted directly with 18 decimals.
+- Why it matters: Arc native USDC uses 18-decimal integer accounting while the ERC-20 interface at `0x3600000000000000000000000000000000000000` uses six decimals for the same underlying balance. The exact conversion is `10^12`; a mismatch can materially misstate a balance.
+- Supported safe conversions: Native amounts may be divided by `10n ** 12n` or `1_000_000_000_000n` before six-decimal formatting. ERC-20 amounts may be multiplied by the same exact factor before 18-decimal formatting.
+- Static-analysis limitation: The private TypeScript AST analyzer parses same-file `.js` and `.ts` only. It recognizes bounded `viem` and `ethers` imports, direct and one-binding reads, immutable same-file ownership, and one supported conversion constant. It does not analyze writes, events, duplicate presentation, imported ownership, inter-file symbols, branches, reassignment, general value flow, or runtime behavior.
 
 ### NO_ETH_GAS_LABEL
 

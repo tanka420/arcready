@@ -18,12 +18,12 @@ import { walletRules } from "../rules/wallet/index.js";
 const knownRules = [...walletRules, ...bridgeRules, ...appKitRules];
 
 describe("internal rule taxonomy catalog", () => {
-  it("matches all 18 known rule inventory IDs exactly once", () => {
+  it("matches all 19 known rule inventory IDs exactly once", () => {
     const catalogIds = ruleTaxonomyCatalog.map((metadata) => metadata.id);
     const knownIds = knownRules.map((rule) => rule.id);
 
-    expect(catalogIds).toHaveLength(18);
-    expect(new Set(catalogIds).size).toBe(18);
+    expect(catalogIds).toHaveLength(19);
+    expect(new Set(catalogIds).size).toBe(19);
     expect([...catalogIds].sort()).toEqual([...knownIds].sort());
   });
 
@@ -44,7 +44,7 @@ describe("internal rule taxonomy catalog", () => {
 
     expect(totals).toEqual({
       "stable-compatibility": 0,
-      "experimental-compatibility": 12,
+      "experimental-compatibility": 13,
       advice: 4,
       "needs-research": 0,
       "remove-or-replace": 2
@@ -101,7 +101,9 @@ describe("internal rule taxonomy catalog", () => {
         ...advice,
         impact: "required-change"
       } as unknown as RuleMetadataInput)
-    ).toContain("wallet/ONE_CONFIRMATION_FINAL: advice must use recommendation impact");
+    ).toContain(
+      "wallet/ONE_CONFIRMATION_FINAL: advice must use recommendation impact"
+    );
 
     expect(
       validateRuleMetadata({
@@ -151,7 +153,9 @@ describe("internal rule taxonomy catalog", () => {
       references.push(...metadata.documentation);
     }
 
-    expect(references.length).toBeGreaterThanOrEqual(ruleTaxonomyCatalog.length);
+    expect(references.length).toBeGreaterThanOrEqual(
+      ruleTaxonomyCatalog.length
+    );
     for (const reference of references) {
       expect(reference.verifiedAt).toBe("2026-07-20");
       expect(["Arc", "Circle"]).toContain(reference.publisher);

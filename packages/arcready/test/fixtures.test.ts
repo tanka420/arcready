@@ -26,6 +26,26 @@ describe("validation fixtures", () => {
     expect(report.status).toBe("fail");
   });
 
+  it("wallet-amount-good formats native units without findings", async () => {
+    const { report } = await runScan(pathToFixture("wallet-amount-good"));
+
+    expect(report.findings).toEqual([]);
+    expect(report.summary).toEqual({ critical: 0, warning: 0, info: 0 });
+    expect(report.score).toBe(100);
+    expect(report.status).toBe("pass");
+  });
+
+  it("wallet-amount-bad emits exactly one critical amount finding", async () => {
+    const { report } = await runScan(pathToFixture("wallet-amount-bad"));
+
+    expect(report.findings.map(({ ruleId }) => ruleId)).toEqual([
+      "wallet/ARC_USDC_AMOUNT_CONVERSION"
+    ]);
+    expect(report.summary).toEqual({ critical: 1, warning: 0, info: 0 });
+    expect(report.score).toBe(75);
+    expect(report.status).toBe("fail");
+  });
+
   it("bridge-good passes without findings", async () => {
     const { report } = await runScan(pathToFixture("bridge-good"));
 

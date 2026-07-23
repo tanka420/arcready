@@ -74,6 +74,7 @@ export {
 } from "../rules/bridge/index.js";
 export {
   arcChainMetadataRule,
+  arcUsdcAmountConversionRule,
   noBlobTxOnArcRule,
   noEthGasLabelRule,
   oneConfirmationFinalRule,

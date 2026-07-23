@@ -5,9 +5,12 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
+  renameSync,
   rmSync,
   writeFileSync
 } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,8 +18,12 @@ import { fileURLToPath } from "node:url";
 interface PackageJson {
   name: string;
   version: string;
+  dependencies?: Record<string, string>;
+  license?: string;
+  engines?: Record<string, string>;
 }
 
+const require = createRequire(import.meta.url);
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const packageRoot = join(repoRoot, "packages", "arcready");
 const packageJson = JSON.parse(
@@ -29,7 +36,9 @@ let smokeRoot: string | undefined;
 let cliFixtureRoot: string | undefined;
 
 try {
+  assertDependencyBoundary();
   run("corepack", ["pnpm", "--filter", "arcready", "build"], repoRoot);
+  assertCompilerIsExternal();
 
   cliFixtureRoot = createJsonV2Fixture();
   validateJsonV2Execution(
@@ -53,12 +62,26 @@ try {
 
   smokeRoot = mkdtempSync(join(tmpdir(), "arcready-package-smoke-"));
   const npmCache = join(smokeRoot, "npm-cache");
+  const typescriptRoot = dirname(require.resolve("typescript/package.json"));
+  const typescriptTarballName = run(
+    "npm",
+    ["pack", typescriptRoot, "--pack-destination", smokeRoot],
+    repoRoot
+  )
+    .trim()
+    .split(/\r?\n/)
+    .at(-1);
+  if (!typescriptTarballName) {
+    throw new Error("Expected npm pack to return a TypeScript tarball name");
+  }
+  const typescriptTarballPath = join(smokeRoot, typescriptTarballName);
 
   run("npm", ["init", "-y"], smokeRoot);
   run(
     "npm",
     [
       "install",
+      typescriptTarballPath,
       tarballPath,
       "--cache",
       npmCache,
@@ -68,6 +91,7 @@ try {
     ],
     smokeRoot
   );
+  assertInstalledTypeScript(smokeRoot);
 
   run("npx", ["--no-install", "arcready", "--help"], smokeRoot);
   run("npx", ["--no-install", "arcready", "init"], smokeRoot);
@@ -100,6 +124,8 @@ try {
   validateJsonV2Execution(
     runCapturedNpx(["--no-install", "arcready", "scan", "--json-v2"], smokeRoot)
   );
+  validateInstalledAmountFixtures(smokeRoot);
+  validateLazyCompilerBoundary(smokeRoot);
   console.log("Package smoke test passed.");
 } finally {
   try {
@@ -115,6 +141,220 @@ try {
   } finally {
     rmSync(tarballPath, { force: true });
   }
+}
+
+function assertDependencyBoundary(): void {
+  if (packageJson.dependencies?.typescript !== "5.9.3") {
+    throw new Error("Expected exact runtime dependency typescript@5.9.3");
+  }
+  const manifest = JSON.parse(
+    readFileSync(require.resolve("typescript/package.json"), "utf8")
+  ) as PackageJson;
+  if (manifest.version !== "5.9.3" || manifest.license !== "Apache-2.0") {
+    throw new Error("Expected TypeScript 5.9.3 with Apache-2.0 metadata");
+  }
+  if (manifest.engines?.node !== ">=14.17") {
+    throw new Error(
+      `Unexpected TypeScript Node engine: ${manifest.engines?.node}`
+    );
+  }
+}
+
+function assertCompilerIsExternal(): void {
+  const distRoot = join(packageRoot, "dist");
+  for (const fileName of readdirSync(distRoot)) {
+    if (!fileName.endsWith(".js") && !fileName.endsWith(".d.ts")) continue;
+    const content = readFileSync(join(distRoot, fileName), "utf8");
+    if (content.includes("function createSourceFile")) {
+      throw new Error(
+        `TypeScript compiler implementation found in ${fileName}`
+      );
+    }
+    if (fileName.endsWith(".d.ts") && content.includes('from "typescript"')) {
+      throw new Error(`TypeScript compiler type leaked into ${fileName}`);
+    }
+  }
+}
+
+function assertInstalledTypeScript(root: string): void {
+  const manifestPath = join(root, "node_modules", "typescript", "package.json");
+  if (!existsSync(manifestPath)) {
+    throw new Error("Expected installed TypeScript to resolve separately");
+  }
+  const manifest = JSON.parse(
+    readFileSync(manifestPath, "utf8")
+  ) as PackageJson;
+  if (manifest.version !== "5.9.3" || manifest.license !== "Apache-2.0") {
+    throw new Error("Installed TypeScript dependency metadata did not match");
+  }
+}
+
+function validateInstalledAmountFixtures(root: string): void {
+  const good = runInstalledAmountCase(root, 18);
+  const bad = runInstalledAmountCase(root, 6);
+
+  assertLegacyReport(good, {
+    exitCode: 0,
+    findings: 0,
+    score: 100,
+    status: "pass"
+  });
+  assertLegacyReport(bad, {
+    exitCode: 1,
+    findings: 1,
+    score: 75,
+    status: "fail",
+    ruleId: "wallet/ARC_USDC_AMOUNT_CONVERSION"
+  });
+}
+
+function runInstalledAmountCase(root: string, decimals: 6 | 18) {
+  writeAmountProject(root, decimals, {
+    presets: ["wallet"],
+    failOn: "critical"
+  });
+  return runCapturedNpx(
+    ["--no-install", "arcready", "scan", "--format", "json"],
+    root
+  );
+}
+
+function assertLegacyReport(
+  execution: ReturnType<typeof runCaptured>,
+  expected: {
+    exitCode: number;
+    findings: number;
+    score: number;
+    status: string;
+    ruleId?: string;
+  }
+): void {
+  if (execution.error) throw execution.error;
+  if (execution.status !== expected.exitCode) {
+    throw new Error(
+      `Expected installed CLI exit ${expected.exitCode}, received ${String(execution.status)}: ${execution.stderr}`
+    );
+  }
+  const report = JSON.parse(execution.stdout) as {
+    findings: Array<{ ruleId: string }>;
+    score: number;
+    status: string;
+  };
+  if (
+    report.findings.length !== expected.findings ||
+    report.score !== expected.score ||
+    report.status !== expected.status ||
+    (expected.ruleId !== undefined &&
+      report.findings[0]?.ruleId !== expected.ruleId)
+  ) {
+    throw new Error(`Unexpected installed amount report: ${execution.stdout}`);
+  }
+}
+
+function validateLazyCompilerBoundary(root: string): void {
+  const installed = join(root, "node_modules", "typescript");
+  const withdrawn = join(root, "node_modules", "typescript-withdrawn");
+  if (!resolve(installed).startsWith(resolve(root)) || !existsSync(installed)) {
+    throw new Error("Refusing to move an unverified TypeScript dependency");
+  }
+  renameSync(installed, withdrawn);
+  try {
+    writeAmountProject(root, 6, {
+      presets: ["wallet"],
+      failOn: "critical",
+      rules: { "wallet/ARC_USDC_AMOUNT_CONVERSION": "off" }
+    });
+    assertCompilerNotRequired(runInstalledProbe(root), "disabled rule");
+
+    writeAmountProject(root, 6, { presets: ["bridge"], failOn: "critical" });
+    assertCompilerNotRequired(runInstalledProbe(root), "non-wallet preset");
+
+    rmSync(join(root, "src", "amounts.ts"), { force: true });
+    writeFileSync(
+      join(root, "src", "component.tsx"),
+      "<div>formatUnits(value, 6)</div>"
+    );
+    writeConfig(root, { presets: ["wallet"], failOn: "critical" });
+    assertCompilerNotRequired(
+      runInstalledProbe(root),
+      "unsupported-only source"
+    );
+
+    rmSync(join(root, "src", "component.tsx"), { force: true });
+    assertCompilerNotRequired(
+      runInstalledProbe(root),
+      "empty eligible source set"
+    );
+
+    writeAmountProject(root, 18, { presets: ["wallet"], failOn: "critical" });
+    const eligible = runInstalledProbe(root);
+    const report = JSON.parse(eligible.stdout) as {
+      findings: Array<{ ruleId: string; severity: string; message: string }>;
+    };
+    if (
+      eligible.status !== 0 ||
+      report.findings.length !== 1 ||
+      report.findings[0]?.ruleId !== "wallet/ARC_USDC_AMOUNT_CONVERSION" ||
+      report.findings[0].severity !== "warning" ||
+      !report.findings[0].message.includes("failed") ||
+      !report.findings[0].message.includes("typescript")
+    ) {
+      throw new Error(
+        "Enabled eligible scan did not attempt TypeScript loading"
+      );
+    }
+  } finally {
+    renameSync(withdrawn, installed);
+  }
+}
+
+function runInstalledProbe(root: string) {
+  return runCapturedNpx(
+    ["--no-install", "arcready", "scan", "--format", "json"],
+    root
+  );
+}
+
+function assertCompilerNotRequired(
+  execution: ReturnType<typeof runCaptured>,
+  label: string
+): void {
+  if (execution.error) throw execution.error;
+  const report = JSON.parse(execution.stdout) as {
+    findings: Array<{ message: string }>;
+  };
+  if (
+    execution.status !== 0 ||
+    report.findings.some(({ message }) => message.includes("failed"))
+  ) {
+    throw new Error(`TypeScript was unexpectedly required for ${label}`);
+  }
+}
+
+function writeAmountProject(
+  root: string,
+  decimals: 6 | 18,
+  config: Record<string, unknown>
+): void {
+  mkdirSync(join(root, "src"), { recursive: true });
+  rmSync(join(root, "src", "bridge.ts"), { force: true });
+  rmSync(join(root, "src", "component.tsx"), { force: true });
+  writeConfig(root, config);
+  writeFileSync(
+    join(root, "src", "amounts.ts"),
+    `import { createPublicClient, formatUnits, http } from "viem";
+const client = createPublicClient({ chain: { id: 5042002 }, transport: http("https://rpc.testnet.arc.network") });
+const balance = await client.getBalance({ address: account });
+formatUnits(balance, ${decimals});
+`
+  );
+}
+
+function writeConfig(root: string, config: Record<string, unknown>): void {
+  writeFileSync(
+    join(root, "arcready.config.json"),
+    JSON.stringify(config, null, 2)
+  );
 }
 
 function run(command: string, args: string[], cwd: string): string {
