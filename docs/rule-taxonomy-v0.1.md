@@ -20,13 +20,13 @@ Arc, Circle products, or any specific network or SDK version.
 Taxonomy describes detector maturity and product posture. It does not describe
 the consequence of an underlying requirement by itself.
 
-| Taxonomy | Meaning | Recommended posture |
-| --- | --- | --- |
-| `stable-compatibility` | A precise, validated detector for a documented Arc-specific requirement, supported by direct official evidence and corpus validation | May be enabled by default and may become CI-failure eligible when its impact is Blocker or Required change |
-| `experimental-compatibility` | A credible compatibility concern whose applicability or current detector precision is not sufficiently validated | May be enabled for visibility; never recommended for CI failure |
-| `advice` | UX, reliability, or operational guidance rather than a compatibility requirement | Recommended disabled/opt-in; never recommended for CI failure |
-| `needs-research` | A plausible concern without enough evidence or a defensible detector contract | Recommended disabled; requires an explicit research gap |
-| `remove-or-replace` | An unsupported, contradicted, or misleading current rule concept or implementation | Recommended disabled; deprecated with replacement direction or an explicit no-replacement reason |
+| Taxonomy                     | Meaning                                                                                                                              | Recommended posture                                                                                        |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| `stable-compatibility`       | A precise, validated detector for a documented Arc-specific requirement, supported by direct official evidence and corpus validation | May be enabled by default and may become CI-failure eligible when its impact is Blocker or Required change |
+| `experimental-compatibility` | A credible compatibility concern whose applicability or current detector precision is not sufficiently validated                     | May be enabled for visibility; never recommended for CI failure                                            |
+| `advice`                     | UX, reliability, or operational guidance rather than a compatibility requirement                                                     | Recommended disabled/opt-in; never recommended for CI failure                                              |
+| `needs-research`             | A plausible concern without enough evidence or a defensible detector contract                                                        | Recommended disabled; requires an explicit research gap                                                    |
+| `remove-or-replace`          | An unsupported, contradicted, or misleading current rule concept or implementation                                                   | Recommended disabled; deprecated with replacement direction or an explicit no-replacement reason           |
 
 No current ArcReady detector is classified as Stable. No current rule is
 recommended to fail CI. This is intentional: several underlying requirements
@@ -52,31 +52,32 @@ underlying requirement does not overstate confidence in a heuristic detector.
 
 ## Classification catalog
 
-| Rule ID | Taxonomy | Impact | Recommended default | Recommended CI failure | Rule packs |
-| --- | --- | --- | --- | --- | --- |
-| `app-kit/APPKIT_BRIDGE_MIN_AMOUNT_NOTE` | Remove or replace | Not applicable until researched | No | No | App Kit advice |
-| `app-kit/APPKIT_CAPABILITY_SUPPORTED` | Remove or replace | Not applicable until researched | No | No | App Kit compatibility |
-| `app-kit/APPKIT_CHAIN_IDENTIFIER_VALID` | Experimental compatibility | Blocker | Yes | No | App Kit compatibility |
-| `app-kit/APPKIT_CUSTOM_RPC_RECOMMENDED` | Advice | Recommendation | No | No | App Kit advice |
-| `app-kit/UB_DELEGATE_REQUIRED` | Experimental compatibility | Required change | No | No | App Kit compatibility |
-| `app-kit/UB_FEE_EXPLANATION_PRESENT` | Advice | Recommendation | No | No | App Kit advice |
-| `bridge/ATTESTATION_404_NOT_FATAL` | Experimental compatibility | Required change | Yes | No | Bridge/CCTP, indexer/infrastructure |
-| `bridge/BRIDGE_CONFIRMATIONS_ONE` | Advice | Recommendation | No | No | Bridge/CCTP, indexer/infrastructure |
-| `bridge/CCTP_DOMAIN_26` | Experimental compatibility | Blocker | Yes | No | Bridge/CCTP, core compatibility |
-| `bridge/NO_PREVRANDAO_RELAY_SELECTION` | Experimental compatibility | Required change | Yes | No | Bridge/CCTP, Solidity |
-| `bridge/NO_WRAPPED_USDC_ON_ARC` | Experimental compatibility | Required change | Yes | No | Bridge/CCTP |
-| `bridge/RELAYER_USES_USDC_FOR_GAS` | Experimental compatibility | Required change | Yes | No | Bridge/CCTP, indexer/infrastructure |
-| `wallet/ARC_CHAIN_METADATA` | Experimental compatibility | Blocker | Yes | No | Core compatibility, wallet |
-| `wallet/NO_BLOB_TX_ON_ARC` | Experimental compatibility | Blocker | Yes | No | Core compatibility |
-| `wallet/NO_ETH_GAS_LABEL` | Experimental compatibility | Required change | Yes | No | Wallet |
-| `wallet/ONE_CONFIRMATION_FINAL` | Advice | Recommendation | No | No | Wallet, indexer/infrastructure |
-| `wallet/PREVRANDAO_NOT_SUPPORTED` | Experimental compatibility | Required change | Yes | No | Solidity, core compatibility |
-| `wallet/WALLET_NATIVE_USDC_DISPLAY` | Experimental compatibility | Required change | Yes | No | Core compatibility, wallet |
+| Rule ID                                 | Taxonomy                   | Impact                          | Recommended default | Recommended CI failure | Rule packs                          |
+| --------------------------------------- | -------------------------- | ------------------------------- | ------------------- | ---------------------- | ----------------------------------- |
+| `app-kit/APPKIT_BRIDGE_MIN_AMOUNT_NOTE` | Remove or replace          | Not applicable until researched | No                  | No                     | App Kit advice                      |
+| `app-kit/APPKIT_CAPABILITY_SUPPORTED`   | Remove or replace          | Not applicable until researched | No                  | No                     | App Kit compatibility               |
+| `app-kit/APPKIT_CHAIN_IDENTIFIER_VALID` | Experimental compatibility | Blocker                         | Yes                 | No                     | App Kit compatibility               |
+| `app-kit/APPKIT_CUSTOM_RPC_RECOMMENDED` | Advice                     | Recommendation                  | No                  | No                     | App Kit advice                      |
+| `app-kit/UB_DELEGATE_REQUIRED`          | Experimental compatibility | Required change                 | No                  | No                     | App Kit compatibility               |
+| `app-kit/UB_FEE_EXPLANATION_PRESENT`    | Advice                     | Recommendation                  | No                  | No                     | App Kit advice                      |
+| `bridge/ATTESTATION_404_NOT_FATAL`      | Experimental compatibility | Required change                 | Yes                 | No                     | Bridge/CCTP, indexer/infrastructure |
+| `bridge/BRIDGE_CONFIRMATIONS_ONE`       | Advice                     | Recommendation                  | No                  | No                     | Bridge/CCTP, indexer/infrastructure |
+| `bridge/CCTP_DOMAIN_26`                 | Experimental compatibility | Blocker                         | Yes                 | No                     | Bridge/CCTP, core compatibility     |
+| `bridge/NO_PREVRANDAO_RELAY_SELECTION`  | Experimental compatibility | Required change                 | Yes                 | No                     | Bridge/CCTP, Solidity               |
+| `bridge/NO_WRAPPED_USDC_ON_ARC`         | Experimental compatibility | Required change                 | Yes                 | No                     | Bridge/CCTP                         |
+| `bridge/RELAYER_USES_USDC_FOR_GAS`      | Experimental compatibility | Required change                 | Yes                 | No                     | Bridge/CCTP, indexer/infrastructure |
+| `wallet/ARC_CHAIN_METADATA`             | Experimental compatibility | Blocker                         | Yes                 | No                     | Core compatibility, wallet          |
+| `wallet/ARC_USDC_AMOUNT_CONVERSION`     | Experimental compatibility | Blocker                         | Yes                 | No                     | Core compatibility, wallet          |
+| `wallet/NO_BLOB_TX_ON_ARC`              | Experimental compatibility | Blocker                         | Yes                 | No                     | Core compatibility                  |
+| `wallet/NO_ETH_GAS_LABEL`               | Experimental compatibility | Required change                 | Yes                 | No                     | Wallet                              |
+| `wallet/ONE_CONFIRMATION_FINAL`         | Advice                     | Recommendation                  | No                  | No                     | Wallet, indexer/infrastructure      |
+| `wallet/PREVRANDAO_NOT_SUPPORTED`       | Experimental compatibility | Required change                 | Yes                 | No                     | Solidity, core compatibility        |
+| `wallet/WALLET_NATIVE_USDC_DISPLAY`     | Experimental compatibility | Required change                 | Yes                 | No                     | Core compatibility, wallet          |
 
 Totals:
 
 - Stable compatibility: 0
-- Experimental compatibility: 12
+- Experimental compatibility: 13
 - Advice: 4
 - Needs research: 0
 - Remove or replace: 2

@@ -443,6 +443,60 @@ export const ruleTaxonomyCatalog = [
     deprecated: false
   },
   {
+    id: "wallet/ARC_USDC_AMOUNT_CONVERSION",
+    category: "wallet",
+    rulePacks: ["core-compatibility", "wallet"],
+    taxonomy: "experimental-compatibility",
+    impact: "blocker",
+    defaultConfidence: "medium",
+    maturity: "prototype",
+    recommendedDefaultEnabled: true,
+    recommendedCiFailureEligible: false,
+    appliesTo: ["wallet-ui"],
+    documentation: [
+      {
+        url: "https://docs.arc.io/arc/concepts/stablecoin-native-model",
+        title: "Stablecoin-native model",
+        publisher: "Arc",
+        claim:
+          "Arc native USDC uses 18-decimal accounting while the ERC-20 interface uses six decimals for the same underlying balance, with a 10^12 conversion boundary.",
+        support: "direct",
+        verifiedAt: VERIFIED_AT,
+        network: "Arc Testnet",
+        stability: "versioned"
+      },
+      {
+        url: "https://docs.arc.io/integrate/wallets",
+        title: "How to: Add Arc to a Wallet",
+        publisher: "Arc",
+        claim:
+          "Wallet integrations must account for Arc's native USDC and its ERC-20 interface as representations of the same underlying balance.",
+        support: "direct",
+        verifiedAt: VERIFIED_AT,
+        network: "Arc Testnet",
+        stability: "versioned"
+      },
+      {
+        url: "https://docs.arc.io/arc/references/contract-addresses",
+        title: "Contract addresses",
+        publisher: "Arc",
+        claim:
+          "The Arc Testnet USDC ERC-20 interface is 0x3600000000000000000000000000000000000000.",
+        support: "direct",
+        verifiedAt: VERIFIED_AT,
+        network: "Arc Testnet",
+        stability: "versioned"
+      }
+    ],
+    rationale:
+      "A proven 10^12 interpretation mismatch can materially misstate an Arc USDC balance even though the native and ERC-20 interfaces represent the same underlying balance.",
+    detectorLimitations: [
+      "Analysis is limited to same-file .js and .ts direct or one-binding reads with bounded viem and ethers import and initialization recognition.",
+      "The detector does not analyze writes, events, imported ownership, runtime values, or inter-file, branch, reassignment, and general value flow."
+    ],
+    deprecated: false
+  },
+  {
     id: "wallet/NO_BLOB_TX_ON_ARC",
     category: "wallet",
     rulePacks: ["core-compatibility"],

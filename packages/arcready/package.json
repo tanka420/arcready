@@ -48,11 +48,14 @@
   },
   "scripts": {
     "arcready": "node ./dist/bin.js",
-    "build": "tsup src/index.ts src/bin.ts --format esm --dts --clean --sourcemap",
+    "build": "tsup src/index.ts src/bin.ts --format esm --dts --clean --sourcemap --external typescript",
     "test": "vitest run",
     "dev": "tsx src/bin.ts"
   },
   "devDependencies": {
     "tsx": "^4.19.4"
+  },
+  "dependencies": {
+    "typescript": "5.9.3"
   }
 }

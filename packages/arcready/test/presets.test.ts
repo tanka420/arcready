@@ -60,15 +60,29 @@ describe("preset registry", () => {
   });
 
   it("keeps retained rules available through default presets", () => {
-    expect(getRulesForPresets(["wallet"]).map((rule) => rule.id)).toContain(
-      "wallet/ARC_CHAIN_METADATA"
-    );
+    expect(getRulesForPresets(["wallet"]).map((rule) => rule.id)).toEqual([
+      "wallet/ARC_CHAIN_METADATA",
+      "wallet/WALLET_NATIVE_USDC_DISPLAY",
+      "wallet/ARC_USDC_AMOUNT_CONVERSION",
+      "wallet/NO_ETH_GAS_LABEL",
+      "wallet/ONE_CONFIRMATION_FINAL",
+      "wallet/PREVRANDAO_NOT_SUPPORTED",
+      "wallet/NO_BLOB_TX_ON_ARC"
+    ]);
     expect(getRulesForPresets(["app-kit"]).map((rule) => rule.id)).toContain(
       "app-kit/APPKIT_CHAIN_IDENTIFIER_VALID"
     );
     expect(getRulesForPresets(["bridge"]).map((rule) => rule.id)).toContain(
       "bridge/BRIDGE_CONFIRMATIONS_ONE"
     );
+  });
+
+  it("exports only the C06B1 rule policy through the public API", () => {
+    expect(arcready.arcUsdcAmountConversionRule.id).toBe(
+      "wallet/ARC_USDC_AMOUNT_CONVERSION"
+    );
+    expect("analyzeArcUsdcAmountFile" in arcready).toBe(false);
+    expect("ArcUsdcAmountIssueKind" in arcready).toBe(false);
   });
 
   it("preserves deprecated App Kit rules as public inventory exports", () => {

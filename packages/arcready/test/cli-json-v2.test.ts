@@ -330,6 +330,7 @@ describe("json-v2 configuration", () => {
     expect(
       result.findings.map(({ ruleId }: { ruleId: string }) => ruleId)
     ).toEqual([CCTP_RULE_ID]);
+    expect(execution.stdout).not.toContain("ARC_USDC_AMOUNT_CONVERSION");
     expect(execution.stdout).not.toContain("ArcReady v");
     expect(execution.stdout).not.toContain("# ArcReady Report");
     expect(execution.stdout).not.toContain("<!doctype html>");

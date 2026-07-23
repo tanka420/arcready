@@ -19,6 +19,7 @@ describe("cross-preset regression coverage", () => {
     expect(ruleIdsFor("wallet")).toEqual([
       "wallet/ARC_CHAIN_METADATA",
       "wallet/WALLET_NATIVE_USDC_DISPLAY",
+      "wallet/ARC_USDC_AMOUNT_CONVERSION",
       "wallet/NO_ETH_GAS_LABEL",
       "wallet/ONE_CONFIRMATION_FINAL",
       "wallet/PREVRANDAO_NOT_SUPPORTED",
@@ -47,7 +48,7 @@ describe("cross-preset regression coverage", () => {
       (rule) => rule.id
     );
 
-    expect(ruleIds).toHaveLength(16);
+    expect(ruleIds).toHaveLength(17);
     expect(ruleIds.every((ruleId) => !ruleId.includes("placeholder"))).toBe(
       true
     );
@@ -136,7 +137,11 @@ function createProject(
   tempDirs.push(projectRoot);
 
   writeFixture(projectRoot, "package.json", JSON.stringify({ name }));
-  writeFixture(projectRoot, "arcready.config.json", JSON.stringify({ presets }));
+  writeFixture(
+    projectRoot,
+    "arcready.config.json",
+    JSON.stringify({ presets })
+  );
 
   for (const [filePath, content] of Object.entries(files)) {
     writeFixture(projectRoot, filePath, content);

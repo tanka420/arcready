@@ -50,7 +50,7 @@ The private `json-v2` runtime now selects exactly these four rules in stable ord
 3. `bridge/RELAYER_USES_USDC_FOR_GAS`
 4. `wallet/ARC_CHAIN_METADATA`
 
-Four of 18 known inventory rules execute, leaving 14 outside the canonical
+Four of 19 known inventory rules execute, leaving 15 outside the canonical
 slice. Coverage exposes `selectedOccurrences: 4`; IDs remain a private tuple.
 
 For this slice, ArcReady now has:
@@ -156,13 +156,20 @@ multichain isolation, and fail-closed syntax handling. Generic `gasToken`,
 `feeToken`, UI prose, decimals, balances, and amount flows remain out of scope.
 The rule remains outside the four-rule canonical runtime.
 
-### C06B — Research the native-versus-ERC-20 USDC amount model
+### C06B1 — Complete: bounded read-side Arc USDC amount conversion
 
 Goal:
 
-Design a high-value semantic slice for Arc's native USDC and ERC-20 USDC interfaces, including amount conversion, balance interpretation, and duplicate presentation risks.
+Detect direct 18-versus-6 decimal interpretation mismatches for proven Arc
+native balance reads and exact Arc USDC ERC-20 `balanceOf` reads.
 
-This work may justify bounded AST or value-flow analysis. It should not be forced into the current regex architecture.
+C06B1 adds a private, lazy TypeScript AST analyzer for same-file `.js` and `.ts`
+only. It models native amounts as 18 decimals and the exact Arc USDC ERC-20
+interface at `0x3600000000000000000000000000000000000000` as six decimals for
+the same underlying balance. It recognizes exact `10^12` conversions and direct
+or one-binding reads. Writes, events, duplicate presentation, imported
+ownership, inter-file flow, and runtime validation remain out of scope. The
+rule remains outside the four-rule canonical runtime.
 
 ### C07 — Arc transaction-submission ownership
 
@@ -248,8 +255,10 @@ The following remain out of scope for the near-term roadmap:
 The next recommended engineering milestone is:
 
 ```text
-C06B — Research and implement the native-versus-ERC20 USDC amount model
+C07 — Arc transaction-submission ownership
 ```
 
-C06A is complete, `wallet/WALLET_NATIVE_USDC_DISPLAY` remains non-canonical,
-and the private canonical runtime remains exactly four rules.
+C06B1 is complete and `wallet/ARC_USDC_AMOUNT_CONVERSION` remains
+non-canonical. C06B2 write-side amount analysis follows C07 ownership. C06C is
+only a proposed later UI-binding milestone for duplicate balance presentation.
+The private canonical runtime remains exactly four rules.

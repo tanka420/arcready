@@ -196,9 +196,10 @@ describe("private ScanResultV2 runtime", () => {
       "bridge/RELAYER_USES_USDC_FOR_GAS",
       "wallet/ARC_CHAIN_METADATA"
     ]);
-    expect(knownRules).toHaveLength(18);
-    expect(new Set(knownRules.map(({ id }) => id)).size).toBe(18);
-    expect(knownRules.length - ruleIds.length).toBe(14);
+    expect(knownRules).toHaveLength(19);
+    expect(new Set(knownRules.map(({ id }) => id)).size).toBe(19);
+    expect(knownRules.length - ruleIds.length).toBe(15);
+    expect(ruleIds).not.toContain("wallet/ARC_USDC_AMOUNT_CONVERSION");
   });
 
   it("returns one validated CCTP FindingV2", async () => {

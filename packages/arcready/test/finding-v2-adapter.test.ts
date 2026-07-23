@@ -220,11 +220,16 @@ describe("FindingV2 adapter specifications", () => {
   );
 
   it("rejects every unsupported rule ID", () => {
-    expect(() =>
-      getFindingV2AdapterSpecification(
-        "bridge/BRIDGE_CONFIRMATIONS_ONE" as SupportedFindingV2AdapterRuleId
-      )
-    ).toThrow(/unsupported/);
+    for (const ruleId of [
+      "bridge/BRIDGE_CONFIRMATIONS_ONE",
+      "wallet/ARC_USDC_AMOUNT_CONVERSION"
+    ]) {
+      expect(() =>
+        getFindingV2AdapterSpecification(
+          ruleId as SupportedFindingV2AdapterRuleId
+        )
+      ).toThrow(/unsupported/);
+    }
   });
 
   it.each([

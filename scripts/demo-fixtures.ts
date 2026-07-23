@@ -65,12 +65,25 @@ export const FIXTURES: FixtureExpectation[] = [
   }
 ];
 
+const C06B1_FIXTURES: FixtureExpectation[] = [
+  {
+    name: "wallet-amount-good",
+    projectPath: "fixtures/wallet-amount-good",
+    shouldPass: true
+  },
+  {
+    name: "wallet-amount-bad",
+    projectPath: "fixtures/wallet-amount-bad",
+    shouldPass: false
+  }
+];
+
 export async function runFixtureDemo(
   repoRoot = process.cwd()
 ): Promise<FixtureValidationResult[]> {
   const results: FixtureValidationResult[] = [];
 
-  for (const fixture of FIXTURES) {
+  for (const fixture of [...FIXTURES, ...C06B1_FIXTURES]) {
     results.push(await scanFixture(repoRoot, fixture));
   }
 

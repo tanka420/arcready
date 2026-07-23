@@ -52,11 +52,15 @@ The runtime checks the tuple ID, specification ID, executable rule ID,
 occurrence identity, and instrumentation identity at their shared selection
 index.
 
-The other 14 known inventory rules are not executed. Running all 18 while
+The other 15 known inventory rules are not executed. Running all 19 while
 adapting only four would make canonical coverage ambiguous and omit unsupported
 results. Adding a rule to this runtime therefore requires an approved adapter
 and a later explicit slice change; there is no mutable adapter or rule
 registry.
+
+`wallet/ARC_USDC_AMOUNT_CONVERSION` is deliberately part of that non-canonical
+inventory. Its legacy findings do not enter FindingV2 or `json-v2`, and
+`selectedOccurrences` remains exactly four.
 
 The IDs and order remain a private tuple. ScanResultV2 exposes the selected
 occurrence count, not a selected-rule-ID list.
