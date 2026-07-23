@@ -486,36 +486,319 @@ describe("wallet rules", () => {
     expect(findings).toHaveLength(1);
   });
 
-  it("WALLET_NATIVE_USDC_DISPLAY flags ETH native currency", async () => {
-    const findings = await runWalletRule(
-      walletNativeUsdcDisplayRule,
-      "export const arc = { name: 'Arc Testnet', chainId: 5042002, nativeCurrency: { name: 'ETH', symbol: 'ETH' } };"
-    );
+  const nativeMessage =
+    "Arc-owned chain metadata sets nativeCurrency.name to ETH/Ethereum or nativeCurrency.symbol to a value other than USDC.";
+  const nativeFix =
+    'Set nativeCurrency.symbol to "USDC". If nativeCurrency.name is "ETH" or "Ethereum", replace it with a USDC-facing name such as "USDC" or "USD Coin". Handle Arc native accounting precision and USDC display precision according to the integration surface.';
+  const positiveNativeCurrencyCases = [
+    [
+      "P01 direct ETH name",
+      'const arcChain = { id: 5042002, nativeCurrency: { name: "ETH" } };'
+    ],
+    [
+      "P02 direct Ethereum name",
+      'const arcChain = { id: 5042002, nativeCurrency: { name: "Ethereum" } };'
+    ],
+    [
+      "P03 direct ETH symbol",
+      'const arcChain = { id: 5042002, nativeCurrency: { name: "USD Coin", symbol: "ETH" } };'
+    ],
+    [
+      "P04 direct DAI symbol",
+      'const arcChain = { id: 5042002, nativeCurrency: { symbol: "DAI" } };'
+    ],
+    [
+      "empty symbol",
+      'const arcChain = { id: 5042002, nativeCurrency: { symbol: "" } };'
+    ],
+    [
+      "whitespace-padded USDC symbol",
+      'const arcChain = { id: 5042002, nativeCurrency: { symbol: " USDC " } };'
+    ],
+    [
+      "P05 Arc identifier with wrong ID",
+      'const arcTestnet = { id: 1, nativeCurrency: { symbol: "ETH" } };'
+    ],
+    [
+      "P06 generic identifier with Arc ID",
+      'const chain = { id: 5042002, nativeCurrency: { symbol: "ETH" } };'
+    ],
+    [
+      "P07 exact Arc Testnet name",
+      'const chain = { name: "Arc Testnet", nativeCurrency: { name: "ETH" } };'
+    ],
+    [
+      "P08 direct defineChain",
+      'export const arcChain = defineChain({ id: 5042002, nativeCurrency: { symbol: "ETH" } });'
+    ],
+    [
+      "P09 as const",
+      'const arcChain = { id: 5042002, nativeCurrency: { symbol: "ETH" } } as const;'
+    ],
+    [
+      "P10 satisfies",
+      'const arcChain = { id: 5042002, nativeCurrency: { symbol: "ETH" } } satisfies Chain;'
+    ],
+    [
+      "P11 one Arc wrapper child",
+      'const chains = { arcTestnet: { id: 5042002, nativeCurrency: { symbol: "ETH" } } };'
+    ],
+    [
+      "P12 Ethereum sibling before Arc child",
+      'const chains = { mainnet: { id: 1, nativeCurrency: { symbol: "ETH" } }, arcTestnet: { id: 5042002, nativeCurrency: { symbol: "DAI" } } };'
+    ],
+    [
+      "P13 Ethereum sibling after Arc child",
+      'const chains = { arcTestnet: { id: 5042002, nativeCurrency: { symbol: "DAI" } }, mainnet: { id: 1, nativeCurrency: { symbol: "ETH" } } };'
+    ],
+    [
+      "P14 bad name and symbol",
+      'const arcChain = { id: 5042002, nativeCurrency: { name: "ETH", symbol: "DAI" } };'
+    ],
+    [
+      "P16 numeric hexadecimal Arc ID",
+      'const chain = { id: 0x4cf4b2, nativeCurrency: { symbol: "ETH" } };'
+    ],
+    [
+      "P16 quoted hexadecimal Arc ID",
+      'const chain = { chainId: "0x4CF4B2", nativeCurrency: { symbol: "ETH" } };'
+    ],
+    [
+      "P17 unresolved name with direct bad symbol",
+      'const arcChain = { id: 5042002, nativeCurrency: { name: importedName, symbol: "ETH" } };'
+    ]
+  ] as const;
 
-    expect(findings[0]).toMatchObject({
-      ruleId: "wallet/WALLET_NATIVE_USDC_DISPLAY",
-      severity: "critical",
-      message: expect.stringContaining("ETH instead of USDC"),
-      suggestedFix: expect.stringContaining("USDC")
-    });
-  });
+  it.each(positiveNativeCurrencyCases)(
+    "WALLET_NATIVE_USDC_DISPLAY finds %s",
+    async (_name, source) => {
+      const findings = await runWalletRule(walletNativeUsdcDisplayRule, source);
 
-  it("WALLET_NATIVE_USDC_DISPLAY allows USDC native currency", async () => {
+      expect(findings).toEqual([
+        {
+          ruleId: "wallet/WALLET_NATIVE_USDC_DISPLAY",
+          severity: "critical",
+          message: nativeMessage,
+          files: ["src/fixture.ts"],
+          suggestedFix: nativeFix,
+          docs: "arc-usdc-gas",
+          preset: "wallet"
+        }
+      ]);
+    }
+  );
+
+  const negativeNativeCurrencyCases = [
+    [
+      "N01 Ethereum sibling bad and Arc sibling safe",
+      'const chains = { mainnet: { id: 1, nativeCurrency: { symbol: "ETH" } }, arcTestnet: { id: 5042002, nativeCurrency: { name: "USD Coin", symbol: "USDC" } } };'
+    ],
+    [
+      "N02 unrelated generic ETH metadata",
+      'const arcChain = { id: 5042002, nativeCurrency: { symbol: "USDC" } };\nconst other = { id: 1, nativeCurrency: { symbol: "ETH" } };'
+    ],
+    [
+      "N03 gasToken",
+      'const arcRelayer = { chainId: 5042002, gasToken: "ETH" };'
+    ],
+    ["N04 feeToken", 'const config = { feeToken: "ETH" };'],
+    [
+      "N05 Arc relayer ETH config",
+      'const arcRelayer = { chainId: 5042002, name: "Arc Testnet", gasToken: "ETH" };'
+    ],
+    [
+      "N06 arbitrary UI copy",
+      'const arcChain = { id: 5042002, name: "Arc Testnet" };\nconst label = "Pay gas in ETH";'
+    ],
+    [
+      "N07 guidance",
+      'const arcChain = { id: 5042002, name: "Arc Testnet" };\nconst help = "Do not show ETH on Arc";'
+    ],
+    [
+      "N08 declaration in comment",
+      '// const arcChain = { id: 5042002, nativeCurrency: { symbol: "ETH" } };'
+    ],
+    [
+      "N09 declaration in string",
+      "const example = 'const arcChain = { id: 5042002, nativeCurrency: { symbol: \"ETH\" } };';"
+    ],
+    [
+      "N10 declaration in template",
+      'const example = `const arcChain = { id: 5042002, nativeCurrency: { symbol: "ETH" } };`;'
+    ],
+    [
+      "N11 declaration in regex",
+      'const matcher = /; const arcChain = { id: 5042002, nativeCurrency: { symbol: "ETH" } };/;'
+    ],
+    [
+      "N14 imported nativeCurrency",
+      "const arcChain = { id: 5042002, nativeCurrency: importedCurrency };"
+    ],
+    [
+      "N15 computed name",
+      'const arcChain = { id: 5042002, nativeCurrency: { name: importedName, symbol: "USDC" } };'
+    ],
+    [
+      "N15 computed symbol",
+      'const arcChain = { id: 5042002, nativeCurrency: { name: "USD Coin", symbol: importedSymbol } };'
+    ],
+    [
+      "N16 nativeCurrency spread",
+      'const arcChain = { id: 5042002, nativeCurrency: { ...base, symbol: "ETH" } };'
+    ],
+    [
+      "N17 duplicate name",
+      'const arcChain = { id: 5042002, nativeCurrency: { name: "USDC", name: "ETH", symbol: "USDC" } };'
+    ],
+    [
+      "N17 duplicate symbol",
+      'const arcChain = { id: 5042002, nativeCurrency: { name: "USDC", symbol: "USDC", symbol: "ETH" } };'
+    ],
+    [
+      "N18 deep wrapper",
+      'const config = { networks: { arcTestnet: { id: 5042002, nativeCurrency: { symbol: "ETH" } } } };'
+    ],
+    [
+      "N19 array root",
+      'const chains = [{ id: 5042002, name: "Arc Testnet", nativeCurrency: { symbol: "ETH" } }];'
+    ],
+    [
+      "N20 malformed candidate",
+      'const arcChain = { id: 5042002, nativeCurrency: { symbol: "ETH" };'
+    ],
+    [
+      "N22 decimals 18",
+      'const arcChain = { id: 5042002, nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 18 } };'
+    ],
+    [
+      "N23 decimals 6",
+      'const arcChain = { id: 5042002, nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 6 } };'
+    ],
+    [
+      "decimals 9",
+      'const arcChain = { id: 5042002, nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 9 } };'
+    ],
+    [
+      "computed decimals",
+      'const arcChain = { id: 5042002, nativeCurrency: { name: "USDC", symbol: "USDC", decimals: importedDecimals } };'
+    ],
+    [
+      "N24 USD Coin name",
+      'const arcChain = { id: 5042002, nativeCurrency: { name: "USD Coin", symbol: "USDC" } };'
+    ],
+    [
+      "mixed-case USDC symbol",
+      'const arcChain = { id: 5042002, nativeCurrency: { name: "Circle USD", symbol: "usDc" } };'
+    ],
+    [
+      "N25 Ethereum only",
+      'const mainnet = { id: 1, name: "Ethereum", nativeCurrency: { name: "Ether", symbol: "ETH" } };'
+    ],
+    [
+      "N26 nativeCurrency only",
+      'const arcTestnet = { nativeCurrency: { symbol: "ETH" } };'
+    ],
+    [
+      "N27 template symbol",
+      "const arcChain = { id: 5042002, nativeCurrency: { symbol: `ETH` } };"
+    ],
+    [
+      "N28 string nativeCurrency",
+      'const arcChain = { id: 5042002, nativeCurrency: "ETH" };'
+    ],
+    [
+      "call nativeCurrency",
+      'const arcChain = { id: 5042002, nativeCurrency: createCurrency("ETH") };'
+    ],
+    [
+      "N29 default export",
+      'export default { id: 5042002, name: "Arc Testnet", nativeCurrency: { symbol: "ETH" } };'
+    ],
+    [
+      "N30 let declaration",
+      'let arcChain = { id: 5042002, nativeCurrency: { symbol: "ETH" } };'
+    ],
+    [
+      "N30 var declaration",
+      'var arcChain = { id: 5042002, nativeCurrency: { symbol: "ETH" } };'
+    ],
+    [
+      "N31 parent spread",
+      'const arcChain = { ...base, id: 5042002, nativeCurrency: { symbol: "ETH" } };'
+    ],
+    [
+      "N32 conflicting IDs",
+      'const arcChain = { id: 5042002, chainId: 1, nativeCurrency: { symbol: "ETH" } };'
+    ],
+    [
+      "N33 terminal continuation",
+      'const arcChain = { id: 5042002, nativeCurrency: { symbol: "ETH" } }.extend;'
+    ],
+    [
+      "non-segment arcadia owner",
+      'const arcadia = { id: 1, nativeCurrency: { symbol: "ETH" } };'
+    ],
+    [
+      "non-segment monarch owner",
+      'const monarch = { id: 1, nativeCurrency: { symbol: "ETH" } };'
+    ]
+  ] as const;
+
+  it.each(negativeNativeCurrencyCases)(
+    "WALLET_NATIVE_USDC_DISPLAY ignores %s",
+    async (_name, source) => {
+      await expect(
+        runWalletRule(walletNativeUsdcDisplayRule, source)
+      ).resolves.toEqual([]);
+    }
+  );
+
+  it.each([".jsx", ".tsx", ".json", ".md", ".mdx", ".yaml", ".yml", ".sol"])(
+    "WALLET_NATIVE_USDC_DISPLAY ignores unsupported file %s",
+    async (extension) => {
+      await expect(
+        runWalletRule(
+          walletNativeUsdcDisplayRule,
+          'const arcChain = { id: 5042002, nativeCurrency: { symbol: "ETH" } };',
+          {},
+          `src/chain${extension}`
+        )
+      ).resolves.toEqual([]);
+    }
+  );
+
+  it.each([
+    "src/chain.test.ts",
+    "src/chain.spec.js",
+    "test/chain.ts",
+    "tests/chain.ts",
+    "src/__tests__/chain.ts"
+  ])("WALLET_NATIVE_USDC_DISPLAY ignores test path %s", async (filePath) => {
     await expect(
       runWalletRule(
         walletNativeUsdcDisplayRule,
-        "export const arc = { name: 'Arc Testnet', chainId: 5042002, nativeCurrency: { name: 'USDC', symbol: 'USDC' } };"
+        'const arcChain = { id: 5042002, nativeCurrency: { symbol: "ETH" } };',
+        {},
+        filePath
       )
     ).resolves.toEqual([]);
   });
 
-  it("WALLET_NATIVE_USDC_DISPLAY ignores explanatory USDC copy", async () => {
-    await expect(
-      runWalletRule(
-        walletNativeUsdcDisplayRule,
-        "const chainId = 5042002;\nexport const help = 'Arc fees are paid in USDC, not ETH.';"
-      )
-    ).resolves.toEqual([]);
+  it("WALLET_NATIVE_USDC_DISPLAY continues past a safe Arc candidate", async () => {
+    const source =
+      'const arcFirst = { id: 5042002, nativeCurrency: { symbol: "USDC" } };\nconst arcSecond = { id: 5042002, nativeCurrency: { symbol: "ETH" } };';
+    const findings = await runWalletRule(walletNativeUsdcDisplayRule, source);
+    expect(findings).toHaveLength(1);
+    expect(findings[0]?.message).toBe(nativeMessage);
+  });
+
+  it("WALLET_NATIVE_USDC_DISPLAY reports the first bad candidate deterministically", async () => {
+    const source =
+      'const arcFirst = { id: 5042002, nativeCurrency: { symbol: "ETH" } };\nconst arcSecond = { id: 5042002, nativeCurrency: { symbol: "DAI" } };';
+    const first = await runWalletRule(walletNativeUsdcDisplayRule, source);
+    const second = await runWalletRule(walletNativeUsdcDisplayRule, source);
+    expect(first).toHaveLength(1);
+    expect(first).toEqual(second);
   });
 
   it("NO_ETH_GAS_LABEL flags ETH or gwei fee labels in Arc UI", async () => {

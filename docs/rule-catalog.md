@@ -11,7 +11,7 @@ ArcReady does not perform live Arc RPC checks, Circle API checks, on-chain trans
 | Preset | Rule ID | Severity | Purpose |
 | --- | --- | --- | --- |
 | Wallet | `wallet/ARC_CHAIN_METADATA` | Critical | Checks bounded Arc-owned chain objects for literal chain ID errors and explicit Ethereum RPC/explorer endpoints. |
-| Wallet | `wallet/WALLET_NATIVE_USDC_DISPLAY` | Critical | Checks whether Arc native asset, gas-token, or fee-token display appears to use ETH instead of USDC. |
+| Wallet | `wallet/WALLET_NATIVE_USDC_DISPLAY` | Critical | Checks bounded Arc-owned chain objects for explicit ETH/Ethereum names or non-USDC native-currency symbols. |
 | Wallet | `wallet/NO_ETH_GAS_LABEL` | Critical | Checks Arc wallet fee UI text for ETH or gwei gas labels. |
 | Wallet | `wallet/ONE_CONFIRMATION_FINAL` | Critical | Checks Arc wallet transaction flows for Ethereum-style multi-confirmation waits. |
 | Wallet | `wallet/PREVRANDAO_NOT_SUPPORTED` | Critical | Checks Arc wallet code for active PREVRANDAO or mixHash assumptions. |
@@ -54,8 +54,8 @@ ArcReady does not perform live Arc RPC checks, Circle API checks, on-chain trans
 
 - Preset: Wallet
 - Severity: Critical
-- What it detects: Arc wallet native currency, gas-token, or fee-token display fields that appear to use `ETH` or `Ethereum`.
-- Why it matters: Arc fee UX should not teach users to expect ETH as the native fee asset when fees should be shown as USDC.
+- What it detects: Bounded Arc-owned chain objects in plain `.js` and `.ts` files whose direct `nativeCurrency.name` is `ETH` or `Ethereum`, or whose direct literal `nativeCurrency.symbol` is not `USDC`.
+- Why it matters: Arc chain metadata should identify USDC, rather than ETH, as the native currency and gas token.
 - Example bad pattern:
 
   ```ts
@@ -66,8 +66,8 @@ ArcReady does not perform live Arc RPC checks, Circle API checks, on-chain trans
   };
   ```
 
-- Suggested fix: Check `nativeCurrency`, gas-token, and fee-token display fields; Arc fees should be shown as USDC.
-- Static-analysis limitation: ArcReady looks for display/config patterns; it does not inspect wallet runtime state.
+- Suggested fix: Set `nativeCurrency.symbol` to `"USDC"`. If `nativeCurrency.name` is `"ETH"` or `"Ethereum"`, replace it with a USDC-facing name such as `"USDC"` or `"USD Coin"`. Handle Arc native accounting precision and USDC display precision according to the integration surface.
+- Static-analysis limitation: The detector supports direct `const` objects, direct `defineChain` objects, and one direct Arc-named wrapper child. It rejects imports, computed metadata, arrays, deep wrappers, spreads, duplicate fields, malformed syntax, and runtime values. It does not inspect generic `gasToken`, `feeToken`, or UI prose, and intentionally leaves decimal analysis to the integration-surface-specific C06B work.
 
 ### NO_ETH_GAS_LABEL
 

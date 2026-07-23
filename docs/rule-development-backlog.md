@@ -65,7 +65,7 @@ Active legacy status does not imply canonical eligibility.
 
 | Rule | Decision | Priority | Impact | Static detectability | Required analyzer or prerequisite | Canonical eligibility | Revisit trigger |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `wallet/WALLET_NATIVE_USDC_DISPLAY` | Build | P0 | Required change | Medium | Reuse or align with trusted Arc chain-object ownership from `ARC_CHAIN_METADATA` | After hardening | Begin after C05A/C05B so native-currency evidence is attached to the correct Arc chain object. |
+| `wallet/WALLET_NATIVE_USDC_DISPLAY` | Complete | P0 | Required change | Medium | Private bounded Arc chain-object scanner shared with `ARC_CHAIN_METADATA` | Non-canonical | C06A detects direct ETH/Ethereum names and non-USDC symbols; decimals and amounts remain C06B. |
 | `wallet/NO_BLOB_TX_ON_ARC` | Research | P1 | Blocker | Low to medium | Arc transaction-submission ownership, structured transaction config, or AST-backed call analysis | After analyzer | Revisit when Arc provider or chain ownership can be connected to the actual submitted transaction. |
 | `wallet/PREVRANDAO_NOT_SUPPORTED` | Replace | P1 | Required change | Low | Solidity AST and value-dependency analysis | Legacy rule never; replacement after analyzer | Replace with one shared `PREVRANDAO` dependency rule and remove unsupported blanket `mixHash` equivalence. |
 | `wallet/NO_ETH_GAS_LABEL` | Advice-only | P2 | Required change | Low | User-facing UI or rendered-label ownership | Advice output only after UI analysis | Revisit when the analyzer can distinguish UI copy from internal EVM units, tests, docs, and multichain labels. |
@@ -109,7 +109,7 @@ The 18 legacy rules do not define the complete product roadmap. New rules may de
 C05A  Complete: harden wallet/ARC_CHAIN_METADATA
 C05B  Complete: add canonical FindingV2 support for ARC_CHAIN_METADATA
 
-C06A  Harden wallet/WALLET_NATIVE_USDC_DISPLAY
+C06A  Complete: harden wallet/WALLET_NATIVE_USDC_DISPLAY
 C06B  Research and implement the native-versus-ERC20 USDC amount model
 
 C07   Build Arc transaction-submission ownership, then revisit blob transactions
@@ -120,10 +120,11 @@ C10   Add versioned App Kit chain and capability analysis
 
 Advice-only rules should not interrupt this core sequence unless real user evidence demonstrates higher value.
 
-The private runtime now executes four of 18 known inventory rules and leaves 14
-outside the canonical slice. The next recommended milestone is C06A: harden
-`wallet/WALLET_NATIVE_USDC_DISPLAY`. C06 has not started, and that rule is not
-canonical.
+The private runtime still executes four of 18 known inventory rules and leaves
+14 outside the canonical slice. C06A is complete, but
+`wallet/WALLET_NATIVE_USDC_DISPLAY` remains non-canonical. The next recommended
+milestone is C06B: research and implement the native-versus-ERC20 USDC amount
+model.
 
 ## Governance Rules
 

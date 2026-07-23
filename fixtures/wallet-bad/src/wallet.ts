@@ -2,9 +2,9 @@ export const arcWalletFlow = {
   name: "Arc Testnet",
   chainId: 1,
   nativeCurrency: {
-    name: "USDC",
-    symbol: "USDC",
-    decimals: 6
+    name: "ETH",
+    symbol: "ETH",
+    decimals: 18
   },
   confirmations: 3
 };
