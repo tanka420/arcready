@@ -14,13 +14,17 @@ acceptance criteria, or resolution of known blockers.
 
 ## Sources of truth
 
-Use this order when instructions differ:
+Use each source for its proper role:
 
-1. Executable code and tests.
-2. Validation scripts and CI workflows.
-3. Approved architecture, roadmap, and engineering documentation.
-4. This `AGENTS.md` file.
-5. The current task prompt.
+- approved product, architecture, and exec-plan documents define intended behavior
+- executable code and tests show current behavior and regression evidence
+- validation scripts and CI workflows define the executable merge gates
+- this `AGENTS.md` defines the default repository operating contract
+- the current task prompt defines the requested delta within those boundaries
+
+When these sources conflict materially, stop and report the conflict. Do not
+silently treat current code as the intended contract or let a task prompt weaken
+repository quality requirements.
 
 A task-specific approved exec plan may narrow scope, but it must not silently
 contradict the product contract or repository quality requirements.
@@ -108,7 +112,7 @@ Every material change report must state:
 
 - goal and risk class
 - files changed
-- behavior changed and deliberately unchaned
+- behavior changed and deliberately unchanged
 - validation run and its result
 - remaining limitations or unresolved decisions
 - canonical, inventory, public API, dependency, and package impact

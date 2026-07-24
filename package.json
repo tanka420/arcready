@@ -12,11 +12,12 @@
     "demo:fixtures": "tsx scripts/demo-fixtures.ts",
     "smoke:package": "tsx scripts/smoke-package.ts",
     "test": "corepack pnpm -r test",
+    "test:workflow": "vitest run scripts/create-review-bundle.test.ts",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "review:bundle": "tsx scripts/create-review-bundle.ts",
-    "verify:full": "corepack pnpm validate:fixtures && corepack pnpm test && corepack pnpm lint && corepack pnpm build && corepack pnpm smoke:package"
+    "verify:full": "corepack pnpm validate:fixtures && corepack pnpm test && corepack pnpm test:workflow && corepack pnpm lint && corepack pnpm build && corepack pnpm smoke:package"
   },
   "devDependencies": {
     "@eslint/js": "^9.28.0",
