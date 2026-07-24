@@ -9,14 +9,21 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   validate:
     name: Validate
     runs-on: ubuntu-latest
+    timeout-minutes: 25
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -29,20 +36,49 @@ jobs:
           node-version: 22
           cache: pnpm
 
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Print tool versions
+        run: |
+          node --version
+          corepack --version
+          corepack pnpm --version
+
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: corepack pnpm install --frozen-lockfile
 
-      - name: Validate fixtures
-        run: corepack pnpm validate:fixtures
+      - name: Run full repository gate
+        run: corepack pnpm verify:full
 
-      - name: Test
-        run: corepack pnpm test
+      - name: Check candidate diff
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base="${{ github.event.pull_request.base.sha }}"
+            head="${{ github.event.pull_request.head.sha }}"
+          else
+            base="${{ github.event.before }}"
+            head="${{ github.sha }}"
+          fi
 
-      - name: Lint
-        run: corepack pnpm lint
+          if [ "$base" = "0000000000000000000000000000000000000000" ]; then
+            base="$head^"
+          fi
 
-      - name: Build
-        run: corepack pnpm build
+          git diff --check "$base...$head"
 
-      - name: Package smoke test
-        run: corepack pnpm smoke:package
+      - name: Verify clean repository
+        shell: bash
+        run: |
+          smoke_tarballs="$(find . -maxdepth 1 -type f -name 'arcready-*-smoke-*.tgz' -print)"
+          if [ -n "$smoke_tarballs" ]; then
+            printf '%s\n' "$smoke_tarballs"
+            exit 1
+          fi
+
+          status="$(git status --porcelain --untracked-files=all)"
+          if [ -n "$status" ]; then
+            printf '%s\n' "$status"
+            exit 1
+          fi

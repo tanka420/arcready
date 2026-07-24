@@ -16,57 +16,31 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 5
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
         with:
-          node-version: 22
+          fetch-depth: 0
 
-      - name: Enable Corepack
-        run: corepack enable
-
-      - name: Print tool versions
+      - name: Verify workflow contract
         run: |
-          node --version
-          corepack --version
-          corepack pnpm --version
+          node -e 'const p=require("./package.json"); if(!p.scripts?.["verify:full"] || !p.scripts?.["review:bundle"]) process.exit(1)'
 
-      - name: Install dependencies
-        run: corepack pnpm install --frozen-lockfile
-
-      - name: Build
-        run: corepack pnpm build
-
-      - name: Test
-        run: corepack pnpm test
-
-      - name: Lint
-        run: corepack pnpm lint
-
-      - name: Validate fixtures
-        run: corepack pnpm validate:fixtures
-
-      - name: Smoke test package
-        run: corepack pnpm smoke:package
-
-      - name: Check diff
-        run: git diff --check
-
-      - name: Verify clean repository
+      - name: Check candidate diff
         shell: bash
         run: |
-          smoke_tarballs="$(find . -maxdepth 1 -type f -name 'arcready-*-smoke-*.tgz' -print)"
-          if [ -n "$smoke_tarballs" ]; then
-            printf '%s\n' "$smoke_tarballs"
-            exit 1
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base="${{ github.event.pull_request.base.sha }}"
+            head="${{ github.event.pull_request.head.sha }}"
+          else
+            base="${{ github.event.before }}"
+            head="${{ github.sha }}"
           fi
 
-          status="$(git status --porcelain --untracked-files=all)"
-          if [ -n "$status" ]; then
-            printf '%s\n' "$status"
-            exit 1
+          if [ "$base" = "0000000000000000000000000000000000000000" ]; then
+            base="$head^"
           fi
+
+          git diff --check "$base...$head"

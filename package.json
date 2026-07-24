@@ -14,7 +14,9 @@
     "test": "corepack pnpm -r test",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "review:bundle": "tsx scripts/create-review-bundle.ts",
+    "verify:full": "corepack pnpm validate:fixtures && corepack pnpm test && corepack pnpm lint && corepack pnpm build && corepack pnpm smoke:package"
   },
   "devDependencies": {
     "@eslint/js": "^9.28.0",
