@@ -900,18 +900,26 @@ describe("wallet rules", () => {
     ).resolves.toEqual([]);
   });
 
-  it("NO_BLOB_TX_ON_ARC flags blob transaction assumptions", async () => {
+  it("NO_BLOB_TX_ON_ARC flags a proven Arc ethers type-3 submission", async () => {
     const findings = await runWalletRule(
       noBlobTxOnArcRule,
-      "const chainId = 5042002;\nconst tx = { type: 3, maxFeePerBlobGas: 1n };"
+      `import { JsonRpcProvider, Wallet } from "ethers";
+const provider = new JsonRpcProvider("https://rpc.testnet.arc.network");
+const signer = new Wallet(key, provider);
+signer.sendTransaction({ type: 3 });`
     );
 
-    expect(findings[0]).toMatchObject({
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toEqual({
       ruleId: "wallet/NO_BLOB_TX_ON_ARC",
       severity: "critical",
+      files: ["src/fixture.ts"],
+      preset: "wallet",
       docs: "arc-blob-transactions",
-      message: expect.stringContaining("EIP-4844"),
-      suggestedFix: expect.stringContaining("EIP-1559")
+      message:
+        "Arc transaction submission uses EIP-4844 transaction type 3, which Arc does not support.",
+      suggestedFix:
+        "Submit a type-2 EIP-1559 transaction on Arc instead (`type: 2`) and remove any blob-only fields present in the submitted transaction."
     });
   });
 

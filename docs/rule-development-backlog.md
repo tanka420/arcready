@@ -63,14 +63,14 @@ Active legacy status does not imply canonical eligibility.
 
 ## Wallet Rules
 
-| Rule                                | Decision                 | Priority | Impact          | Static detectability | Required analyzer or prerequisite                                                                | Canonical eligibility                         | Revisit trigger                                                                                                |
-| ----------------------------------- | ------------------------ | -------- | --------------- | -------------------- | ------------------------------------------------------------------------------------------------ | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `wallet/WALLET_NATIVE_USDC_DISPLAY` | Complete                 | P0       | Required change | Medium               | Private bounded Arc chain-object scanner shared with `ARC_CHAIN_METADATA`                        | Non-canonical                                 | C06A detects direct ETH/Ethereum names and non-USDC symbols; decimals and amounts remain C06B.                 |
-| `wallet/ARC_USDC_AMOUNT_CONVERSION` | Complete for C06B1 reads | P0       | Blocker         | Medium               | Private lazy TypeScript AST analyzer with bounded same-file ownership and one-hop amount flow    | Non-canonical                                 | C06B1 covers native and exact Arc USDC ERC-20 reads; C06B2 follows C07 for write-side analysis.                |
-| `wallet/NO_BLOB_TX_ON_ARC`          | Research                 | P1       | Blocker         | Low to medium        | Arc transaction-submission ownership, structured transaction config, or AST-backed call analysis | After analyzer                                | Revisit when Arc provider or chain ownership can be connected to the actual submitted transaction.             |
-| `wallet/PREVRANDAO_NOT_SUPPORTED`   | Replace                  | P1       | Required change | Low                  | Solidity AST and value-dependency analysis                                                       | Legacy rule never; replacement after analyzer | Replace with one shared `PREVRANDAO` dependency rule and remove unsupported blanket `mixHash` equivalence.     |
-| `wallet/NO_ETH_GAS_LABEL`           | Advice-only              | P2       | Required change | Low                  | User-facing UI or rendered-label ownership                                                       | Advice output only after UI analysis          | Revisit when the analyzer can distinguish UI copy from internal EVM units, tests, docs, and multichain labels. |
-| `wallet/ONE_CONFIRMATION_FINAL`     | Advice-only              | P3       | Recommendation  | Medium               | Shared Arc finality-policy model                                                                 | Advice output only                            | Consolidate with bridge confirmation guidance when a shared finality analyzer exists.                          |
+| Rule                                | Decision                 | Priority | Impact          | Static detectability | Required analyzer or prerequisite                                                             | Canonical eligibility                         | Revisit trigger                                                                                                |
+| ----------------------------------- | ------------------------ | -------- | --------------- | -------------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `wallet/WALLET_NATIVE_USDC_DISPLAY` | Complete                 | P0       | Required change | Medium               | Private bounded Arc chain-object scanner shared with `ARC_CHAIN_METADATA`                     | Non-canonical                                 | C06A detects direct ETH/Ethereum names and non-USDC symbols; decimals and amounts remain C06B.                 |
+| `wallet/ARC_USDC_AMOUNT_CONVERSION` | Complete for C06B1 reads | P0       | Blocker         | Medium               | Private lazy TypeScript AST analyzer with bounded same-file ownership and one-hop amount flow | Non-canonical                                 | C06B1 covers native and exact Arc USDC ERC-20 reads; C06B2 follows C07 for write-side analysis.                |
+| `wallet/NO_BLOB_TX_ON_ARC`          | Complete for C07B ethers | P1       | Blocker         | Medium               | Private lazy ethers transaction-submission ownership analyzer with exact type-3 evidence      | Non-canonical                                 | C07B covers bounded same-file ethers Wallet and JsonRpcSigner submissions; viem remains deferred to C07C.      |
+| `wallet/PREVRANDAO_NOT_SUPPORTED`   | Replace                  | P1       | Required change | Low                  | Solidity AST and value-dependency analysis                                                    | Legacy rule never; replacement after analyzer | Replace with one shared `PREVRANDAO` dependency rule and remove unsupported blanket `mixHash` equivalence.     |
+| `wallet/NO_ETH_GAS_LABEL`           | Advice-only              | P2       | Required change | Low                  | User-facing UI or rendered-label ownership                                                    | Advice output only after UI analysis          | Revisit when the analyzer can distinguish UI copy from internal EVM units, tests, docs, and multichain labels. |
+| `wallet/ONE_CONFIRMATION_FINAL`     | Advice-only              | P3       | Recommendation  | Medium               | Shared Arc finality-policy model                                                              | Advice output only                            | Consolidate with bridge confirmation guidance when a shared finality analyzer exists.                          |
 
 ## Bridge Rules
 
@@ -113,7 +113,9 @@ C05B  Complete: add canonical FindingV2 support for ARC_CHAIN_METADATA
 C06A  Complete: harden wallet/WALLET_NATIVE_USDC_DISPLAY
 C06B1 Complete: bounded read-side native-versus-ERC20 amount interpretation
 
-C07   Build Arc transaction-submission ownership, then revisit blob transactions
+C07A  Complete: private ethers transaction-submission ownership
+C07B  Complete: ethers-only NO_BLOB_TX_ON_ARC hardening
+C07C  Deferred: separately plan and approve viem ownership
 C06B2 Add write-side amount analysis after C07 ownership
 C08   Add CCTP attestation control-flow analysis
 C09   Add one Solidity PREVRANDAO value-dependency analyzer
@@ -123,11 +125,11 @@ C10   Add versioned App Kit chain and capability analysis
 Advice-only rules should not interrupt this core sequence unless real user evidence demonstrates higher value.
 
 The private runtime still executes four of 19 known inventory rules and leaves
-15 outside the canonical slice. C06B1 is complete, but
-`wallet/ARC_USDC_AMOUNT_CONVERSION` remains non-canonical. The next recommended
-milestone is C07 transaction-submission ownership; C06B2 write-side amount
-analysis follows C07. C06C remains only a proposed later UI-binding milestone
-for duplicate presentation and related display ownership.
+15 outside the canonical slice. C07A and the ethers-only C07B consumer are
+complete but remain private/non-canonical. C07C viem ownership requires a
+separate approved plan before any C07C-dependent C06B2 work. C06C remains only
+a proposed later UI-binding milestone for duplicate presentation and related
+display ownership.
 
 ## Governance Rules
 

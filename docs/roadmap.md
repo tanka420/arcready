@@ -175,9 +175,20 @@ rule remains outside the four-rule canonical runtime.
 
 Goal:
 
-Associate a submitted transaction with an Arc provider or chain context.
+Associate an exact ethers transaction submission with an Arc provider or
+transaction chain context and use that proof to harden
+`wallet/NO_BLOB_TX_ON_ARC`.
 
-This capability is a prerequisite for reliable blob-transaction and transaction-specific gas or fee checks.
+C07A provides a private, lazy, same-file ethers v6 analyzer for exact
+`JsonRpcProvider`, `Wallet`, awaited `getSigner`, and dot-call
+`sendTransaction` flows. C07B reports only structurally safe own decimal
+`type: 3` transactions with effective `proven-arc` ownership. Broad Arc/blob
+text matching has been removed; supporting blob fields never independently
+create a finding. The rule remains non-canonical.
+
+C07C viem ownership and consumer behavior remain deferred to a separate plan.
+Imported/cross-file flows, wrappers, inferred transaction type, JSX/TSX, and
+runtime validation remain unsupported.
 
 ### C08 — CCTP attestation control-flow analysis
 
@@ -252,13 +263,7 @@ The following remain out of scope for the near-term roadmap:
 
 ## Current Recommended Next Step
 
-The next recommended engineering milestone is:
-
-```text
-C07 — Arc transaction-submission ownership
-```
-
-C06B1 is complete and `wallet/ARC_USDC_AMOUNT_CONVERSION` remains
-non-canonical. C06B2 write-side amount analysis follows C07 ownership. C06C is
-only a proposed later UI-binding milestone for duplicate balance presentation.
-The private canonical runtime remains exactly four rules.
+Complete C07B release-candidate/pilot evidence, then separately plan and approve
+C07C before starting viem-dependent transaction ownership or C06B2 write-side
+analysis. C06C remains only a proposed later UI-binding milestone for duplicate
+balance presentation. The private canonical runtime remains exactly four rules.

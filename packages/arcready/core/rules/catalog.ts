@@ -520,10 +520,10 @@ export const ruleTaxonomyCatalog = [
       }
     ],
     rationale:
-      "Submitting an applicable blob transaction is unsupported, but blob terminology alone does not prove an Arc transaction submission.",
+      "An exact ethers type-3 transaction submitted through a proven Arc-owned provider is unsupported; exact ownership and sink evidence prevent sibling or prose-only context from creating a blocker.",
     detectorLimitations: [
-      "Blob fields may belong to another chain, a type definition, or documentation.",
-      "The detector does not trace transaction construction to an Arc provider."
+      "Analysis is limited to bounded same-file .js and .ts ethers v6 Wallet and awaited JsonRpcSigner flows with exact supported construction and sendTransaction grammar.",
+      "Imported or cross-file values, wrappers, inferred transaction type, JSX/TSX, runtime state, and all viem/C07C flows remain unsupported; supporting blob fields never independently prove transaction kind."
     ],
     deprecated: false
   },
