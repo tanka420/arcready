@@ -6,8 +6,10 @@
 
 ## Purpose
 
-This document owns sequencing and development decisions. It records which rules
-should be built, researched, kept as advice, replaced, or retired.
+This document owns sequencing and development decisions.
+
+It records which rules should be built, researched, kept as advice, replaced, or
+retired.
 
 It is not a commitment to canonicalize every legacy rule.
 
@@ -21,23 +23,19 @@ packages/arcready/core/rules/catalog.ts
 
 ## Decision values
 
-| Decision | Meaning |
-| --- | --- |
-| `Complete` | The approved detector scope is implemented and reviewed. |
-| `Build` | The rule has enough evidence and user value for a bounded implementation milestone. |
-| `Research` | The problem matters, but reliable static evidence is not yet defined. |
-| `Advice-only` | Keep as optional guidance, not a core compatibility blocker. |
-| `Replace` | Preserve the product problem, but stop hardening the current detector. |
-| `Retire` | Do not invest further in the current premise. |
+- `Complete`: the approved detector scope is implemented and reviewed.
+- `Build`: the rule has enough evidence and user value for a bounded milestone.
+- `Research`: the problem matters, but reliable static evidence is not defined.
+- `Advice-only`: keep as optional guidance, not a compatibility blocker.
+- `Replace`: preserve the product problem but stop hardening the current rule.
+- `Retire`: do not invest further in the current premise.
 
 ## Priority values
 
-| Priority | Meaning |
-| --- | --- |
-| `P0` | Current core compatibility work. |
-| `P1` | High-value work after the current P0 sequence. |
-| `P2` | Useful but narrower, framework-specific, or dependent on new capability. |
-| `P3` | Optional advice, replacement research, or low urgency. |
+- `P0`: current core compatibility work.
+- `P1`: high-value work after the current P0 sequence.
+- `P2`: useful but narrower, framework-specific, or capability-dependent work.
+- `P3`: optional advice, replacement research, or low-urgency work.
 
 ## Canonical eligibility
 
@@ -56,30 +54,78 @@ Legacy presence does not imply canonical eligibility.
 
 ## Completed canonical rules
 
-| Rule | Decision | Priority | Canonical status | Notes |
-| --- | --- | --- | --- | --- |
-| `bridge/CCTP_DOMAIN_26` | Complete | P0 | Canonical | Detects Arc CCTP domain values other than `26`. |
-| `bridge/NO_WRAPPED_USDC_ON_ARC` | Complete | P0 | Canonical | Detects Arc-side wrapped-USDC mappings with source-chain isolation. |
-| `bridge/RELAYER_USES_USDC_FOR_GAS` | Complete | P0 | Canonical | Detects literal ETH relayer gas-token configuration owned by Arc. |
-| `wallet/ARC_CHAIN_METADATA` | Complete | P0 | Canonical | Bounded Arc-owned metadata analysis with one adapter specification. |
+- `bridge/CCTP_DOMAIN_26`
+  - Decision: Complete.
+  - Priority: P0.
+  - Detects Arc CCTP domain values other than `26`.
+- `bridge/NO_WRAPPED_USDC_ON_ARC`
+  - Decision: Complete.
+  - Priority: P0.
+  - Detects Arc-side wrapped-USDC mappings with source-chain isolation.
+- `bridge/RELAYER_USES_USDC_FOR_GAS`
+  - Decision: Complete.
+  - Priority: P0.
+  - Detects literal ETH relayer gas-token configuration owned by Arc.
+- `wallet/ARC_CHAIN_METADATA`
+  - Decision: Complete.
+  - Priority: P0.
+  - Uses bounded Arc-owned metadata analysis.
 
 The private canonical runtime remains exactly four rules.
 
 ## Wallet rules
 
-| Rule | Decision | Priority | Impact | Required analyzer or prerequisite | Canonical eligibility | Revisit trigger |
-| --- | --- | --- | --- | --- | --- | --- |
-| `wallet/WALLET_NATIVE_USDC_DISPLAY` | Complete | P0 | Required change | Bounded Arc chain-object scanner shared with `ARC_CHAIN_METADATA` | Non-canonical | Revisit amount and UI binding separately. |
-| `wallet/ARC_USDC_AMOUNT_CONVERSION` | Complete for C06B1 reads | P0 | Blocker | Private bounded same-file amount interpretation | Non-canonical | C06B2 follows approved transaction-ownership work. |
-| `wallet/NO_BLOB_TX_ON_ARC` | Complete for C07B ethers; Build for C07C viem MVP | P0 | Blocker | Completed ethers analyzer plus conservative viem explicit-pattern analyzer | Non-canonical | Expand viem only from concrete user patterns or independently approved milestones. |
-| `wallet/PREVRANDAO_NOT_SUPPORTED` | Replace | P1 | Required change | Solidity AST and value-dependency analysis | Current legacy rule never | Replace with one shared dependency rule; remove blanket `mixHash` equivalence. |
-| `wallet/NO_ETH_GAS_LABEL` | Advice-only | P2 | Required change | Rendered UI-label ownership | Advice output only | Revisit when UI copy can be separated from internal EVM terminology. |
-| `wallet/ONE_CONFIRMATION_FINAL` | Advice-only | P3 | Recommendation | Shared Arc finality-policy model | Advice output only | Consolidate with bridge confirmation guidance. |
+### `wallet/WALLET_NATIVE_USDC_DISPLAY`
 
-### C07C viem scope decision
+- Decision: Complete.
+- Priority: P0.
+- Impact: Required change.
+- Canonical status: Non-canonical.
+- Revisit amount and UI binding separately.
 
-C07C is no longer deferred in the abstract. It is an active bounded build with a
-conservative explicit-pattern contract.
+### `wallet/ARC_USDC_AMOUNT_CONVERSION`
+
+- Decision: Complete for C06B1 reads.
+- Priority: P0.
+- Impact: Blocker.
+- Canonical status: Non-canonical.
+- C06B2 follows approved transaction-ownership work.
+
+### `wallet/NO_BLOB_TX_ON_ARC`
+
+- Decision: Complete for C07B ethers; Build for C07C viem MVP.
+- Priority: P0.
+- Impact: Blocker.
+- Canonical status: Non-canonical.
+- Required capability: completed ethers ownership plus conservative viem
+  explicit-pattern ownership.
+- Expand viem only from concrete user patterns or separately approved work.
+
+### `wallet/PREVRANDAO_NOT_SUPPORTED`
+
+- Decision: Replace.
+- Priority: P1.
+- Impact: Required change.
+- Replace with one shared Solidity value-dependency rule.
+- Do not preserve blanket `mixHash` equivalence.
+
+### `wallet/NO_ETH_GAS_LABEL`
+
+- Decision: Advice-only.
+- Priority: P2.
+- Impact: Required change.
+- Revisit when rendered UI labels can be separated from internal terminology.
+
+### `wallet/ONE_CONFIRMATION_FINAL`
+
+- Decision: Advice-only.
+- Priority: P3.
+- Impact: Recommendation.
+- Consolidate with bridge confirmation guidance.
+
+## C07C viem scope decision
+
+C07C is an active bounded build with a conservative explicit-pattern contract.
 
 Supported initial value:
 
@@ -95,45 +141,88 @@ Deferred until real usage evidence or separate approval:
 
 - `maxFeePerBlobGas` and `authorizationList` inference;
 - blobs, KZG, versioned hashes, and sidecars;
-- per-call chain/account overrides;
-- alias depth 2+, branching aliases, and general mutation graphs;
+- per-call chain or account overrides;
+- alias depth 2+, branching aliases, and mutation graphs;
 - imported, cross-function, and cross-file resolution;
 - custom transport, formatter, serializer, and client extensions;
 - `writeContract`, raw, sync, deploy, and account-abstraction paths;
 - shared static-analysis infrastructure.
 
-The rejected local candidate `61ce4f6...` is audit evidence only and must not be
-used as an implementation base.
+The rejected candidate `61ce4f6...` is audit evidence only.
+
+It must not be used as an implementation base.
 
 ## Bridge rules
 
-| Rule | Decision | Priority | Impact | Required analyzer or prerequisite | Canonical eligibility | Revisit trigger |
-| --- | --- | --- | --- | --- | --- | --- |
-| `bridge/ATTESTATION_404_NOT_FATAL` | Research | P1 | Required change | Retry-loop and typed HTTP control-flow analysis | After analyzer | Revisit when pending polling can be distinguished from terminal failure and invalid parameters. |
-| `bridge/NO_PREVRANDAO_RELAY_SELECTION` | Replace | P1 | Required change | Shared Solidity value-dependency analysis | Current legacy rule never | Merge into the replacement PREVRANDAO dependency rule. |
-| `bridge/BRIDGE_CONFIRMATIONS_ONE` | Advice-only | P3 | Recommendation | Shared finality-policy model | Advice output only | Consolidate with wallet confirmation guidance. |
+### `bridge/ATTESTATION_404_NOT_FATAL`
+
+- Decision: Research.
+- Priority: P1.
+- Impact: Required change.
+- Requires retry-loop and typed HTTP control-flow analysis.
+
+### `bridge/NO_PREVRANDAO_RELAY_SELECTION`
+
+- Decision: Replace.
+- Priority: P1.
+- Impact: Required change.
+- Merge into the shared Solidity value-dependency rule.
+
+### `bridge/BRIDGE_CONFIRMATIONS_ONE`
+
+- Decision: Advice-only.
+- Priority: P3.
+- Impact: Recommendation.
+- Consolidate with wallet confirmation guidance.
 
 ## App Kit rules
 
-| Rule | Decision | Priority | Impact | Required analyzer or prerequisite | Canonical eligibility | Revisit trigger |
-| --- | --- | --- | --- | --- | --- | --- |
-| `app-kit/APPKIT_CHAIN_IDENTIFIER_VALID` | Build | P2 | Blocker | Version-aware App Kit argument/configuration ownership | After hardening | Revisit after current wallet core work. |
-| `app-kit/UB_DELEGATE_REQUIRED` | Research | P2 | Required change | Account-role and delegate-controlled spend modeling | After SDK model | Revisit when owner and delegate flows can be distinguished. |
-| `app-kit/APPKIT_CAPABILITY_SUPPORTED` | Replace | P2 | Undetermined | Official versioned operation/token/adapter/support matrix | Current rule never | Design a new versioned compatibility rule. |
-| `app-kit/APPKIT_CUSTOM_RPC_RECOMMENDED` | Advice-only | P3 | Recommendation | Project-wide provider/import resolution | Never in core slice | Keep as optional advice. |
-| `app-kit/UB_FEE_EXPLANATION_PRESENT` | Advice-only | P3 | Recommendation | Confirmation-screen or UI-flow ownership | Never in core slice | Revisit only with rendered UI ownership. |
-| `app-kit/APPKIT_BRIDGE_MIN_AMOUNT_NOTE` | Retire | P3 | Undetermined | None for current premise | Never | Research any future fee or disclosure rule separately. |
+### `app-kit/APPKIT_CHAIN_IDENTIFIER_VALID`
+
+- Decision: Build.
+- Priority: P2.
+- Impact: Blocker.
+- Requires version-aware App Kit argument or configuration ownership.
+
+### `app-kit/UB_DELEGATE_REQUIRED`
+
+- Decision: Research.
+- Priority: P2.
+- Impact: Required change.
+- Requires account-role and delegate-controlled spend modeling.
+
+### `app-kit/APPKIT_CAPABILITY_SUPPORTED`
+
+- Decision: Replace.
+- Priority: P2.
+- Design a versioned compatibility rule from official support tables.
+
+### `app-kit/APPKIT_CUSTOM_RPC_RECOMMENDED`
+
+- Decision: Advice-only.
+- Priority: P3.
+- Keep in an optional advice pack.
+
+### `app-kit/UB_FEE_EXPLANATION_PRESENT`
+
+- Decision: Advice-only.
+- Priority: P3.
+- Revisit only with rendered confirmation-screen ownership.
+
+### `app-kit/APPKIT_BRIDGE_MIN_AMOUNT_NOTE`
+
+- Decision: Retire.
+- Priority: P3.
+- Research future fee or disclosure guidance separately.
 
 ## High-value opportunities beyond current inventory
 
-| Opportunity | Priority | Why it matters | Required capability |
-| --- | --- | --- | --- |
-| Native USDC versus ERC-20 USDC amount model | P0/P1 | Incorrect conversion can create real value errors. | Bounded amount-flow analysis. |
-| Duplicate native and ERC-20 USDC presentation | P1 | One underlying Arc balance should not appear as two unrelated assets. | Wallet state and UI binding analysis. |
-| Arc transaction-submission ownership | P0 | Enables reliable blob and future transaction checks. | Bounded provider/client/request association. |
-| Indexer ordering by block number | P2 | Sub-second blocks can share timestamps. | Query-shape and cursor analysis. |
-| Ethereum-style reorg assumptions | P2 | Arc finality differs from probabilistic Ethereum workflows. | Control-flow and infrastructure analysis. |
-| Native-value and USDC event reconciliation | P2 | Indexers need Arc-specific accounting semantics. | Event and balance reconciliation. |
+- Native USDC versus ERC-20 USDC amount modeling.
+- Duplicate native and ERC-20 USDC presentation.
+- Arc transaction-submission ownership.
+- Indexer ordering by block number.
+- Ethereum-style reorg assumptions.
+- Native-value and USDC event reconciliation.
 
 ## Recommended sequence
 
@@ -157,16 +246,16 @@ Advice-only work should not interrupt this sequence without real user evidence.
 
 ## Expansion triggers
 
-A deferred analyzer family may be promoted only when at least one of these is
+A deferred analyzer family may be promoted only when at least one condition is
 true:
 
-- a user reports a concrete false negative or unsupported real integration;
+- a user reports a concrete false negative or unsupported integration;
 - multiple real repositories use the same unsupported pattern;
 - at least two high-value rules need the same stable capability;
-- the expansion clearly reduces total code or regression risk;
-- official versioned documentation changes the product premise.
+- expansion clearly reduces total code or regression risk;
+- official versioned documentation changes the premise.
 
-A theoretical language pattern is not sufficient.
+A theoretical language pattern is insufficient.
 
 ## Governance rules
 
@@ -174,11 +263,13 @@ A theoretical language pattern is not sufficient.
 2. Do not promote advice into a blocker to increase rule count.
 3. Do not keep hardening a detector whose premise is unsupported.
 4. Prefer exact common patterns before wider semantic infrastructure.
-5. Share analysis infrastructure only after multiple stable consumers justify it.
-6. Record decision changes here and update policy metadata separately when
-   official support or detector claims change.
-7. Revalidate versioned Arc, Circle, viem, and App Kit sources before implementing
-   deferred work.
+5. Share infrastructure only after multiple stable consumers justify it.
+6. Record decision changes here and policy changes in the catalog.
+7. Revalidate versioned Arc, Circle, viem, and App Kit sources before deferred
+   work.
 8. User-reported failures may change priority but do not bypass canonical
    eligibility.
-9. After two unsuccessful review cycles, stop and reduce scope or redesign.
+9. Continue correction until no known blocker remains in the declared scope.
+10. Reduce scope, redesign, or split work when defects reveal an architecture
+    problem.
+11. Do not impose a fixed numerical cap on correction or review rounds.
