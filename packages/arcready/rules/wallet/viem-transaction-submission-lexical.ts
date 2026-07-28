@@ -125,7 +125,7 @@ export function buildViemLexicalIndex(
     } else if (ts.isImportEqualsDeclaration(node)) {
       add(currentLexicalScope, node.name.text, otherBinding(node.name));
     } else if (ts.isImportDeclaration(node)) {
-      collectImportBindings(ts, sourceFile, node, currentLexicalScope, add);
+      collectImportBindings(ts, node, currentLexicalScope, add);
     } else if (ts.isFunctionExpression(node) && node.name !== undefined) {
       add(currentLexicalScope, node.name.text, otherBinding(node.name));
     }
@@ -280,7 +280,6 @@ function otherBinding(node: Node): Omit<MutableBinding, "writeOffsets"> {
 
 function collectImportBindings(
   ts: TypeScript,
-  sourceFile: SourceFile,
   node: import("typescript").ImportDeclaration,
   scope: Node,
   add: (
