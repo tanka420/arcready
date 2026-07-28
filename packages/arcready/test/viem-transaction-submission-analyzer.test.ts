@@ -136,7 +136,8 @@ describe("viem analyzer compiler and status boundary", () => {
         createSourceFile: () => ({ isDeclarationFile: false })
       })
     ]
-  ] as const)("fails closed for %s", async (_label, loader) => {
+  ] as const)("fails closed for %s", async (label, loader) => {
+    void label;
     expect(await analyze("const value = 1;", loader)).toEqual({
       status: "compiler-unavailable",
       submissions: []
