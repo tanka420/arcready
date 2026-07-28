@@ -28,8 +28,8 @@ ArcReady should remain:
 - focused on real developer workflows and common source patterns.
 
 ArcReady should not become a generic multi-chain linter, Solidity security
-auditor, hosted monitoring service, SaaS dashboard, or speculative static-analysis
-framework.
+auditor, hosted monitoring service, SaaS dashboard, or speculative
+static-analysis framework.
 
 ## Product development rule
 
@@ -42,9 +42,9 @@ exact common pattern
 → wider semantic analysis only after usage evidence
 ```
 
-Do not begin with alias graphs, mutation graphs, cross-file resolution, prototype
-analysis, or general control-flow unless a prioritized Arc rule cannot be made
-reliable with a smaller design.
+Do not begin with alias graphs, mutation graphs, cross-file resolution,
+prototype analysis, or general control-flow unless a prioritized Arc rule cannot
+be made reliable with a smaller design.
 
 For critical findings, a bounded false negative outside the declared surface is
 preferable to a false positive inside CI.
@@ -132,8 +132,8 @@ Decimals, amount flow, balances, and UI prose remain separate problems.
 ### C06B1 — Complete: read-side Arc USDC amount conversion
 
 Private lazy same-file analysis for direct native balance reads and exact Arc
-USDC ERC-20 `balanceOf` reads. Supports only bounded direct or one-binding
-amount interpretation.
+USDC ERC-20 `balanceOf` reads. Supports only bounded direct or one-binding amount
+interpretation.
 
 ### C07A — Complete: private ethers transaction ownership
 
@@ -159,20 +159,21 @@ one immutable same-file binding, exact `.sendTransaction(...)`, and exact own
 
 The replacement uses two private viem-specific modules and does not create a
 shared AST framework. Wider blob inference, alias/mutation graphs, per-call
-overrides, custom hooks, alternate actions, and cross-file analysis are deferred.
+overrides, custom hooks, alternate actions, and cross-file analysis are
+deferred.
 
 ### C07C-B — Blocked: thin viem integration
 
 Starts only after replacement C07C-A is independently approved.
 
-The integration may combine already-valid ethers and viem records and choose the
-earliest `callOffset`. It must not add new viem inference or change public output,
-inventory, canonical status, scoring, schema, reporters, or exits.
+The integration may combine already-valid ethers and viem records and choose
+the earliest `callOffset`. It must not add new viem inference or change public
+output, inventory, canonical status, scoring, schema, reporters, or exits.
 
 ### C06B2 — Planned after C07C
 
-Write-side amount analysis remains behind transaction-ownership work. It must not
-inherit unnecessary semantic complexity from the rejected C07C-A design.
+Write-side amount analysis remains behind transaction-ownership work. It must
+not inherit unnecessary semantic complexity from the rejected C07C-A design.
 
 ### C08 — Research: CCTP attestation control flow
 
@@ -206,9 +207,9 @@ analysis infrastructure without users.
 ## Distribution and release track
 
 The v0.3 package and GitHub Action are already released. Distribution work may
-proceed independently of engineering milestones after verifying package contents,
-CLI installation, Action references, release notes, and CI on the selected
-release commit.
+proceed independently of engineering milestones after verifying package
+contents, CLI installation, Action references, release notes, and CI on the
+selected release commit.
 
 Core milestones must not silently change an already selected release commit.
 
@@ -252,10 +253,12 @@ The following remain outside the near-term roadmap:
    alignment.
 2. Implement replacement C07C-A from fresh `main` on
    `agent/c07c-a-viem-explicit-mvp`.
-3. Complete one comprehensive review, at most one correction batch, and one
-   focused re-review.
-4. Implement only the thin C07C-B integration.
-5. Return focus to broken/fixed demo quality, developer experience, and adoption
+3. Obtain independent adversarial review and correct until no known blocker
+   remains in the declared scope.
+4. Reduce scope, redesign, or split the work when review identifies a systemic
+   architecture defect.
+5. Implement only the thin C07C-B integration.
+6. Return focus to broken/fixed demo quality, developer experience, and adoption
    evidence before opening deferred semantic families.
 
 The private canonical runtime remains exactly four rules throughout C07C.
