@@ -2,23 +2,24 @@
 
 ## Status
 
-- Status: replacement decision record; implementation remains blocked until the
-  planning alignment PR is independently reviewed and merged.
+- Status: replacement decision record.
 - Risk class: R3.
 - Parent plan: `docs/exec-plans/active/C07C.md`.
-- Planning base: `main` at `1e595050373009994636bf9afef70500109f573b`.
+- Planning base: `1e595050373009994636bf9afef70500109f573b`.
 - Planning branch: `agent/c07c-a-explicit-mvp-plan`.
 - Rule: `wallet/NO_BLOB_TX_ON_ARC`.
 - Date: 2026-07-28.
 
-The parent C07C plan now contains the authoritative replacement implementation
-contract. This file preserves the decision history, rejected candidate evidence,
-and reasons for the reset.
+The parent C07C plan is the authoritative implementation contract.
+
+This file preserves the reset decision and failed-candidate evidence.
 
 ## Rejected candidate
 
 The first local C07C-A candidate was implemented on
-`agent/c07c-a-viem-analyzer`:
+`agent/c07c-a-viem-analyzer`.
+
+Evidence:
 
 - candidate commit: `61ce4f68a28f0c0f589cd52a7c47cd7ef78ac344`;
 - base: `1e595050373009994636bf9afef70500109f573b`;
@@ -26,7 +27,8 @@ The first local C07C-A candidate was implemented on
 - targeted suite: 134/134 passed;
 - analyzer: 989 physical lines;
 - tests: 1,403 physical lines;
-- package boundary: unchanged at 7 files and 68,925 pnpm smoke bytes.
+- package boundary: unchanged at 7 files and 68,925 bytes;
+- `prettier-ignore` directives: 40.
 
 Independent adversarial review rejected the candidate with:
 
@@ -35,43 +37,43 @@ Independent adversarial review rejected the candidate with:
 - 0 minor findings;
 - root-cause classes A = 8, B = 1, C = 1.
 
-The review confirmed false positives, false negatives, status-contract
-violations, incomplete semantic families, and inadequate readable budget. The
-analyzer used 34 `prettier-ignore` directives and had only 11 lines remaining
-under the original hard stop.
+The review found false positives, false negatives, status-contract violations,
+incomplete semantic families, and inadequate readable budget.
 
 Disposition:
 
 - do not push the candidate;
 - do not open a PR from it;
 - do not merge or amend it;
-- do not cherry-pick it into the replacement;
-- do not treat its passing test count as acceptance evidence;
+- do not cherry-pick it;
+- do not reuse it as the replacement implementation base;
+- do not treat its passing tests as acceptance evidence;
 - retain it only as local audit evidence.
 
 ## Strategic decision
 
-The broad semantic-analyzer design is withdrawn.
+Withdraw the broad semantic-analyzer design.
 
-C07C-A will be rebuilt as a **conservative explicit-pattern MVP**. ArcReady will
-report only a small, common, source-proven viem shape. Unsupported or ambiguous
-code produces no viem finding and is not described as safe.
+Rebuild C07C-A as a conservative explicit-pattern MVP.
 
-The decision intentionally prefers bounded false negatives over critical false
+ArcReady reports only a small source-proven viem shape.
+
+Unsupported or ambiguous code produces no viem finding and is not described as
+safe.
+
+This intentionally prefers bounded false negatives over critical false
 positives.
 
 Rejected alternatives:
 
-1. Patch the 989-line monolith — rejected because reviewability and budget had
-   already failed.
-2. Build a 1,300–1,700-line full semantic analyzer — deferred because its product
-   value does not justify the current complexity.
-3. Extract a shared ethers/viem framework — rejected as speculative R3
-   infrastructure and an unnecessary C07B regression surface.
+1. Patch the monolith. Reviewability and budget already failed.
+2. Build a larger full semantic analyzer. Product value does not justify the
+   complexity.
+3. Extract a shared ethers/viem framework. The common semantics are not proven.
 
 ## Replacement shape
 
-The authoritative parent plan now locks two private viem-specific modules:
+Use two private viem-specific modules:
 
 ```text
 packages/arcready/rules/wallet/viem-transaction-submission-lexical.ts
@@ -90,58 +92,70 @@ The MVP supports only:
 
 The MVP defers:
 
-- local inference from `maxFeePerBlobGas` and `authorizationList`;
+- `maxFeePerBlobGas` and `authorizationList` inference;
 - blobs, KZG, versioned hashes, and sidecars;
-- per-call chain/account overrides;
-- alias depth 2+, branching aliases, and general mutation graphs;
+- per-call chain or account overrides;
+- alias depth 2+, branching aliases, and mutation graphs;
 - imported, cross-function, and cross-file resolution;
-- `.extend(...)`, custom actions, transports, formatters, and serializers;
+- `.extend(...)` and custom actions;
+- custom transports, formatters, serializers, and hooks;
 - `writeContract`, raw, sync, deploy, and account-abstraction paths;
-- direct chain objects and `defineChain`;
-- shared lexical/static-analysis infrastructure.
+- direct chain objects and `defineChain(...)`;
+- shared static-analysis infrastructure.
 
-Future expansion requires at least one concrete user pattern, issue, fixture, or
-separately approved milestone. Theoretical expressibility alone is not enough.
+Future expansion requires concrete usage evidence or separate approval.
 
-## Budgets and process
+Theoretical expressibility alone is insufficient.
 
-Production target across the two private modules is 700–1,000 physical lines,
-with a hard stop above 1,100. Tests target 1,000–1,400 physical lines across at
-most two files, with a hard stop above 1,500.
+## Budgets
 
-No semantic code may use `prettier-ignore`, minification, generated fixtures,
-snapshots, helper-file fragmentation, or formatting compression to satisfy the
-budget.
+Production target:
 
-Delivery process:
+- 700–1,000 physical lines across two private modules;
+- hard stop above 1,100 lines.
 
-1. merge the planning alignment;
-2. start from fresh `main` on `agent/c07c-a-viem-explicit-mvp`;
-3. implement compiler/status and lexical contracts first;
-4. implement the exact positive grammar;
-5. add fail-closed, source-order, and sibling-isolation tests;
-6. run targeted checks and package-boundary proof;
-7. perform one comprehensive independent review;
-8. apply at most one correction batch;
-9. perform one focused re-review.
+Test target:
 
-A systemic issue after review cycle two stops the milestone for another scope
-decision.
+- 1,000–1,400 physical lines across at most two files;
+- hard stop above 1,500 lines.
+
+Do not use `prettier-ignore`, minification, generated fixtures, snapshots, or
+helper-file fragmentation to hide scope.
+
+## Delivery process
+
+1. Merge the planning alignment.
+2. Start from fresh `main` on `agent/c07c-a-viem-explicit-mvp`.
+3. Implement compiler and lexical contracts first.
+4. Implement the exact positive grammar.
+5. Add fail-closed, source-order, and sibling-isolation tests.
+6. Run targeted checks and package-boundary proof.
+7. Obtain independent adversarial review.
+8. Correct until no known blocker remains in the declared scope.
+
+There is no fixed numerical cap on correction or review rounds.
+
+Repeated local defects with one cause require a regression family.
+
+A missing contract class requires specification and matrix updates.
+
+A systemic architecture defect requires scope reduction, redesign, or a split.
 
 ## Unchanged boundaries
 
 The replacement must preserve:
 
 - exactly 7 published files;
-- exactly 68,925 bytes in the C07C-A pnpm smoke artifact;
+- exactly 68,925 bytes in the C07C-A package smoke artifact;
 - no public viem analyzer exports or declarations;
 - no `viem` dependency;
-- TypeScript `5.9.3` external and lazy;
+- lazy external TypeScript `5.9.3` handling;
 - all C07B ethers behavior and tests;
-- 19 known / 17 default / 7 wallet / 4 canonical rules;
+- 19 known, 17 default, 7 wallet, and 4 canonical rules;
 - non-canonical status of `NO_BLOB_TX_ON_ARC`;
-- rule ID, severity, message, fix, docs URL, presets, reporters, schema, scoring,
-  file order, exits, and one-finding-per-file behavior.
+- rule ID, severity, message, fix, and docs URL;
+- presets, reporters, schema, scoring, file order, exits, and
+  one-finding-per-file behavior.
 
 Any drift is a stop condition.
 
@@ -150,11 +164,11 @@ Any drift is a stop condition.
 - [x] Original C07C planning contract merged.
 - [x] First C07C-A candidate implemented locally.
 - [x] Independent adversarial review completed.
-- [x] Candidate rejected: 1 blocker / 9 major / 0 minor.
+- [x] Candidate rejected: 1 blocker, 9 major, 0 minor.
 - [x] Conservative explicit-pattern MVP selected.
 - [x] Parent C07C plan aligned with the replacement direction.
-- [ ] Planning alignment independently reviewed and merged.
-- [ ] Replacement C07C-A implemented from fresh main.
+- [ ] Planning alignment independently approved and merged.
+- [ ] Replacement C07C-A implemented from fresh `main`.
 - [ ] Replacement C07C-A independently approved.
 - [ ] C07C-B thin integration started.
 
@@ -162,13 +176,17 @@ C07C-B remains blocked until replacement C07C-A is independently approved.
 
 ## Exit criteria for this planning alignment
 
-- Exact scope is documentation only:
-  - `docs/exec-plans/active/C07C.md`;
-  - `docs/exec-plans/active/C07C-A-explicit-mvp-amendment.md`;
-  - `docs/roadmap.md`;
-  - `docs/rule-development-backlog.md`.
-- One independent planning review reports 0 blocker, 0 major, and 0 minor.
-- Formatting and diff checks pass.
-- No production, test, package, dependency, export, inventory, canonical, schema,
-  scoring, reporter, or exit behavior changes.
-- The planning alignment is merged before replacement implementation begins.
+The scope is documentation only:
+
+- `docs/exec-plans/active/C07C.md`;
+- `docs/exec-plans/active/C07C-A-explicit-mvp-amendment.md`;
+- `docs/roadmap.md`;
+- `docs/rule-development-backlog.md`.
+
+The alignment may merge only when:
+
+- independent review reports no known blocker in scope;
+- formatting and diff checks pass;
+- no production, test, package, dependency, export, inventory, canonical,
+  schema, scoring, reporter, or exit behavior changes;
+- implementation has not started from the planning branch.
