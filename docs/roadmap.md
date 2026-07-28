@@ -1,6 +1,6 @@
 # ArcReady Roadmap
 
-**Status:** Active roadmap after C07B, with C07C-A explicit-MVP redesign in progress  
+**Status:** Active roadmap after C07B, with C07C-A explicit-MVP redesign in progress
 **Last reviewed:** 2026-07-28
 
 ArcReady is an Arc-specific, repository-level static compatibility analyzer for
