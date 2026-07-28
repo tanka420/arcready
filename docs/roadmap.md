@@ -1,13 +1,17 @@
 # ArcReady Roadmap
 
-**Status:** Active roadmap after C05B
-**Last reviewed:** 2026-07-22
+**Status:** Active roadmap after C07B, with C07C-A explicit-MVP redesign in progress
+**Last reviewed:** 2026-07-28
 
-ArcReady is an Arc-specific, repository-level static compatibility analyzer for projects being ported from Ethereum or other EVM environments to Arc.
+ArcReady is an Arc-specific, repository-level static compatibility analyzer for
+projects being ported from Ethereum or other EVM environments to Arc.
 
-The project has moved beyond the original v0.3 rule-hardening release scope. The current engineering focus is to improve evidence quality, expand the canonical FindingV2 slice beyond bridge configuration, and introduce bounded semantic analysis only where it creates clear user value.
+The current engineering focus is to improve evidence quality, keep critical
+findings conservative, and add bounded semantic analysis only where it creates
+clear user value. ArcReady should remain a small, trustworthy developer tool,
+not grow into a general TypeScript analysis platform.
 
-## Guiding Principles
+## Guiding principles
 
 ArcReady should remain:
 
@@ -19,234 +23,216 @@ ArcReady should remain:
 - conservative and fail-closed when evidence is ambiguous;
 - useful without a hosted backend;
 - driven by official Arc and Circle documentation;
-- explicit about confidence, limitations, and advice versus compatibility impact.
+- explicit about confidence, limitations, and advice versus compatibility
+  impact;
+- focused on real developer workflows and common source patterns.
 
-ArcReady should not become a generic multi-chain linter, Solidity security auditor, hosted monitoring service, or SaaS dashboard in the near term.
+ArcReady should not become a generic multi-chain linter, Solidity security
+auditor, hosted monitoring service, SaaS dashboard, or speculative
+static-analysis framework.
 
-## Completed Product Foundation
+## Product development rule
 
-The existing product foundation includes:
+New analysis capability should be introduced in this order:
+
+```text
+exact common pattern
+→ one safe same-file binding
+→ nearby real-world variants
+→ wider semantic analysis only after usage evidence
+```
+
+Do not begin with alias graphs, mutation graphs, cross-file resolution,
+prototype analysis, or general control-flow unless a prioritized Arc rule cannot
+be made reliable with a smaller design.
+
+For critical findings, a bounded false negative outside the declared surface is
+preferable to a false positive inside CI.
+
+## Completed product foundation
+
+ArcReady currently includes:
 
 - TypeScript and Node.js CLI scanning;
 - wallet, bridge, and App Kit rule packs;
 - terminal, JSON, Markdown, and HTML legacy reports;
-- installable npm package shape;
-- external composite GitHub Action usage;
+- installable npm package `arcready@0.3.0`;
+- external composite GitHub Action `tanka420/arcready@v0.3.0`;
 - validation fixtures and package smoke tests;
-- automated GitHub Actions CI and repository verification;
-- 18 active legacy static rules after placeholder cleanup;
-- rule taxonomy, maturity, confidence, documentation support, and detector-limitation metadata;
-- cross-preset regression coverage;
-- deterministic private FindingV2, CoverageV2, ScanResultV2, and `json-v2` contracts.
+- automated CI and repository verification;
+- rule taxonomy, maturity, confidence, documentation, and detector-limitation
+  metadata;
+- deterministic private FindingV2, CoverageV2, ScanResultV2, and `json-v2`
+  contracts.
 
-## Completed Four-Rule Canonical Slice
-
-C04 completed the first bounded bridge slice, and C05 added the first wallet rule.
-
-The private `json-v2` runtime now selects exactly these four rules in stable order:
+The private canonical runtime remains exactly four rules in stable order:
 
 1. `bridge/CCTP_DOMAIN_26`
 2. `bridge/NO_WRAPPED_USDC_ON_ARC`
 3. `bridge/RELAYER_USES_USDC_FOR_GAS`
 4. `wallet/ARC_CHAIN_METADATA`
 
-Four of 19 known inventory rules execute, leaving 15 outside the canonical
-slice. Coverage exposes `selectedOccurrences: 4`; IDs remain a private tuple.
+Inventory remains 19 known / 17 default / 7 wallet / 4 canonical.
 
-For this slice, ArcReady now has:
+`json-v2` remains observational. It does not change legacy scoring, reporters,
+presets, `failOn`, or process exit behavior.
 
-- hardened detectors with bounded Arc ownership;
-- approved FindingV2 adapter specifications;
-- truthful per-rule capabilities for new adapters;
-- deterministic fingerprints and output ordering;
-- lifecycle and coverage instrumentation;
-- schema-validated machine-readable output;
-- package and built-CLI validation;
-- preserved legacy scan behavior.
+## Intentional product limits
 
-`json-v2` remains observational. It does not yet change process exit behavior or legacy scoring, reporters, presets, and `failOn` behavior.
+ArcReady still has no general:
 
-## Current Product Limits
+- TypeScript or Solidity AST platform;
+- package/module resolution;
+- cross-file value resolution;
+- control-flow or data-flow engine;
+- runtime RPC, Circle API, on-chain, or simulation validation;
+- SARIF, baseline, or suppression workflow;
+- precise line-and-column FindingV2 regions.
 
-The current implementation is still primarily text-pattern and structured-literal analysis.
+These limits are intentional. Infrastructure is justified only when it unlocks
+a prioritized rule with clear product value.
 
-Known limits include:
+## Rule development governance
 
-- no general TypeScript or Solidity AST pipeline;
-- no import, symbol, or cross-file value resolution;
-- no general control-flow or data-flow analysis;
-- file-level canonical locations rather than precise line and column regions;
-- no SARIF, baseline, or suppression workflow;
-- limited framework-aware ownership for wallet, provider, transaction, and UI configuration;
-- no runtime RPC, Circle API, on-chain, or simulation checks.
-
-These limits are intentional. New infrastructure should be added only when a prioritized rule cannot be made reliable with a smaller bounded design.
-
-## Rule Development Governance
-
-The active sequencing and disposition for completed and deferred rules is maintained in:
+Sequencing and disposition are maintained in:
 
 ```text
 docs/rule-development-backlog.md
 ```
 
-The backlog distinguishes:
-
-- `Complete`;
-- `Build`;
-- `Research`;
-- `Advice-only`;
-- `Replace`;
-- `Retire`.
-
-Legacy presence does not imply canonical eligibility. A rule should not enter the canonical FindingV2 slice until its official-document premise, Arc applicability, static evidence, confidence, capabilities, and fail-closed behavior are all defensible.
-
-The policy source of truth remains:
+Policy metadata and official-document support remain in:
 
 ```text
 docs/rule-catalog.md
 packages/arcready/core/rules/catalog.ts
 ```
 
-## Near-Term Engineering Roadmap
+A legacy rule is not automatically eligible for the canonical FindingV2 slice.
+Canonical entry still requires official premise, Arc ownership, fail-closed
+evidence, truthful capabilities, deterministic fingerprints, and meaningful
+compatibility impact.
 
-### C05A — Complete: Harden `wallet/ARC_CHAIN_METADATA`
+## Engineering milestones
 
-Goal:
+### C05A — Complete: `wallet/ARC_CHAIN_METADATA`
 
-Reliably identify an Arc-owned chain configuration and detect incorrect applicable Arc metadata without borrowing evidence from Ethereum or sibling networks.
+Bounded Arc-owned chain-object analysis for chain ID, RPC, explorer, and native
+metadata. No generic chain registry or live RPC validation.
 
-Priority evidence:
+### C05B — Complete: canonical FindingV2 adapter
 
-- Arc Testnet chain ID `5042002`;
-- Arc-owned RPC configuration;
-- Arc-owned explorer configuration;
-- bounded chain-object ownership;
-- common JavaScript and TypeScript chain-definition shapes.
+Added the fourth canonical rule while preserving private APIs and observational
+`json-v2` behavior.
 
-Non-goals:
+### C06A — Complete: `wallet/WALLET_NATIVE_USDC_DISPLAY`
 
-- no generic chain registry framework;
-- no live RPC validation;
-- no broad repository-wide keyword association;
-- no FindingV2 expansion in the same detector-hardening milestone.
+Bounded Arc chain ownership and direct native-currency name/symbol analysis.
+Decimals, amount flow, balances, and UI prose remain separate problems.
 
-C05A completed with bounded plain `.js` and `.ts` object-local scanning,
-multichain isolation, four stable messages, and fail-closed syntax handling.
+### C06B1 — Complete: read-side Arc USDC amount conversion
 
-### C05B — Complete: Add canonical FindingV2 support for `wallet/ARC_CHAIN_METADATA`
+Private lazy same-file analysis for direct native balance reads and exact Arc
+USDC ERC-20 `balanceOf` reads. Supports only bounded direct or one-binding amount
+interpretation.
 
-Goal:
+### C07A — Complete: private ethers transaction ownership
 
-Expand the canonical slice beyond bridge rules while preserving deterministic selection, private API boundaries, and observational `json-v2` behavior.
+Private same-file ethers v6 analysis for exact `JsonRpcProvider`, `Wallet`,
+awaited `getSigner`, and dot-call `sendTransaction` paths.
 
-C05B completed with one private file-level adapter specification,
-message-independent fingerprints, and observational json-v2 coverage. It added
-no enforcement or public export.
+### C07B — Complete: ethers-only `NO_BLOB_TX_ON_ARC`
 
-### C06A — Complete: Harden `wallet/WALLET_NATIVE_USDC_DISPLAY`
+Reports only structurally safe own decimal `type: 3` transactions with effective
+`proven-arc` ownership. Broad Arc/blob keyword matching was removed. The rule
+remains non-canonical.
 
-Goal:
+### C07C-A — Build: conservative viem explicit-pattern MVP
 
-Attach native-currency evidence to a trusted Arc-owned wallet or chain configuration and detect ETH-native assumptions without flagging valid Ethereum sibling configuration or internal EVM terminology.
+The first broad local implementation candidate was rejected after independent
+adversarial review despite 134 passing targeted tests. It remains audit evidence
+and is not a merge candidate.
 
-C06A completed with a private scanner shared with C05A, bounded plain `.js`
-and `.ts` object ownership, direct native-currency name/symbol analysis,
-multichain isolation, and fail-closed syntax handling. Generic `gasToken`,
-`feeToken`, UI prose, decimals, balances, and amount flows remain out of scope.
-The rule remains outside the four-rule canonical runtime.
+The replacement supports only exact first-party viem imports, exact
+`arcTestnet`, direct built-in HTTP transport, approved account routes, direct or
+one immutable same-file binding, exact `.sendTransaction(...)`, and exact own
+`type: "eip4844"` evidence.
 
-### C06B1 — Complete: bounded read-side Arc USDC amount conversion
+The replacement uses two private viem-specific modules and does not create a
+shared AST framework. Wider blob inference, alias/mutation graphs, per-call
+overrides, custom hooks, alternate actions, and cross-file analysis are
+deferred.
 
-Goal:
+### C07C-B — Blocked: thin viem integration
 
-Detect direct 18-versus-6 decimal interpretation mismatches for proven Arc
-native balance reads and exact Arc USDC ERC-20 `balanceOf` reads.
+Starts only after replacement C07C-A is independently approved.
 
-C06B1 adds a private, lazy TypeScript AST analyzer for same-file `.js` and `.ts`
-only. It models native amounts as 18 decimals and the exact Arc USDC ERC-20
-interface at `0x3600000000000000000000000000000000000000` as six decimals for
-the same underlying balance. It recognizes exact `10^12` conversions and direct
-or one-binding reads. Writes, events, duplicate presentation, imported
-ownership, inter-file flow, and runtime validation remain out of scope. The
-rule remains outside the four-rule canonical runtime.
+The integration may combine already-valid ethers and viem records and choose
+the earliest `callOffset`. It must not add new viem inference or change public
+output, inventory, canonical status, scoring, schema, reporters, or exits.
 
-### C07 — Arc transaction-submission ownership
+### C06B2 — Planned after C07C
 
-Goal:
+Write-side amount analysis remains behind transaction-ownership work. It must
+not inherit unnecessary semantic complexity from the rejected C07C-A design.
 
-Associate an exact ethers transaction submission with an Arc provider or
-transaction chain context and use that proof to harden
-`wallet/NO_BLOB_TX_ON_ARC`.
+### C08 — Research: CCTP attestation control flow
 
-C07A provides a private, lazy, same-file ethers v6 analyzer for exact
-`JsonRpcProvider`, `Wallet`, awaited `getSigner`, and dot-call
-`sendTransaction` flows. C07B reports only structurally safe own decimal
-`type: 3` transactions with effective `proven-arc` ownership. Broad Arc/blob
-text matching has been removed; supporting blob fields never independently
-create a finding. The rule remains non-canonical.
+Distinguish pending `404` polling from terminal failure and invalid parameters.
+Do not canonicalize the current keyword detector without control-flow evidence.
 
-C07C viem ownership and consumer behavior remain deferred to a separate plan.
-Imported/cross-file flows, wrappers, inferred transaction type, JSX/TSX, and
-runtime validation remain unsupported.
+### C09 — Replace: shared Solidity `PREVRANDAO` value dependency
 
-### C08 — CCTP attestation control-flow analysis
+Replace duplicate wallet and bridge keyword rules with one evidence-backed rule.
+Do not preserve unsupported blanket `mixHash` equivalence.
 
-Goal:
+### C10 — Research/build: versioned App Kit compatibility
 
-Distinguish expected pending `404` polling from terminal failures and invalid request parameters.
+Model official versioned chain identifiers, operations, tokens, adapters, and
+support tables. Do not keep hardening the deprecated generic capability guard.
 
-Do not canonicalize the current low-confidence keyword detector before control-flow evidence exists.
+## Adoption and developer-experience track
 
-### C09 — Shared Solidity `PREVRANDAO` value-dependency analysis
+After C07C integration, prioritize product usefulness before expanding deep
+semantic infrastructure:
 
-Goal:
+1. maintain a small public broken/fixed demo project;
+2. improve onboarding and GitHub Action usage;
+3. make reports easier to understand and act on;
+4. gather real false-positive, false-negative, and unsupported-pattern reports;
+5. expand analyzers only from that evidence.
 
-Replace duplicate wallet and bridge keyword detectors with one semantic rule that proves `PREVRANDAO` influences randomness, selection, or another behavior that fails when the value is always zero on Arc.
+Example repositories and adoption walkthroughs are higher priority than broad
+analysis infrastructure without users.
 
-Unsupported blanket `mixHash` equivalence should not be carried forward.
+## Distribution and release track
 
-### C10 — Versioned App Kit integration analysis
+The v0.3 package and GitHub Action are already released. Distribution work may
+proceed independently of engineering milestones after verifying package
+contents, CLI installation, Action references, release notes, and CI on the
+selected release commit.
 
-Goal:
+Core milestones must not silently change an already selected release commit.
 
-Model App Kit chain identifiers and operation, token, adapter, and supported-chain compatibility using official versioned APIs and support tables.
-
-Do not continue hardening the deprecated generic capability-guard detector.
-
-## Distribution and Release Track
-
-The v0.3 package and GitHub Action remain release-ready from the rule-quality-hardening phase.
-
-Creating or updating a tag and GitHub Release is a maintainer distribution decision and may proceed independently of the C05 engineering sequence after verifying:
-
-- package metadata and package contents;
-- installable CLI behavior;
-- external GitHub Action references;
-- release notes that accurately distinguish legacy output from private observational `json-v2` work;
-- current CI on the chosen release commit.
-
-Release work should not block core compatibility development, and core milestones should not silently change an already selected release commit.
-
-## Later Product Capabilities
+## Later product capabilities
 
 Potential later work includes:
 
 - precise line and column locations;
-- source excerpts with privacy and stability safeguards;
+- source excerpts with privacy safeguards;
 - SARIF output;
 - baseline and suppression workflows;
 - indexer ordering analysis;
 - deterministic-finality and unnecessary reorg-handling analysis;
 - native-value and USDC event reconciliation;
 - richer HTML reporting;
-- example repositories and adoption walkthroughs.
+- expanded example repositories.
 
-These items should be prioritized only when they support proven user workflows or unlock a high-value compatibility rule.
+Prioritize these only when they support proven workflows or unlock a high-value
+compatibility rule.
 
-## Explicit Non-Goals
+## Explicit non-goals
 
-The following remain out of scope for the near-term roadmap:
+The following remain outside the near-term roadmap:
 
 - hosted dashboard;
 - database;
@@ -258,12 +244,21 @@ The following remain out of scope for the near-term roadmap:
 - user accounts;
 - generic multi-chain abstraction;
 - runtime bridge simulation;
-- on-chain verification as a substitute for static evidence;
+- on-chain verification as a replacement for static evidence;
 - broad analyzer infrastructure without a prioritized rule use case.
 
-## Current Recommended Next Step
+## Current recommended next step
 
-Complete C07B release-candidate/pilot evidence, then separately plan and approve
-C07C before starting viem-dependent transaction ownership or C06B2 write-side
-analysis. C06C remains only a proposed later UI-binding milestone for duplicate
-balance presentation. The private canonical runtime remains exactly four rules.
+1. Complete independent planning review and merge the C07C-A explicit-MVP
+   alignment.
+2. Implement replacement C07C-A from fresh `main` on
+   `agent/c07c-a-viem-explicit-mvp`.
+3. Obtain independent adversarial review and correct until no known blocker
+   remains in the declared scope.
+4. Reduce scope, redesign, or split the work when review identifies a systemic
+   architecture defect.
+5. Implement only the thin C07C-B integration.
+6. Return focus to broken/fixed demo quality, developer experience, and adoption
+   evidence before opening deferred semantic families.
+
+The private canonical runtime remains exactly four rules throughout C07C.
