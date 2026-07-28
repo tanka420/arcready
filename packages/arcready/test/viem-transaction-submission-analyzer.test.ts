@@ -1,4 +1,5 @@
 import ts from "typescript";
+import type { Identifier, Node, SourceFile } from "typescript";
 import { describe, expect, it } from "vitest";
 import {
   buildViemLexicalIndex,
@@ -18,7 +19,7 @@ import {
 } from "../rules/wallet/viem-transaction-submission-analyzer.js";
 
 function parse(source: string): {
-  readonly sourceFile: import("typescript").SourceFile;
+  readonly sourceFile: SourceFile;
   readonly index: ViemLexicalIndex;
 } {
   const sourceFile = ts.createSourceFile(
@@ -31,12 +32,9 @@ function parse(source: string): {
   return { sourceFile, index: buildViemLexicalIndex(ts, sourceFile) };
 }
 
-function identifiers(
-  sourceFile: import("typescript").SourceFile,
-  name: string
-): import("typescript").Identifier[] {
-  const matches: import("typescript").Identifier[] = [];
-  const visit = (node: import("typescript").Node): void => {
+function identifiers(sourceFile: SourceFile, name: string): Identifier[] {
+  const matches: Identifier[] = [];
+  const visit = (node: Node): void => {
     if (ts.isIdentifier(node) && node.text === name) matches.push(node);
     ts.forEachChild(node, visit);
   };
@@ -44,10 +42,7 @@ function identifiers(
   return matches;
 }
 
-function lastIdentifier(
-  sourceFile: import("typescript").SourceFile,
-  name: string
-): import("typescript").Identifier {
+function lastIdentifier(sourceFile: SourceFile, name: string): Identifier {
   const identifier = identifiers(sourceFile, name).at(-1);
   if (identifier === undefined) throw new Error(`missing ${name}`);
   return identifier;
