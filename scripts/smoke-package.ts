@@ -8,6 +8,7 @@ import {
   readdirSync,
   renameSync,
   rmSync,
+  statSync,
   writeFileSync
 } from "node:fs";
 import { createRequire } from "node:module";
@@ -29,6 +30,8 @@ const packageRoot = join(repoRoot, "packages", "arcready");
 const packageJson = JSON.parse(
   readFileSync(join(packageRoot, "package.json"), "utf8")
 ) as PackageJson;
+const C07A_BASELINE_PACKED_SIZE = 59_591;
+const MAX_C07B_PACKED_DELTA = 20_000;
 const tarballName = `${packageJson.name}-${packageJson.version}-smoke-${randomUUID()}.tgz`;
 const tarballPath = join(repoRoot, tarballName);
 
@@ -59,6 +62,16 @@ try {
   if (!existsSync(tarballPath)) {
     throw new Error(`Expected package tarball was not created: ${tarballPath}`);
   }
+  const candidatePackedSize = statSync(tarballPath).size;
+  const packedSizeDelta = candidatePackedSize - C07A_BASELINE_PACKED_SIZE;
+  if (packedSizeDelta <= 0 || packedSizeDelta > MAX_C07B_PACKED_DELTA) {
+    throw new Error(
+      `Unexpected C07B packed-size delta: ${packedSizeDelta} bytes`
+    );
+  }
+  console.log(
+    `C07B packed size: ${candidatePackedSize} bytes (${packedSizeDelta >= 0 ? "+" : ""}${packedSizeDelta} from C07A baseline ${C07A_BASELINE_PACKED_SIZE}).`
+  );
 
   smokeRoot = mkdtempSync(join(tmpdir(), "arcready-package-smoke-"));
   const npmCache = join(smokeRoot, "npm-cache");
@@ -125,6 +138,7 @@ try {
     runCapturedNpx(["--no-install", "arcready", "scan", "--json-v2"], smokeRoot)
   );
   validateInstalledAmountFixtures(smokeRoot);
+  validateInstalledBlobFixtures(smokeRoot);
   validateLazyCompilerBoundary(smokeRoot);
   console.log("Package smoke test passed.");
 } finally {
@@ -162,6 +176,8 @@ function assertDependencyBoundary(): void {
 
 function assertCompilerIsExternal(): void {
   const distRoot = join(packageRoot, "dist");
+  let c07AnalyzerIncluded = false;
+  let c07RuleIncluded = false;
   for (const fileName of readdirSync(distRoot)) {
     if (!fileName.endsWith(".js") && !fileName.endsWith(".d.ts")) continue;
     const content = readFileSync(join(distRoot, fileName), "utf8");
@@ -173,6 +189,19 @@ function assertCompilerIsExternal(): void {
     if (fileName.endsWith(".d.ts") && content.includes('from "typescript"')) {
       throw new Error(`TypeScript compiler type leaked into ${fileName}`);
     }
+    if (fileName.endsWith(".js")) {
+      c07AnalyzerIncluded ||= content.includes(
+        "async function analyzeArcTransactionSubmissionFile"
+      );
+      c07RuleIncluded ||= content.includes(
+        "Arc transaction submission uses EIP-4844 transaction type 3"
+      );
+    }
+  }
+  if (!c07AnalyzerIncluded || !c07RuleIncluded) {
+    throw new Error(
+      "Expected the private C07 analyzer and hardened consumer in the production bundle"
+    );
   }
 }
 
@@ -206,6 +235,103 @@ function validateInstalledAmountFixtures(root: string): void {
     status: "fail",
     ruleId: "wallet/ARC_USDC_AMOUNT_CONVERSION"
   });
+}
+
+function validateInstalledBlobFixtures(root: string): void {
+  writeBlobProject(root, true);
+  const jsonExecution = runCapturedNpx(
+    ["--no-install", "arcready", "scan", "--format", "json"],
+    root
+  );
+  if (jsonExecution.error) throw jsonExecution.error;
+  const report = JSON.parse(jsonExecution.stdout) as {
+    findings: Array<{
+      ruleId: string;
+      severity: string;
+      message: string;
+      files: string[];
+      suggestedFix?: string;
+      docs?: string;
+      preset?: string;
+    }>;
+    score: number;
+    status: string;
+    summary: { critical: number; warning: number; info: number };
+  };
+  const finding = report.findings[0];
+  if (
+    jsonExecution.status !== 1 ||
+    report.findings.length !== 1 ||
+    report.score !== 75 ||
+    report.status !== "fail" ||
+    JSON.stringify(report.summary) !==
+      JSON.stringify({ critical: 1, warning: 0, info: 0 }) ||
+    finding?.ruleId !== "wallet/NO_BLOB_TX_ON_ARC" ||
+    finding.severity !== "critical" ||
+    finding.message !==
+      "Arc transaction submission uses EIP-4844 transaction type 3, which Arc does not support." ||
+    finding.files.length !== 1 ||
+    !resolve(finding.files[0] ?? "").startsWith(resolve(root)) ||
+    !finding.files[0]?.replaceAll("\\", "/").endsWith("/src/submit.ts") ||
+    finding.suggestedFix !==
+      "Submit a type-2 EIP-1559 transaction on Arc instead (`type: 2`) and remove any blob-only fields present in the submitted transaction." ||
+    finding.docs !== "arc-blob-transactions" ||
+    finding.preset !== "wallet"
+  ) {
+    throw new Error(
+      `Unexpected installed C07B report: ${jsonExecution.stdout}`
+    );
+  }
+
+  for (const format of ["terminal", "markdown", "html"] as const) {
+    const rendered = runCapturedNpx(
+      ["--no-install", "arcready", "scan", "--format", format],
+      root
+    );
+    if (
+      rendered.error ||
+      rendered.status !== 1 ||
+      !rendered.stdout.includes("NO_BLOB_TX_ON_ARC") ||
+      !rendered.stdout.includes(
+        "Arc transaction submission uses EIP-4844 transaction type 3"
+      ) ||
+      !rendered.stdout.includes("type-2 EIP-1559 transaction")
+    ) {
+      throw new Error(`Unexpected installed C07B ${format} output`);
+    }
+  }
+
+  const jsonV2 = runCapturedNpx(
+    ["--no-install", "arcready", "scan", "--json-v2"],
+    root
+  );
+  if (jsonV2.error || jsonV2.status !== 0) {
+    throw new Error("Installed C07B json-v2 observation failed");
+  }
+  const privateResult = JSON.parse(jsonV2.stdout) as {
+    findings?: Array<{ ruleId?: string }>;
+  };
+  if (
+    privateResult.findings?.some(
+      ({ ruleId }) => ruleId === "wallet/NO_BLOB_TX_ON_ARC"
+    )
+  ) {
+    throw new Error("Non-canonical C07B rule leaked into json-v2 findings");
+  }
+
+  writeBlobProject(root, false);
+  assertLegacyReport(
+    runCapturedNpx(
+      ["--no-install", "arcready", "scan", "--format", "json"],
+      root
+    ),
+    {
+      exitCode: 0,
+      findings: 0,
+      score: 100,
+      status: "pass"
+    }
+  );
 }
 
 function runInstalledAmountCase(root: string, decimals: 6 | 18) {
@@ -262,7 +388,10 @@ function validateLazyCompilerBoundary(root: string): void {
     writeAmountProject(root, 6, {
       presets: ["wallet"],
       failOn: "critical",
-      rules: { "wallet/ARC_USDC_AMOUNT_CONVERSION": "off" }
+      rules: {
+        "wallet/ARC_USDC_AMOUNT_CONVERSION": "off",
+        "wallet/NO_BLOB_TX_ON_ARC": "off"
+      }
     });
     assertCompilerNotRequired(runInstalledProbe(root), "disabled rule");
 
@@ -286,22 +415,48 @@ function validateLazyCompilerBoundary(root: string): void {
       "empty eligible source set"
     );
 
-    writeAmountProject(root, 18, { presets: ["wallet"], failOn: "critical" });
-    const eligible = runInstalledProbe(root);
-    const report = JSON.parse(eligible.stdout) as {
-      findings: Array<{ ruleId: string; severity: string; message: string }>;
-    };
-    if (
-      eligible.status !== 0 ||
-      report.findings.length !== 1 ||
-      report.findings[0]?.ruleId !== "wallet/ARC_USDC_AMOUNT_CONVERSION" ||
-      report.findings[0].severity !== "warning" ||
-      !report.findings[0].message.includes("failed") ||
-      !report.findings[0].message.includes("typescript")
-    ) {
-      throw new Error(
-        "Enabled eligible scan did not attempt TypeScript loading"
-      );
+    const compilerStates = [
+      {
+        label: "L01 both compiler consumers disabled",
+        rules: {
+          "wallet/ARC_USDC_AMOUNT_CONVERSION": "off",
+          "wallet/NO_BLOB_TX_ON_ARC": "off"
+        },
+        ruleIds: []
+      },
+      {
+        label: "L02 C06 enabled and C07 disabled",
+        rules: { "wallet/NO_BLOB_TX_ON_ARC": "off" },
+        ruleIds: ["wallet/ARC_USDC_AMOUNT_CONVERSION"]
+      },
+      {
+        label: "L03 C06 disabled and C07 enabled",
+        rules: { "wallet/ARC_USDC_AMOUNT_CONVERSION": "off" },
+        ruleIds: ["wallet/NO_BLOB_TX_ON_ARC"]
+      },
+      {
+        label: "L04 both compiler consumers enabled",
+        rules: {},
+        ruleIds: [
+          "wallet/ARC_USDC_AMOUNT_CONVERSION",
+          "wallet/NO_BLOB_TX_ON_ARC"
+        ]
+      }
+    ] as const;
+    for (const state of compilerStates) {
+      for (const failOn of ["info", "warning", "critical", "none"] as const) {
+        writeCompilerProbeProject(root, {
+          presets: ["wallet"],
+          failOn,
+          rules: state.rules
+        });
+        assertCompilerUnavailableState(
+          runInstalledProbe(root),
+          `${state.label} with fail-on ${failOn}`,
+          state.ruleIds,
+          failOn
+        );
+      }
     }
   } finally {
     renameSync(withdrawn, installed);
@@ -331,6 +486,67 @@ function assertCompilerNotRequired(
   }
 }
 
+function assertCompilerUnavailableState(
+  execution: ReturnType<typeof runCaptured>,
+  label: string,
+  ruleIds: readonly string[],
+  failOn: "info" | "warning" | "critical" | "none"
+): void {
+  if (execution.error) throw execution.error;
+  const expectedExit =
+    ruleIds.length > 0 && (failOn === "info" || failOn === "warning") ? 1 : 0;
+  const report = JSON.parse(execution.stdout) as {
+    findings: Array<{
+      ruleId: string;
+      severity: string;
+      message: string;
+      files: string[];
+      suggestedFix?: string;
+      docs?: string;
+      preset?: string;
+    }>;
+    score: number;
+    status: string;
+    summary: { critical: number; warning: number; info: number };
+  };
+  const actualRuleIds = report.findings.map(({ ruleId }) => ruleId);
+  const warningsAreStable = report.findings.every((finding) => {
+    const prefix = `Rule "${finding.ruleId}" failed: `;
+    const messageMatches =
+      finding.ruleId === "wallet/NO_BLOB_TX_ON_ARC"
+        ? finding.message === `${prefix}typescript compiler unavailable`
+        : finding.message.startsWith(prefix) &&
+          finding.message.includes("typescript");
+    const docs =
+      finding.ruleId === "wallet/NO_BLOB_TX_ON_ARC"
+        ? "arc-blob-transactions"
+        : "arc-usdc-amount-conversion";
+    return (
+      finding.severity === "warning" &&
+      messageMatches &&
+      finding.files.length === 0 &&
+      finding.suggestedFix ===
+        "Check the rule implementation or disable this rule temporarily." &&
+      finding.docs === docs &&
+      finding.preset === "wallet"
+    );
+  });
+  if (
+    execution.status !== expectedExit ||
+    JSON.stringify(actualRuleIds) !== JSON.stringify(ruleIds) ||
+    !warningsAreStable ||
+    report.score !== 100 - ruleIds.length * 10 ||
+    report.status !== (ruleIds.length === 0 ? "pass" : "warn") ||
+    report.summary.critical !== 0 ||
+    report.summary.warning !== ruleIds.length ||
+    report.summary.info !== 0
+  ) {
+    throw new Error(
+      `Unexpected compiler-unavailable state for ${label}: ${execution.stdout}`
+    );
+  }
+}
+
 function writeAmountProject(
   root: string,
   decimals: 6 | 18,
@@ -339,6 +555,8 @@ function writeAmountProject(
   mkdirSync(join(root, "src"), { recursive: true });
   rmSync(join(root, "src", "bridge.ts"), { force: true });
   rmSync(join(root, "src", "component.tsx"), { force: true });
+  rmSync(join(root, "src", "compiler-probe.ts"), { force: true });
+  rmSync(join(root, "src", "submit.ts"), { force: true });
   writeConfig(root, config);
   writeFileSync(
     join(root, "src", "amounts.ts"),
@@ -347,6 +565,43 @@ const client = createPublicClient({ chain: { id: 5042002 }, transport: http("htt
 const balance = await client.getBalance({ address: account });
 formatUnits(balance, ${decimals});
 `
+  );
+}
+
+function writeBlobProject(root: string, violation: boolean): void {
+  mkdirSync(join(root, "src"), { recursive: true });
+  rmSync(join(root, "src", "amounts.ts"), { force: true });
+  rmSync(join(root, "src", "bridge.ts"), { force: true });
+  rmSync(join(root, "src", "component.tsx"), { force: true });
+  rmSync(join(root, "src", "compiler-probe.ts"), { force: true });
+  writeConfig(root, { presets: ["wallet"], failOn: "critical" });
+  writeFileSync(
+    join(root, "src", "submit.ts"),
+    violation
+      ? `import { JsonRpcProvider, Wallet } from "ethers";
+const provider = new JsonRpcProvider("https://rpc.testnet.arc.network");
+const signer = new Wallet(key, provider);
+signer.sendTransaction({ type: 3 });
+`
+      : `const chainId = 5042002;
+const docs = "Arc EIP-4844 blob transaction type: 3";
+`
+  );
+}
+
+function writeCompilerProbeProject(
+  root: string,
+  config: Record<string, unknown>
+): void {
+  mkdirSync(join(root, "src"), { recursive: true });
+  rmSync(join(root, "src", "amounts.ts"), { force: true });
+  rmSync(join(root, "src", "bridge.ts"), { force: true });
+  rmSync(join(root, "src", "component.tsx"), { force: true });
+  rmSync(join(root, "src", "submit.ts"), { force: true });
+  writeConfig(root, config);
+  writeFileSync(
+    join(root, "src", "compiler-probe.ts"),
+    "export const compilerProbe = true;\n"
   );
 }
 
