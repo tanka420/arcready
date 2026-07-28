@@ -1,7 +1,7 @@
 # ArcReady Rule Development Backlog
 
-**Status:** Active decision record  
-**Last reviewed:** 2026-07-28  
+**Status:** Active decision record
+**Last reviewed:** 2026-07-28
 **Applies to:** Active and proposed ArcReady static-analysis rules
 
 ## Purpose
