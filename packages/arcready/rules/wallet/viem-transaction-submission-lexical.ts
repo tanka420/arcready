@@ -35,7 +35,6 @@ type MutableBinding = Omit<ViemLexicalBinding, "writeOffsets"> & {
   readonly writeOffsets: number[];
 };
 type MutableBindingTable = Map<Node, Map<string, MutableBinding[]>>;
-
 export function buildViemLexicalIndex(
   ts: TypeScript,
   sourceFile: SourceFile
@@ -71,11 +70,7 @@ export function buildViemLexicalIndex(
     }
   };
 
-  const visit = (
-    node: Node,
-    lexicalScope: Node,
-    functionScope: Node
-  ): void => {
+  const visit = (node: Node, lexicalScope: Node, functionScope: Node): void => {
     if (
       (ts.isFunctionDeclaration(node) ||
         ts.isClassDeclaration(node) ||
@@ -138,23 +133,16 @@ export function buildViemLexicalIndex(
 
   visit(sourceFile, sourceFile, sourceFile);
 
-  const mutableIndex: ViemLexicalIndex = {
-    ts,
-    sourceFile,
-    bindings
-  };
+  const mutableIndex: ViemLexicalIndex = { ts, sourceFile, bindings };
   for (const identifier of writeIdentifiers) {
-    const binding = resolveViemBinding(
-      mutableIndex,
-      identifier,
-      identifier.getStart(sourceFile)
-    );
+    const offset = identifier.getStart(sourceFile);
+    const binding = resolveViemBinding(mutableIndex, identifier, offset);
     if (binding !== null && binding !== undefined) {
-      (binding.writeOffsets as number[]).push(identifier.getStart(sourceFile));
+      (binding.writeOffsets as number[]).push(offset);
     }
   }
 
-  return { ts, sourceFile, bindings };
+  return mutableIndex;
 }
 
 export function resolveViemBinding(
@@ -271,11 +259,7 @@ export function resolveDirectOrOneConstImport(
 }
 
 function otherBinding(node: Node): Omit<MutableBinding, "writeOffsets"> {
-  return {
-    node,
-    kind: "other",
-    readyOffset: node.end
-  };
+  return { node, kind: "other", readyOffset: node.end };
 }
 
 function collectImportBindings(
@@ -377,28 +361,25 @@ function collectTargetIdentifiers(
   node: Node,
   output: Identifier[]
 ): void {
-  if (ts.isIdentifier(node)) {
-    output.push(node);
+  const target = unwrapWriteTarget(ts, node);
+  if (ts.isIdentifier(target)) {
+    output.push(target);
     return;
   }
-  if (ts.isParenthesizedExpression(node) || ts.isNonNullExpression(node)) {
-    collectTargetIdentifiers(ts, node.expression, output);
+  if (ts.isSpreadElement(target)) {
+    collectTargetIdentifiers(ts, target.expression, output);
     return;
   }
-  if (ts.isSpreadElement(node)) {
-    collectTargetIdentifiers(ts, node.expression, output);
-    return;
-  }
-  if (ts.isArrayLiteralExpression(node)) {
-    for (const element of node.elements) {
+  if (ts.isArrayLiteralExpression(target)) {
+    for (const element of target.elements) {
       if (!ts.isOmittedExpression(element)) {
         collectTargetIdentifiers(ts, element, output);
       }
     }
     return;
   }
-  if (ts.isObjectLiteralExpression(node)) {
-    for (const property of node.properties) {
+  if (ts.isObjectLiteralExpression(target)) {
+    for (const property of target.properties) {
       if (ts.isShorthandPropertyAssignment(property)) {
         output.push(property.name);
       } else if (ts.isPropertyAssignment(property)) {
@@ -408,6 +389,21 @@ function collectTargetIdentifiers(
       }
     }
   }
+}
+
+function unwrapWriteTarget(ts: TypeScript, node: Node): Node {
+  let current = node;
+  while (
+    ts.isParenthesizedExpression(current) ||
+    ts.isNonNullExpression(current) ||
+    ts.isAsExpression(current) ||
+    ts.isTypeAssertionExpression(current) ||
+    ts.isSatisfiesExpression(current) ||
+    ts.isPartiallyEmittedExpression(current)
+  ) {
+    current = current.expression;
+  }
+  return current;
 }
 
 function isAssignmentOperator(
