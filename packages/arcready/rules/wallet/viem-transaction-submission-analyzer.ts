@@ -20,6 +20,7 @@ const REQUIRED_COMPILER_FUNCTIONS = [
   "createSourceFile",
   "forEachChild",
   "isArrayLiteralExpression",
+  "isAsExpression",
   "isBinaryExpression",
   "isBlock",
   "isCaseBlock",
@@ -46,14 +47,17 @@ const REQUIRED_COMPILER_FUNCTIONS = [
   "isOmittedExpression",
   "isParameter",
   "isParenthesizedExpression",
+  "isPartiallyEmittedExpression",
   "isPostfixUnaryExpression",
   "isPrefixUnaryExpression",
   "isPropertyAssignment",
+  "isSatisfiesExpression",
   "isShorthandPropertyAssignment",
   "isSourceFile",
   "isSpreadAssignment",
   "isSpreadElement",
   "isStringLiteral",
+  "isTypeAssertionExpression",
   "isVariableDeclaration",
   "isVariableDeclarationList"
 ] as const;
@@ -99,10 +103,13 @@ export async function analyzeViemTransactionSubmissionFile(
       true,
       scriptKind
     );
-    if (!isSourceFileShape(sourceFile)) {
+    if (!isSourceFileShape(ts, sourceFile)) {
       return { status: "compiler-unavailable", submissions: [] };
     }
-    if (sourceFile.isDeclarationFile || sourceFile.parseDiagnostics.length > 0) {
+    if (
+      sourceFile.isDeclarationFile ||
+      sourceFile.parseDiagnostics.length > 0
+    ) {
       return { status: "malformed", submissions: [] };
     }
 
@@ -116,17 +123,15 @@ export async function analyzeViemTransactionSubmissionFile(
 async function loadCompiler(
   compilerLoader: () => Promise<unknown>
 ): Promise<TypeScript | null> {
-  let loaded: unknown;
   try {
-    loaded = await compilerLoader();
+    const loaded = await compilerLoader();
+    for (const candidate of compilerCandidates(loaded)) {
+      if (hasCompilerShape(candidate)) {
+        return candidate;
+      }
+    }
   } catch {
     return null;
-  }
-
-  for (const candidate of compilerCandidates(loaded)) {
-    if (hasCompilerShape(candidate)) {
-      return candidate;
-    }
   }
   return null;
 }
@@ -145,7 +150,9 @@ function hasCompilerShape(value: unknown): value is TypeScript {
   }
 
   const scriptKind = record.ScriptKind as Record<string, unknown> | undefined;
-  const scriptTarget = record.ScriptTarget as Record<string, unknown> | undefined;
+  const scriptTarget = record.ScriptTarget as
+    | Record<string, unknown>
+    | undefined;
   const nodeFlags = record.NodeFlags as Record<string, unknown> | undefined;
   const syntaxKind = record.SyntaxKind as Record<string, unknown> | undefined;
   return (
@@ -161,13 +168,23 @@ function hasCompilerShape(value: unknown): value is TypeScript {
   );
 }
 
-function isSourceFileShape(value: unknown): value is SourceFile & {
+function isSourceFileShape(
+  ts: TypeScript,
+  value: unknown
+): value is SourceFile & {
   readonly parseDiagnostics: readonly import("typescript").Diagnostic[];
 } {
   if (typeof value !== "object" || value === null) return false;
+  if (!ts.isSourceFile(value as import("typescript").Node)) return false;
+
   const record = value as Record<string, unknown>;
   return (
     typeof record.isDeclarationFile === "boolean" &&
-    Array.isArray(record.parseDiagnostics)
+    Array.isArray(record.parseDiagnostics) &&
+    Array.isArray(record.statements) &&
+    typeof record.fileName === "string" &&
+    typeof record.text === "string" &&
+    typeof record.end === "number" &&
+    typeof record.getStart === "function"
   );
 }
