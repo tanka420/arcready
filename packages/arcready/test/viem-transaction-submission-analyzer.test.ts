@@ -1,6 +1,6 @@
 import ts from "typescript";
 import type { Diagnostic, Identifier, Node, SourceFile } from "typescript";
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   buildViemLexicalIndex,
   isViemBindingSafeBefore,
@@ -30,9 +30,11 @@ function parse(source: string): {
     true,
     ts.ScriptKind.TS
   );
-  const diagnostics = (sourceFile as SourceFile & {
-    readonly parseDiagnostics: readonly Diagnostic[];
-  }).parseDiagnostics;
+  const diagnostics = (
+    sourceFile as SourceFile & {
+      readonly parseDiagnostics: readonly Diagnostic[];
+    }
+  ).parseDiagnostics;
   expect(diagnostics).toHaveLength(0);
   return { sourceFile, index: buildViemLexicalIndex(ts, sourceFile) };
 }
@@ -66,7 +68,10 @@ function exactImport(
   );
 }
 
-function bindingAtLastUse(source: string, name: string): ViemLexicalBinding | null {
+function bindingAtLastUse(
+  source: string,
+  name: string
+): ViemLexicalBinding | null {
   const { sourceFile, index } = parse(source);
   return resolveViemBinding(index, lastIdentifier(sourceFile, name)) ?? null;
 }
@@ -82,7 +87,9 @@ chain;`;
   expect(binding).not.toBeNull();
   expect(binding).toBeDefined();
   expect(binding?.writeOffsets.length).toBeGreaterThan(0);
-  expect(isViemBindingSafeBefore(binding!, use.getStart(sourceFile))).toBe(false);
+  expect(isViemBindingSafeBefore(binding!, use.getStart(sourceFile))).toBe(
+    false
+  );
 }
 
 async function analyze(
@@ -127,11 +134,62 @@ describe("viem compiler and status boundary", () => {
     expect(loaded).toBe(false);
   });
 
-  it("accepts direct and default-wrapped compiler modules", async () => {
-    const direct = await analyze("const value = 1;", async () => ts);
-    const wrapped = await analyze("const value = 1;", async () => ({ default: ts }));
-    expect(direct).toEqual({ status: "analyzed", submissions: [] });
-    expect(wrapped).toEqual(direct);
+  it("accepts the actual TypeScript compiler object", async () => {
+    expect(await analyze("const value = 1;", async () => ts)).toEqual({
+      status: "analyzed",
+      submissions: []
+    });
+  });
+
+  it("accepts a default-wrapped actual TypeScript compiler object", async () => {
+    expect(
+      await analyze("const value = 1;", async () => ({ default: ts }))
+    ).toEqual({
+      status: "analyzed",
+      submissions: []
+    });
+  });
+
+  it("rejects copied and proxy-wrapped compiler objects", async () => {
+    expect(await analyze("const value = 1;", async () => ({ ...ts }))).toEqual({
+      status: "compiler-unavailable",
+      submissions: []
+    });
+    expect(
+      await analyze("const value = 1;", async () => new Proxy(ts, {}))
+    ).toEqual({
+      status: "compiler-unavailable",
+      submissions: []
+    });
+  });
+
+  it("rejects a fully structural fake SourceFile from a copied compiler", async () => {
+    let createCalled = false;
+    const structuralSourceFile = {
+      kind: ts.SyntaxKind.SourceFile,
+      isDeclarationFile: false,
+      parseDiagnostics: [],
+      statements: [],
+      fileName: "src/submit.ts",
+      text: "const value = 1;",
+      end: 16,
+      getStart: () => 0
+    };
+    const copiedCompiler = {
+      ...ts,
+      createSourceFile: () => {
+        createCalled = true;
+        return structuralSourceFile;
+      }
+    };
+
+    expect(
+      await analyze("const value = 1;", async () => copiedCompiler)
+    ).toEqual({
+      status: "compiler-unavailable",
+      submissions: []
+    });
+    expect(createCalled).toBe(false);
   });
 
   it.each([
@@ -148,7 +206,10 @@ describe("viem compiler and status boundary", () => {
       "invalid source object",
       async () => ({
         ...ts,
-        createSourceFile: () => ({ isDeclarationFile: false, parseDiagnostics: [] })
+        createSourceFile: () => ({
+          isDeclarationFile: false,
+          parseDiagnostics: []
+        })
       })
     ],
     [
@@ -170,26 +231,46 @@ describe("viem compiler and status boundary", () => {
     });
   });
 
-  it("contains hostile compiler getters inside the trust boundary", async () => {
+  it("contains a hostile default getter inside the trust boundary", async () => {
     const hostileDefault = Object.defineProperty({}, "default", {
       get(): never {
         throw new Error("hostile default getter");
       }
     });
-    const hostileShape = Object.defineProperty({}, "createSourceFile", {
-      get(): never {
-        throw new Error("hostile compiler getter");
-      }
-    });
-    expect(await analyze("const value = 1;", async () => hostileDefault)).toEqual({
-      status: "compiler-unavailable",
-      submissions: []
-    });
-    expect(await analyze("const value = 1;", async () => hostileShape)).toEqual({
+    expect(
+      await analyze("const value = 1;", async () => hostileDefault)
+    ).toEqual({
       status: "compiler-unavailable",
       submissions: []
     });
   });
+
+  it.each([
+    ["required function", "createSourceFile"],
+    ["ScriptKind", "ScriptKind"],
+    ["ScriptTarget", "ScriptTarget"],
+    ["NodeFlags", "NodeFlags"],
+    ["SyntaxKind", "SyntaxKind"],
+    ["isSourceFile", "isSourceFile"]
+  ] as const)(
+    "rejects an untrusted compiler with a hostile %s getter before property access",
+    async (_label, property) => {
+      let accessed = false;
+      const hostileCompiler = Object.defineProperty({}, property, {
+        get(): never {
+          accessed = true;
+          throw new Error(`hostile ${property} getter`);
+        }
+      });
+      expect(
+        await analyze("const value = 1;", async () => hostileCompiler)
+      ).toEqual({
+        status: "compiler-unavailable",
+        submissions: []
+      });
+      expect(accessed).toBe(false);
+    }
+  );
 
   it("contains compiler execution and hostile source getters", async () => {
     const throwingCreate = await analyze("const value = 1;", async () => ({
@@ -215,7 +296,10 @@ describe("viem compiler and status boundary", () => {
   });
 
   it("returns malformed for parse diagnostics", async () => {
-    expect(await analyze("const =")).toEqual({ status: "malformed", submissions: [] });
+    expect(await analyze("const =")).toEqual({
+      status: "malformed",
+      submissions: []
+    });
   });
 });
 
@@ -225,11 +309,16 @@ describe("viem exact import provenance", () => {
 import { arcTestnet as chain } from "viem/chains";
 import { privateKeyToAccount as accountFromKey } from "viem/accounts";
 makeClient; transport; chain; accountFromKey;`;
-    expect(exactImport(source, "makeClient", "viem:createWalletClient")?.kind).toBe("import");
-    expect(exactImport(source, "transport", "viem:http")?.kind).toBe("import");
-    expect(exactImport(source, "chain", "viem/chains:arcTestnet")?.kind).toBe("import");
     expect(
-      exactImport(source, "accountFromKey", "viem/accounts:privateKeyToAccount")?.kind
+      exactImport(source, "makeClient", "viem:createWalletClient")?.kind
+    ).toBe("import");
+    expect(exactImport(source, "transport", "viem:http")?.kind).toBe("import");
+    expect(exactImport(source, "chain", "viem/chains:arcTestnet")?.kind).toBe(
+      "import"
+    );
+    expect(
+      exactImport(source, "accountFromKey", "viem/accounts:privateKeyToAccount")
+        ?.kind
     ).toBe("import");
   });
 
@@ -242,7 +331,9 @@ makeClient; transport; chain; accountFromKey;`;
     `import createWalletClient = require("viem"); createWalletClient;`,
     `const createWalletClient = local; createWalletClient;`
   ])("rejects unsupported provenance: %s", (source) => {
-    expect(exactImport(source, "createWalletClient", "viem:createWalletClient")).toBeUndefined();
+    expect(
+      exactImport(source, "createWalletClient", "viem:createWalletClient")
+    ).toBeUndefined();
   });
 
   it("rejects shadowed, duplicate, and reassigned imports", () => {
@@ -278,7 +369,9 @@ arcTestnet = replacement; arcTestnet;`,
 arcTestnet; arcTestnet = replacement;`
     );
     const use = identifiers(sourceFile, "arcTestnet")[1];
-    expect(resolveExactViemImport(index, use, "viem/chains:arcTestnet")?.kind).toBe("import");
+    expect(
+      resolveExactViemImport(index, use, "viem/chains:arcTestnet")?.kind
+    ).toBe("import");
   });
 });
 
@@ -289,26 +382,59 @@ describe("viem direct or one-const budget", () => {
 const chain = arcTestnet; arcTestnet; chain;`
     );
     expect(
-      resolveDirectOrOneConstImport(index, identifiers(sourceFile, "arcTestnet")[2], "viem/chains:arcTestnet")
+      resolveDirectOrOneConstImport(
+        index,
+        identifiers(sourceFile, "arcTestnet")[2],
+        "viem/chains:arcTestnet"
+      )
     ).toHaveLength(1);
     expect(
-      resolveDirectOrOneConstImport(index, lastIdentifier(sourceFile, "chain"), "viem/chains:arcTestnet")
+      resolveDirectOrOneConstImport(
+        index,
+        lastIdentifier(sourceFile, "chain"),
+        "viem/chains:arcTestnet"
+      )
     ).toHaveLength(2);
   });
 
   it.each([
-    ["depth two", `import { arcTestnet } from "viem/chains"; const one = arcTestnet; const target = one; target;`],
-    ["let alias", `import { arcTestnet } from "viem/chains"; let target = arcTestnet; target;`],
-    ["var alias", `import { arcTestnet } from "viem/chains"; var target = arcTestnet; target;`],
-    ["parameter", `import { arcTestnet } from "viem/chains"; function f(target = arcTestnet) { target; }`],
-    ["destructuring", `import { arcTestnet } from "viem/chains"; const { target } = { target: arcTestnet }; target;`],
-    ["missing initializer", `import { arcTestnet } from "viem/chains"; let target; target;`],
-    ["ambiguous", `import { arcTestnet } from "viem/chains"; const target = arcTestnet; const target = arcTestnet; target;`]
+    [
+      "depth two",
+      `import { arcTestnet } from "viem/chains"; const one = arcTestnet; const target = one; target;`
+    ],
+    [
+      "let alias",
+      `import { arcTestnet } from "viem/chains"; let target = arcTestnet; target;`
+    ],
+    [
+      "var alias",
+      `import { arcTestnet } from "viem/chains"; var target = arcTestnet; target;`
+    ],
+    [
+      "parameter",
+      `import { arcTestnet } from "viem/chains"; function f(target = arcTestnet) { target; }`
+    ],
+    [
+      "destructuring",
+      `import { arcTestnet } from "viem/chains"; const { target } = { target: arcTestnet }; target;`
+    ],
+    [
+      "missing initializer",
+      `import { arcTestnet } from "viem/chains"; let target; target;`
+    ],
+    [
+      "ambiguous",
+      `import { arcTestnet } from "viem/chains"; const target = arcTestnet; const target = arcTestnet; target;`
+    ]
   ] as const)("rejects %s", (label, source) => {
     void label;
     const { sourceFile, index } = parse(source);
     expect(
-      resolveDirectOrOneConstImport(index, lastIdentifier(sourceFile, "target"), "viem/chains:arcTestnet")
+      resolveDirectOrOneConstImport(
+        index,
+        lastIdentifier(sourceFile, "target"),
+        "viem/chains:arcTestnet"
+      )
     ).toBeNull();
   });
 
@@ -319,14 +445,22 @@ const chain = arcTestnet; arcTestnet; chain;`
     ]) {
       const { sourceFile, index } = parse(source);
       expect(
-        resolveDirectOrOneConstImport(index, lastIdentifier(sourceFile, "chain"), "viem/chains:arcTestnet")
+        resolveDirectOrOneConstImport(
+          index,
+          lastIdentifier(sourceFile, "chain"),
+          "viem/chains:arcTestnet"
+        )
       ).toBeNull();
     }
     const { sourceFile, index } = parse(
       `import { arcTestnet } from "viem/chains"; const chain = arcTestnet; chain; chain = replacement; arcTestnet = replacement;`
     );
     expect(
-      resolveDirectOrOneConstImport(index, identifiers(sourceFile, "chain")[1], "viem/chains:arcTestnet")
+      resolveDirectOrOneConstImport(
+        index,
+        identifiers(sourceFile, "chain")[1],
+        "viem/chains:arcTestnet"
+      )
     ).toHaveLength(2);
   });
 
@@ -334,21 +468,43 @@ const chain = arcTestnet; arcTestnet; chain;`
     const { sourceFile, index } = parse(
       `const request = { type: "eip4844" }; const one = request; request; one; ({ type: "eip4844" });`
     );
-    expect(resolveDirectOrOneConstExpression(index, identifiers(sourceFile, "request")[2])?.depth).toBe(1);
-    expect(resolveDirectOrOneConstExpression(index, lastIdentifier(sourceFile, "one"))).toBeNull();
+    expect(
+      resolveDirectOrOneConstExpression(
+        index,
+        identifiers(sourceFile, "request")[2]
+      )?.depth
+    ).toBe(1);
+    expect(
+      resolveDirectOrOneConstExpression(
+        index,
+        lastIdentifier(sourceFile, "one")
+      )
+    ).toBeNull();
     const statement = sourceFile.statements.at(-1);
-    if (statement === undefined || !ts.isExpressionStatement(statement)) throw new Error("missing expression");
-    expect(resolveDirectOrOneConstExpression(index, statement.expression)?.depth).toBe(0);
+    if (statement === undefined || !ts.isExpressionStatement(statement))
+      throw new Error("missing expression");
+    expect(
+      resolveDirectOrOneConstExpression(index, statement.expression)?.depth
+    ).toBe(0);
   });
 
   it("fails closed inside a const initializer and falls back to outer scope", () => {
     const self = parse(`const request = request; request;`);
     const selfUses = identifiers(self.sourceFile, "request");
     expect(resolveViemBinding(self.index, selfUses[1])).toBeNull();
-    expect(resolveDirectOrOneConstExpression(self.index, selfUses[2])).toBeNull();
+    expect(
+      resolveDirectOrOneConstExpression(self.index, selfUses[2])
+    ).toBeNull();
 
-    const outer = parse(`const request = { type: "eip4844" }; function submit() { request; }`);
-    expect(resolveDirectOrOneConstExpression(outer.index, lastIdentifier(outer.sourceFile, "request"))?.depth).toBe(1);
+    const outer = parse(
+      `const request = { type: "eip4844" }; function submit() { request; }`
+    );
+    expect(
+      resolveDirectOrOneConstExpression(
+        outer.index,
+        lastIdentifier(outer.sourceFile, "request")
+      )?.depth
+    ).toBe(1);
   });
 });
 
@@ -388,7 +544,8 @@ for (const arcTestnet of values) { arcTestnet; }
 arcTestnet;`;
     const { sourceFile, index } = parse(source);
     const uses = identifiers(sourceFile, "arcTestnet");
-    for (const offset of [2, 4, 6, 8]) expect(resolveViemBinding(index, uses[offset])?.kind).toBe("other");
+    for (const offset of [2, 4, 6, 8])
+      expect(resolveViemBinding(index, uses[offset])?.kind).toBe("other");
     expect(resolveViemBinding(index, uses.at(-1)!)?.kind).toBe("import");
   });
 
@@ -401,8 +558,15 @@ arcTestnet;`;
     expect(resolveViemBinding(index, uses[2])?.kind).toBe("const");
     expect(resolveViemBinding(index, uses[3])?.kind).toBe("const");
     expect(resolveViemBinding(index, uses.at(-1)!)?.kind).toBe("import");
-    expect(bindingAtLastUse("enum local {}\nlocal;", "local")?.kind).toBe("other");
-    expect(bindingAtLastUse("namespace local { export const value = 1; }\nlocal;", "local")?.kind).toBe("other");
+    expect(bindingAtLastUse("enum local {}\nlocal;", "local")?.kind).toBe(
+      "other"
+    );
+    expect(
+      bindingAtLastUse(
+        "namespace local { export const value = 1; }\nlocal;",
+        "local"
+      )?.kind
+    ).toBe("other");
   });
 
   it("handles var, later declarations, and duplicate bindings fail closed", () => {
@@ -415,9 +579,21 @@ arcTestnet;`;
     expect(resolveViemBinding(index, blockOnly[1])?.kind).toBe("const");
     expect(resolveViemBinding(index, blockOnly.at(-1)!)).toBeUndefined();
 
-    const later = parse(`import { arcTestnet } from "viem/chains"; { arcTestnet; const arcTestnet = local; }`);
-    expect(resolveViemBinding(later.index, identifiers(later.sourceFile, "arcTestnet")[1])).toBeNull();
-    expect(bindingAtLastUse("const chain = first; const chain = second; chain;", "chain")).toBeNull();
+    const later = parse(
+      `import { arcTestnet } from "viem/chains"; { arcTestnet; const arcTestnet = local; }`
+    );
+    expect(
+      resolveViemBinding(
+        later.index,
+        identifiers(later.sourceFile, "arcTestnet")[1]
+      )
+    ).toBeNull();
+    expect(
+      bindingAtLastUse(
+        "const chain = first; const chain = second; chain;",
+        "chain"
+      )
+    ).toBeNull();
   });
 });
 
@@ -482,6 +658,76 @@ chain = replacement;`;
     const use = identifiers(sourceFile, "chain")[1];
     const binding = resolveViemBinding(index, use);
     expect(binding?.writeOffsets).toHaveLength(1);
-    expect(isViemBindingSafeBefore(binding!, use.getStart(sourceFile))).toBe(true);
+    expect(isViemBindingSafeBefore(binding!, use.getStart(sourceFile))).toBe(
+      true
+    );
+  });
+});
+
+describe("viem trusted compiler failure containment", () => {
+  const trustedCompiler = { ...ts };
+
+  beforeAll(() => {
+    vi.doMock("typescript", () => ({ default: trustedCompiler }));
+  });
+
+  afterAll(() => {
+    vi.doUnmock("typescript");
+  });
+
+  it.each([
+    ["required function", "createSourceFile"],
+    ["ScriptKind", "ScriptKind"],
+    ["ScriptTarget", "ScriptTarget"],
+    ["NodeFlags", "NodeFlags"],
+    ["SyntaxKind", "SyntaxKind"],
+    ["isSourceFile", "isSourceFile"]
+  ] as const)(
+    "contains a hostile trusted %s getter",
+    async (_label, property) => {
+      const original = Object.getOwnPropertyDescriptor(
+        trustedCompiler,
+        property
+      );
+      expect(original).toBeDefined();
+      Object.defineProperty(trustedCompiler, property, {
+        configurable: true,
+        get(): never {
+          throw new Error(`hostile trusted ${property} getter`);
+        }
+      });
+
+      try {
+        expect(
+          await analyze("const value = 1;", async () => trustedCompiler)
+        ).toEqual({
+          status: "compiler-unavailable",
+          submissions: []
+        });
+      } finally {
+        Object.defineProperty(trustedCompiler, property, original!);
+      }
+    }
+  );
+
+  it("contains a throwing trusted isSourceFile call and restores it", async () => {
+    const original = trustedCompiler.isSourceFile;
+    trustedCompiler.isSourceFile = (node: Node): node is SourceFile => {
+      void node;
+      throw new Error("trusted isSourceFile failed");
+    };
+
+    try {
+      expect(
+        await analyze("const value = 1;", async () => trustedCompiler)
+      ).toEqual({
+        status: "compiler-unavailable",
+        submissions: []
+      });
+    } finally {
+      trustedCompiler.isSourceFile = original;
+    }
+
+    expect(trustedCompiler.isSourceFile).toBe(original);
   });
 });

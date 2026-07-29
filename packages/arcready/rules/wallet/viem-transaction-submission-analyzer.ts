@@ -103,7 +103,7 @@ export async function analyzeViemTransactionSubmissionFile(
       true,
       scriptKind
     );
-    if (!isSourceFileShape(ts, sourceFile)) {
+    if (!hasSourceFileShape(ts, sourceFile)) {
       return { status: "compiler-unavailable", submissions: [] };
     }
     if (
@@ -124,11 +124,26 @@ async function loadCompiler(
   compilerLoader: () => Promise<unknown>
 ): Promise<TypeScript | null> {
   try {
+    const trustedModule = await import("typescript");
+    const trustedCandidates = compilerCandidates(trustedModule);
     const loaded = await compilerLoader();
-    for (const candidate of compilerCandidates(loaded)) {
-      if (hasCompilerShape(candidate)) {
-        return candidate;
-      }
+
+    if (
+      isTrustedCompilerCandidate(loaded, trustedCandidates) &&
+      hasCompilerShape(loaded)
+    ) {
+      return loaded;
+    }
+    if (typeof loaded !== "object" || loaded === null) {
+      return null;
+    }
+
+    const loadedDefault = (loaded as { readonly default?: unknown }).default;
+    if (
+      isTrustedCompilerCandidate(loadedDefault, trustedCandidates) &&
+      hasCompilerShape(loadedDefault)
+    ) {
+      return loadedDefault;
     }
   } catch {
     return null;
@@ -140,6 +155,13 @@ function compilerCandidates(value: unknown): readonly unknown[] {
   if (typeof value !== "object" || value === null) return [value];
   const defaultValue = (value as { readonly default?: unknown }).default;
   return defaultValue === undefined ? [value] : [value, defaultValue];
+}
+
+function isTrustedCompilerCandidate(
+  candidate: unknown,
+  trustedCandidates: readonly unknown[]
+): candidate is TypeScript {
+  return trustedCandidates.some((trusted) => candidate === trusted);
 }
 
 function hasCompilerShape(value: unknown): value is TypeScript {
@@ -168,7 +190,9 @@ function hasCompilerShape(value: unknown): value is TypeScript {
   );
 }
 
-function isSourceFileShape(
+// Compiler identity is already proven. These checks only validate the shape
+// returned by the trusted compiler before the lexical analyzer consumes it.
+function hasSourceFileShape(
   ts: TypeScript,
   value: unknown
 ): value is SourceFile & {
