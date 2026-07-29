@@ -1,5 +1,5 @@
 import ts from "typescript";
-import type { Identifier, Node, SourceFile } from "typescript";
+import type { Diagnostic, Identifier, Node, SourceFile } from "typescript";
 import { describe, expect, it } from "vitest";
 import {
   buildViemLexicalIndex,
@@ -11,6 +11,7 @@ import {
 } from "../rules/wallet/viem-transaction-submission-lexical.js";
 import type {
   ViemImportIdentity,
+  ViemLexicalBinding,
   ViemLexicalIndex
 } from "../rules/wallet/viem-transaction-submission-lexical.js";
 import {
@@ -29,30 +30,34 @@ function parse(source: string): {
     true,
     ts.ScriptKind.TS
   );
+  const diagnostics = (sourceFile as SourceFile & {
+    readonly parseDiagnostics: readonly Diagnostic[];
+  }).parseDiagnostics;
+  expect(diagnostics).toHaveLength(0);
   return { sourceFile, index: buildViemLexicalIndex(ts, sourceFile) };
 }
 
 function identifiers(sourceFile: SourceFile, name: string): Identifier[] {
-  const matches: Identifier[] = [];
+  const result: Identifier[] = [];
   const visit = (node: Node): void => {
-    if (ts.isIdentifier(node) && node.text === name) matches.push(node);
+    if (ts.isIdentifier(node) && node.text === name) result.push(node);
     ts.forEachChild(node, visit);
   };
   visit(sourceFile);
-  return matches;
+  return result;
 }
 
 function lastIdentifier(sourceFile: SourceFile, name: string): Identifier {
-  const identifier = identifiers(sourceFile, name).at(-1);
-  if (identifier === undefined) throw new Error(`missing ${name}`);
-  return identifier;
+  const result = identifiers(sourceFile, name).at(-1);
+  if (result === undefined) throw new Error(`missing ${name}`);
+  return result;
 }
 
 function exactImport(
   source: string,
   name: string,
   identity: ViemImportIdentity
-) {
+): ViemLexicalBinding | null | undefined {
   const { sourceFile, index } = parse(source);
   return resolveExactViemImport(
     index,
@@ -61,19 +66,34 @@ function exactImport(
   );
 }
 
+function bindingAtLastUse(source: string, name: string): ViemLexicalBinding | null {
+  const { sourceFile, index } = parse(source);
+  return resolveViemBinding(index, lastIdentifier(sourceFile, name)) ?? null;
+}
+
+function expectWriteUnsafe(statement: string): void {
+  const source = `import { arcTestnet } from "viem/chains";
+const chain = arcTestnet;
+${statement}
+chain;`;
+  const { sourceFile, index } = parse(source);
+  const use = lastIdentifier(sourceFile, "chain");
+  const binding = resolveViemBinding(index, use);
+  expect(binding).not.toBeNull();
+  expect(binding).toBeDefined();
+  expect(binding?.writeOffsets.length).toBeGreaterThan(0);
+  expect(isViemBindingSafeBefore(binding!, use.getStart(sourceFile))).toBe(false);
+}
+
 async function analyze(
   source: string,
   compilerLoader?: () => Promise<unknown>,
   filePath = "src/submit.ts"
 ) {
-  return analyzeViemTransactionSubmissionFile(
-    filePath,
-    source,
-    compilerLoader
-  );
+  return analyzeViemTransactionSubmissionFile(filePath, source, compilerLoader);
 }
 
-describe("viem analyzer compiler and status boundary", () => {
+describe("viem compiler and status boundary", () => {
   it.each([
     ["src/submit.ts", true],
     ["src/submit.js", true],
@@ -83,9 +103,13 @@ describe("viem analyzer compiler and status boundary", () => {
     ["src/submit.spec.js", false],
     ["src/submit.generated.ts", false],
     ["tests/submit.ts", false],
+    ["src/__tests__/submit.ts", false],
     ["src/generated/submit.ts", false],
-    ["src/dist/submit.js", false]
-  ] as const)("classifies path %s", (filePath, expected) => {
+    ["src/dist/submit.js", false],
+    ["src/build/submit.ts", false],
+    ["src/coverage/submit.ts", false],
+    ["src\\generated\\submit.ts", false]
+  ] as const)("classifies %s", (filePath, expected) => {
     expect(supportsViemTransactionSubmissionPath(filePath)).toBe(expected);
   });
 
@@ -105,9 +129,7 @@ describe("viem analyzer compiler and status boundary", () => {
 
   it("accepts direct and default-wrapped compiler modules", async () => {
     const direct = await analyze("const value = 1;", async () => ts);
-    const wrapped = await analyze("const value = 1;", async () => ({
-      default: ts
-    }));
+    const wrapped = await analyze("const value = 1;", async () => ({ default: ts }));
     expect(direct).toEqual({ status: "analyzed", submissions: [] });
     expect(wrapped).toEqual(direct);
   });
@@ -116,19 +138,28 @@ describe("viem analyzer compiler and status boundary", () => {
     ["loader throw", async () => Promise.reject(new Error("missing"))],
     ["empty object", async () => ({})],
     ["missing function", async () => ({ ...ts, isForStatement: undefined })],
+    ["missing wrapper", async () => ({ ...ts, isAsExpression: 1 })],
     ["missing ScriptKind", async () => ({ ...ts, ScriptKind: undefined })],
     [
-      "missing NodeFlags member",
+      "missing NodeFlags",
+      async () => ({ ...ts, NodeFlags: { ...ts.NodeFlags, Const: undefined } })
+    ],
+    [
+      "invalid source object",
       async () => ({
         ...ts,
-        NodeFlags: { ...ts.NodeFlags, Const: undefined }
+        createSourceFile: () => ({ isDeclarationFile: false, parseDiagnostics: [] })
       })
     ],
     [
-      "invalid source-file result",
+      "spoofed source kind",
       async () => ({
         ...ts,
-        createSourceFile: () => ({ isDeclarationFile: false })
+        createSourceFile: () => ({
+          kind: ts.SyntaxKind.SourceFile,
+          isDeclarationFile: false,
+          parseDiagnostics: []
+        })
       })
     ]
   ] as const)("fails closed for %s", async (label, loader) => {
@@ -139,305 +170,318 @@ describe("viem analyzer compiler and status boundary", () => {
     });
   });
 
-  it("converts compiler execution failures into compiler-unavailable", async () => {
-    const result = await analyze("const value = 1;", async () => ({
-      ...ts,
-      createSourceFile: () => {
-        throw new Error("compiler failed");
+  it("contains hostile compiler getters inside the trust boundary", async () => {
+    const hostileDefault = Object.defineProperty({}, "default", {
+      get(): never {
+        throw new Error("hostile default getter");
       }
-    }));
-    expect(result).toEqual({
+    });
+    const hostileShape = Object.defineProperty({}, "createSourceFile", {
+      get(): never {
+        throw new Error("hostile compiler getter");
+      }
+    });
+    expect(await analyze("const value = 1;", async () => hostileDefault)).toEqual({
+      status: "compiler-unavailable",
+      submissions: []
+    });
+    expect(await analyze("const value = 1;", async () => hostileShape)).toEqual({
       status: "compiler-unavailable",
       submissions: []
     });
   });
 
-  it("returns malformed for parse diagnostics", async () => {
-    expect(await analyze("const =")).toEqual({
-      status: "malformed",
+  it("contains compiler execution and hostile source getters", async () => {
+    const throwingCreate = await analyze("const value = 1;", async () => ({
+      ...ts,
+      createSourceFile: () => {
+        throw new Error("compiler failed");
+      }
+    }));
+    const hostileSource = await analyze("const value = 1;", async () => ({
+      ...ts,
+      createSourceFile: () =>
+        Object.defineProperty({}, "kind", {
+          get(): never {
+            throw new Error("hostile source getter");
+          }
+        })
+    }));
+    expect(throwingCreate).toEqual({
+      status: "compiler-unavailable",
       submissions: []
     });
+    expect(hostileSource).toEqual(throwingCreate);
+  });
+
+  it("returns malformed for parse diagnostics", async () => {
+    expect(await analyze("const =")).toEqual({ status: "malformed", submissions: [] });
   });
 });
 
 describe("viem exact import provenance", () => {
-  it("accepts exact named imports and direct aliases", () => {
+  it("accepts exact named value imports and aliases", () => {
     const source = `import { createWalletClient as makeClient, http as transport } from "viem";
 import { arcTestnet as chain } from "viem/chains";
 import { privateKeyToAccount as accountFromKey } from "viem/accounts";
-makeClient;
-transport;
-chain;
-accountFromKey;`;
+makeClient; transport; chain; accountFromKey;`;
+    expect(exactImport(source, "makeClient", "viem:createWalletClient")?.kind).toBe("import");
+    expect(exactImport(source, "transport", "viem:http")?.kind).toBe("import");
+    expect(exactImport(source, "chain", "viem/chains:arcTestnet")?.kind).toBe("import");
     expect(
-      exactImport(source, "makeClient", "viem:createWalletClient")?.kind
-    ).toBe("import");
-    expect(exactImport(source, "transport", "viem:http")?.kind).toBe(
-      "import"
-    );
-    expect(
-      exactImport(source, "chain", "viem/chains:arcTestnet")?.kind
-    ).toBe("import");
-    expect(
-      exactImport(
-        source,
-        "accountFromKey",
-        "viem/accounts:privateKeyToAccount"
-      )?.kind
+      exactImport(source, "accountFromKey", "viem/accounts:privateKeyToAccount")?.kind
     ).toBe("import");
   });
 
   it.each([
-    `import { createWalletClient } from "viem/client";
-createWalletClient;`,
-    `import type { createWalletClient } from "viem";
-createWalletClient;`,
-    `import { type createWalletClient } from "viem";
-createWalletClient;`,
-    `import * as createWalletClient from "viem";
-createWalletClient;`,
-    `import createWalletClient from "viem";
-createWalletClient;`,
-    `const createWalletClient = local;
-createWalletClient;`
+    `import { createWalletClient } from "viem/client"; createWalletClient;`,
+    `import type { createWalletClient } from "viem"; createWalletClient;`,
+    `import { type createWalletClient } from "viem"; createWalletClient;`,
+    `import * as createWalletClient from "viem"; createWalletClient;`,
+    `import createWalletClient from "viem"; createWalletClient;`,
+    `import createWalletClient = require("viem"); createWalletClient;`,
+    `const createWalletClient = local; createWalletClient;`
   ])("rejects unsupported provenance: %s", (source) => {
+    expect(exactImport(source, "createWalletClient", "viem:createWalletClient")).toBeUndefined();
+  });
+
+  it("rejects shadowed, duplicate, and reassigned imports", () => {
     expect(
-      exactImport(source, "createWalletClient", "viem:createWalletClient")
+      exactImport(
+        `import { arcTestnet } from "viem/chains";
+function submit(arcTestnet) { arcTestnet; }`,
+        "arcTestnet",
+        "viem/chains:arcTestnet"
+      )
+    ).toBeUndefined();
+    expect(
+      exactImport(
+        `import { arcTestnet } from "viem/chains";
+const arcTestnet = local; arcTestnet;`,
+        "arcTestnet",
+        "viem/chains:arcTestnet"
+      )
+    ).toBeNull();
+    expect(
+      exactImport(
+        `import { arcTestnet } from "viem/chains";
+arcTestnet = replacement; arcTestnet;`,
+        "arcTestnet",
+        "viem/chains:arcTestnet"
+      )
     ).toBeUndefined();
   });
 
-  it("tracks import reassignment by source order", () => {
-    const before = `import { arcTestnet } from "viem/chains";
-arcTestnet = replacement;
-arcTestnet;`;
-    expect(
-      exactImport(before, "arcTestnet", "viem/chains:arcTestnet")
-    ).toBeUndefined();
-
-    const after = `import { arcTestnet } from "viem/chains";
-arcTestnet;
-arcTestnet = replacement;`;
-    const { sourceFile, index } = parse(after);
+  it("keeps imported writes after use unrelated", () => {
+    const { sourceFile, index } = parse(
+      `import { arcTestnet } from "viem/chains";
+arcTestnet; arcTestnet = replacement;`
+    );
     const use = identifiers(sourceFile, "arcTestnet")[1];
-    expect(
-      resolveExactViemImport(index, use, "viem/chains:arcTestnet")?.kind
-    ).toBe("import");
+    expect(resolveExactViemImport(index, use, "viem/chains:arcTestnet")?.kind).toBe("import");
   });
 });
 
-describe("viem lexical identity and one-binding budget", () => {
+describe("viem direct or one-const budget", () => {
   it("resolves direct and one-const imported identities", () => {
-    const source = `import { arcTestnet } from "viem/chains";
-const chain = arcTestnet;
-arcTestnet;
-chain;`;
-    const { sourceFile, index } = parse(source);
-    const direct = identifiers(sourceFile, "arcTestnet")[2];
-    const alias = lastIdentifier(sourceFile, "chain");
+    const { sourceFile, index } = parse(
+      `import { arcTestnet } from "viem/chains";
+const chain = arcTestnet; arcTestnet; chain;`
+    );
     expect(
-      resolveDirectOrOneConstImport(
-        index,
-        direct,
-        "viem/chains:arcTestnet"
-      )
+      resolveDirectOrOneConstImport(index, identifiers(sourceFile, "arcTestnet")[2], "viem/chains:arcTestnet")
     ).toHaveLength(1);
     expect(
-      resolveDirectOrOneConstImport(
-        index,
-        alias,
-        "viem/chains:arcTestnet"
-      )
+      resolveDirectOrOneConstImport(index, lastIdentifier(sourceFile, "chain"), "viem/chains:arcTestnet")
     ).toHaveLength(2);
   });
 
-  it("rejects depth two and non-const aliases", () => {
-    const source = `import { arcTestnet } from "viem/chains";
-const one = arcTestnet;
-const two = one;
-let mutable = arcTestnet;
-two;
-mutable;`;
+  it.each([
+    ["depth two", `import { arcTestnet } from "viem/chains"; const one = arcTestnet; const target = one; target;`],
+    ["let alias", `import { arcTestnet } from "viem/chains"; let target = arcTestnet; target;`],
+    ["var alias", `import { arcTestnet } from "viem/chains"; var target = arcTestnet; target;`],
+    ["parameter", `import { arcTestnet } from "viem/chains"; function f(target = arcTestnet) { target; }`],
+    ["destructuring", `import { arcTestnet } from "viem/chains"; const { target } = { target: arcTestnet }; target;`],
+    ["missing initializer", `import { arcTestnet } from "viem/chains"; let target; target;`],
+    ["ambiguous", `import { arcTestnet } from "viem/chains"; const target = arcTestnet; const target = arcTestnet; target;`]
+  ] as const)("rejects %s", (label, source) => {
+    void label;
     const { sourceFile, index } = parse(source);
     expect(
-      resolveDirectOrOneConstImport(
-        index,
-        lastIdentifier(sourceFile, "two"),
-        "viem/chains:arcTestnet"
-      )
-    ).toBeNull();
-    expect(
-      resolveDirectOrOneConstImport(
-        index,
-        lastIdentifier(sourceFile, "mutable"),
-        "viem/chains:arcTestnet"
-      )
+      resolveDirectOrOneConstImport(index, lastIdentifier(sourceFile, "target"), "viem/chains:arcTestnet")
     ).toBeNull();
   });
 
-  it("invalidates alias or imported identity written before use", () => {
+  it("invalidates alias and source writes before use but not after use", () => {
     for (const source of [
-      `import { arcTestnet } from "viem/chains";
-const chain = arcTestnet;
-chain = replacement;
-chain;`,
-      `import { arcTestnet } from "viem/chains";
-const chain = arcTestnet;
-arcTestnet = replacement;
-chain;`
+      `import { arcTestnet } from "viem/chains"; const chain = arcTestnet; chain = replacement; chain;`,
+      `import { arcTestnet } from "viem/chains"; const chain = arcTestnet; arcTestnet = replacement; chain;`
     ]) {
       const { sourceFile, index } = parse(source);
       expect(
-        resolveDirectOrOneConstImport(
-          index,
-          lastIdentifier(sourceFile, "chain"),
-          "viem/chains:arcTestnet"
-        )
+        resolveDirectOrOneConstImport(index, lastIdentifier(sourceFile, "chain"), "viem/chains:arcTestnet")
       ).toBeNull();
     }
-  });
-
-  it("keeps writes after the use unrelated", () => {
-    const source = `import { arcTestnet } from "viem/chains";
-const chain = arcTestnet;
-chain;
-chain = replacement;
-arcTestnet = replacement;`;
-    const { sourceFile, index } = parse(source);
-    const use = identifiers(sourceFile, "chain")[1];
+    const { sourceFile, index } = parse(
+      `import { arcTestnet } from "viem/chains"; const chain = arcTestnet; chain; chain = replacement; arcTestnet = replacement;`
+    );
     expect(
-      resolveDirectOrOneConstImport(
-        index,
-        use,
-        "viem/chains:arcTestnet"
-      )
+      resolveDirectOrOneConstImport(index, identifiers(sourceFile, "chain")[1], "viem/chains:arcTestnet")
     ).toHaveLength(2);
   });
 
-  it("resolves direct expressions and one initialized const only", () => {
-    const source = `const request = { type: "eip4844" };
-const one = request;
-request;
-one;
-({ type: "eip4844" });`;
-    const { sourceFile, index } = parse(source);
-    const request = identifiers(sourceFile, "request")[2];
-    const one = lastIdentifier(sourceFile, "one");
-    expect(resolveDirectOrOneConstExpression(index, request)?.depth).toBe(1);
-    expect(resolveDirectOrOneConstExpression(index, one)).toBeNull();
-
+  it("resolves direct expressions and one initialized const", () => {
+    const { sourceFile, index } = parse(
+      `const request = { type: "eip4844" }; const one = request; request; one; ({ type: "eip4844" });`
+    );
+    expect(resolveDirectOrOneConstExpression(index, identifiers(sourceFile, "request")[2])?.depth).toBe(1);
+    expect(resolveDirectOrOneConstExpression(index, lastIdentifier(sourceFile, "one"))).toBeNull();
     const statement = sourceFile.statements.at(-1);
-    if (statement === undefined || !ts.isExpressionStatement(statement)) {
-      throw new Error("missing expression statement");
-    }
-    expect(
-      resolveDirectOrOneConstExpression(index, statement.expression)?.depth
-    ).toBe(0);
+    if (statement === undefined || !ts.isExpressionStatement(statement)) throw new Error("missing expression");
+    expect(resolveDirectOrOneConstExpression(index, statement.expression)?.depth).toBe(0);
   });
 
-  it("does not expose a const binding inside its initializer", () => {
-    const source = `const request = request;
-request;`;
-    const { sourceFile, index } = parse(source);
-    const uses = identifiers(sourceFile, "request");
-    expect(resolveViemBinding(index, uses[1])).toBeNull();
-    expect(resolveDirectOrOneConstExpression(index, uses[2])).toBeNull();
+  it("fails closed inside a const initializer and falls back to outer scope", () => {
+    const self = parse(`const request = request; request;`);
+    const selfUses = identifiers(self.sourceFile, "request");
+    expect(resolveViemBinding(self.index, selfUses[1])).toBeNull();
+    expect(resolveDirectOrOneConstExpression(self.index, selfUses[2])).toBeNull();
+
+    const outer = parse(`const request = { type: "eip4844" }; function submit() { request; }`);
+    expect(resolveDirectOrOneConstExpression(outer.index, lastIdentifier(outer.sourceFile, "request"))?.depth).toBe(1);
   });
 });
 
-describe("viem lexical scopes and shadowing", () => {
-  it("keeps parameter and block shadows separate from the import", () => {
+describe("viem lexical scope families", () => {
+  it("keeps function, arrow, and parameter bindings scoped", () => {
     const source = `import { arcTestnet } from "viem/chains";
-function submit(arcTestnet) {
-  arcTestnet;
-}
-{
-  const arcTestnet = local;
-  arcTestnet;
-}
+function declared(arcTestnet) { arcTestnet; }
+const expressed = function ({ arcTestnet }) { arcTestnet; };
+const arrow = (arcTestnet) => arcTestnet;
 arcTestnet;`;
     const { sourceFile, index } = parse(source);
     const uses = identifiers(sourceFile, "arcTestnet");
     expect(resolveViemBinding(index, uses[2])?.kind).toBe("other");
-    expect(resolveViemBinding(index, uses[4])?.kind).toBe("const");
-    expect(
-      resolveExactViemImport(
-        index,
-        uses.at(-1)!,
-        "viem/chains:arcTestnet"
-      )?.kind
-    ).toBe("import");
+    expect(resolveViemBinding(index, uses[4])?.kind).toBe("other");
+    expect(resolveViemBinding(index, uses[6])?.kind).toBe("other");
+    expect(resolveViemBinding(index, uses.at(-1)!)?.kind).toBe("import");
   });
 
-  it("fails closed for a later declaration in the same scope", () => {
+  it("keeps named function and class expression self-bindings private", () => {
     const source = `import { arcTestnet } from "viem/chains";
-{
-  arcTestnet;
-  const arcTestnet = local;
-}`;
-    const { sourceFile, index } = parse(source);
-    expect(resolveViemBinding(index, identifiers(sourceFile, "arcTestnet")[1]))
-      .toBeNull();
-  });
-
-  it("keeps for-loop bindings inside the loop scope", () => {
-    const source = `import { createWalletClient } from "viem";
-for (const createWalletClient of clients) {
-  createWalletClient;
-}
-createWalletClient;`;
-    const { sourceFile, index } = parse(source);
-    const uses = identifiers(sourceFile, "createWalletClient");
-    expect(resolveViemBinding(index, uses[2])?.kind).toBe("other");
-    expect(
-      resolveExactViemImport(
-        index,
-        uses.at(-1)!,
-        "viem:createWalletClient"
-      )?.kind
-    ).toBe("import");
-  });
-
-  it("keeps a named class expression self-binding private", () => {
-    const source = `import { arcTestnet } from "viem/chains";
-const Holder = class arcTestnet {
-  method() {
-    arcTestnet;
-  }
-};
+const fn = function arcTestnet() { arcTestnet; };
+const Holder = class arcTestnet { method() { arcTestnet; } };
 arcTestnet;`;
     const { sourceFile, index } = parse(source);
     const uses = identifiers(sourceFile, "arcTestnet");
     expect(resolveViemBinding(index, uses[2])?.kind).toBe("other");
-    expect(
-      resolveExactViemImport(
-        index,
-        uses.at(-1)!,
-        "viem/chains:arcTestnet"
-      )?.kind
-    ).toBe("import");
+    expect(resolveViemBinding(index, uses[4])?.kind).toBe("other");
+    expect(resolveViemBinding(index, uses.at(-1)!)?.kind).toBe("import");
   });
 
-  it("treats duplicate same-scope bindings as ambiguous", () => {
-    const source = `const chain = first;
-const chain = second;
-chain;`;
+  it("keeps catch, for, for-in, and for-of bindings scoped", () => {
+    const source = `import { arcTestnet } from "viem/chains";
+try {} catch (arcTestnet) { arcTestnet; }
+for (let arcTestnet = local; condition; update) { arcTestnet; }
+for (const arcTestnet in record) { arcTestnet; }
+for (const arcTestnet of values) { arcTestnet; }
+arcTestnet;`;
     const { sourceFile, index } = parse(source);
-    expect(resolveViemBinding(index, lastIdentifier(sourceFile, "chain")))
-      .toBeNull();
+    const uses = identifiers(sourceFile, "arcTestnet");
+    for (const offset of [2, 4, 6, 8]) expect(resolveViemBinding(index, uses[offset])?.kind).toBe("other");
+    expect(resolveViemBinding(index, uses.at(-1)!)?.kind).toBe("import");
   });
 
-  it("tracks destructuring writes against a protected binding", () => {
+  it("uses shared switch scope and tracks enum/module bindings", () => {
+    const source = `import { arcTestnet } from "viem/chains";
+switch (value) { case 0: const arcTestnet = local; arcTestnet; break; case 1: arcTestnet; }
+arcTestnet;`;
+    const { sourceFile, index } = parse(source);
+    const uses = identifiers(sourceFile, "arcTestnet");
+    expect(resolveViemBinding(index, uses[2])?.kind).toBe("const");
+    expect(resolveViemBinding(index, uses[3])?.kind).toBe("const");
+    expect(resolveViemBinding(index, uses.at(-1)!)?.kind).toBe("import");
+    expect(bindingAtLastUse("enum local {}\nlocal;", "local")?.kind).toBe("other");
+    expect(bindingAtLastUse("namespace local { export const value = 1; }\nlocal;", "local")?.kind).toBe("other");
+  });
+
+  it("handles var, later declarations, and duplicate bindings fail closed", () => {
+    const source = `function submit() { before; { var before = local; const blockOnly = local; blockOnly; } before; blockOnly; }`;
+    const { sourceFile, index } = parse(source);
+    const before = identifiers(sourceFile, "before");
+    const blockOnly = identifiers(sourceFile, "blockOnly");
+    expect(resolveViemBinding(index, before[0])).toBeNull();
+    expect(resolveViemBinding(index, before.at(-1)!)?.kind).toBe("other");
+    expect(resolveViemBinding(index, blockOnly[1])?.kind).toBe("const");
+    expect(resolveViemBinding(index, blockOnly.at(-1)!)).toBeUndefined();
+
+    const later = parse(`import { arcTestnet } from "viem/chains"; { arcTestnet; const arcTestnet = local; }`);
+    expect(resolveViemBinding(later.index, identifiers(later.sourceFile, "arcTestnet")[1])).toBeNull();
+    expect(bindingAtLastUse("const chain = first; const chain = second; chain;", "chain")).toBeNull();
+  });
+});
+
+describe("viem protected-binding write detection", () => {
+  it.each([
+    "chain = replacement;",
+    "chain += replacement;",
+    "chain -= replacement;",
+    "chain *= replacement;",
+    "chain /= replacement;",
+    "chain %= replacement;",
+    "chain **= replacement;",
+    "chain <<= replacement;",
+    "chain >>= replacement;",
+    "chain >>>= replacement;",
+    "chain &= replacement;",
+    "chain |= replacement;",
+    "chain ^= replacement;",
+    "chain &&= replacement;",
+    "chain ||= replacement;",
+    "chain ??= replacement;"
+  ])("detects assignment target: %s", expectWriteUnsafe);
+
+  it.each(["++chain;", "chain++;", "--chain;", "chain--;", "delete chain;"])(
+    "detects update/delete target: %s",
+    expectWriteUnsafe
+  );
+
+  it.each([
+    "[chain] = values;",
+    "[...chain] = values;",
+    "({ chain } = replacement);",
+    "({ value: chain } = replacement);",
+    "({ ...chain } = replacement);",
+    "[{ value: chain }] = values;"
+  ])("detects destructuring target: %s", expectWriteUnsafe);
+
+  it.each([
+    "for (chain in values) {}",
+    "for (chain of values) {}",
+    "for ((chain as unknown) in values) {}",
+    "for ((chain as unknown) of values) {}"
+  ])("detects loop target: %s", expectWriteUnsafe);
+
+  it.each([
+    "(chain) = replacement;",
+    "chain! = replacement;",
+    "(chain as unknown) = replacement;",
+    "(<unknown>chain) = replacement;",
+    "(chain satisfies unknown) = replacement;",
+    "((chain as unknown)!) = replacement;"
+  ])("unwraps TypeScript target: %s", expectWriteUnsafe);
+
+  it("ignores property writes and writes after the protected use", () => {
     const source = `import { arcTestnet } from "viem/chains";
 const chain = arcTestnet;
-({ chain } = replacement);
-chain;`;
+chain;
+container.chain = replacement;
+chain.value = replacement;
+chain = replacement;`;
     const { sourceFile, index } = parse(source);
-    const use = lastIdentifier(sourceFile, "chain");
+    const use = identifiers(sourceFile, "chain")[1];
     const binding = resolveViemBinding(index, use);
-    expect(binding).not.toBeNull();
-    expect(binding).toBeDefined();
-    expect(isViemBindingSafeBefore(binding!, use.getStart(sourceFile))).toBe(
-      false
-    );
+    expect(binding?.writeOffsets).toHaveLength(1);
+    expect(isViemBindingSafeBefore(binding!, use.getStart(sourceFile))).toBe(true);
   });
 });
