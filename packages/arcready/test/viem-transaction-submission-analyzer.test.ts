@@ -272,29 +272,6 @@ describe("viem compiler and status boundary", () => {
     }
   );
 
-  it("contains compiler execution and hostile source getters", async () => {
-    const throwingCreate = await analyze("const value = 1;", async () => ({
-      ...ts,
-      createSourceFile: () => {
-        throw new Error("compiler failed");
-      }
-    }));
-    const hostileSource = await analyze("const value = 1;", async () => ({
-      ...ts,
-      createSourceFile: () =>
-        Object.defineProperty({}, "kind", {
-          get(): never {
-            throw new Error("hostile source getter");
-          }
-        })
-    }));
-    expect(throwingCreate).toEqual({
-      status: "compiler-unavailable",
-      submissions: []
-    });
-    expect(hostileSource).toEqual(throwingCreate);
-  });
-
   it("returns malformed for parse diagnostics", async () => {
     expect(await analyze("const =")).toEqual({
       status: "malformed",
@@ -709,6 +686,59 @@ describe("viem trusted compiler failure containment", () => {
       }
     }
   );
+
+  it("contains trusted createSourceFile execution", async () => {
+    const original = trustedCompiler.createSourceFile;
+    let createCalled = false;
+    trustedCompiler.createSourceFile = () => {
+      createCalled = true;
+      throw new Error("trusted compiler failed");
+    };
+
+    try {
+      expect(
+        await analyze("const value = 1;", async () => trustedCompiler)
+      ).toEqual({
+        status: "compiler-unavailable",
+        submissions: []
+      });
+      expect(createCalled).toBe(true);
+    } finally {
+      trustedCompiler.createSourceFile = original;
+    }
+
+    expect(trustedCompiler.createSourceFile).toBe(original);
+  });
+
+  it("contains a hostile trusted post-create SourceFile getter", async () => {
+    const original = trustedCompiler.createSourceFile;
+    let createCalled = false;
+    let sourceGetterRead = false;
+    trustedCompiler.createSourceFile = () => {
+      createCalled = true;
+      return Object.defineProperty({}, "kind", {
+        get(): never {
+          sourceGetterRead = true;
+          throw new Error("hostile trusted source getter");
+        }
+      }) as SourceFile;
+    };
+
+    try {
+      expect(
+        await analyze("const value = 1;", async () => trustedCompiler)
+      ).toEqual({
+        status: "compiler-unavailable",
+        submissions: []
+      });
+      expect(createCalled).toBe(true);
+      expect(sourceGetterRead).toBe(true);
+    } finally {
+      trustedCompiler.createSourceFile = original;
+    }
+
+    expect(trustedCompiler.createSourceFile).toBe(original);
+  });
 
   it("contains a throwing trusted isSourceFile call and restores it", async () => {
     const original = trustedCompiler.isSourceFile;
