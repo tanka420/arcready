@@ -17,12 +17,26 @@ export interface FixtureValidationResult {
   warning: number;
   info: number;
   findings: number;
+  ruleIds: string[];
   expected: "pass" | "findings";
   matched: boolean;
   error?: string;
 }
 
-export const FIXTURES: FixtureExpectation[] = [
+export const DEMO_FIXTURES = [
+  {
+    name: "broken-arc-integration",
+    projectPath: "examples/demo-projects/broken-arc-integration",
+    shouldPass: false
+  },
+  {
+    name: "fixed-arc-integration",
+    projectPath: "examples/demo-projects/fixed-arc-integration",
+    shouldPass: true
+  }
+] as const satisfies readonly FixtureExpectation[];
+
+export const FIXTURES = [
   {
     name: "wallet-good",
     projectPath: "fixtures/wallet-good",
@@ -53,19 +67,10 @@ export const FIXTURES: FixtureExpectation[] = [
     projectPath: "fixtures/app-kit-bad",
     shouldPass: false
   },
-  {
-    name: "broken-arc-integration",
-    projectPath: "examples/demo-projects/broken-arc-integration",
-    shouldPass: false
-  },
-  {
-    name: "fixed-arc-integration",
-    projectPath: "examples/demo-projects/fixed-arc-integration",
-    shouldPass: true
-  }
-];
+  ...DEMO_FIXTURES
+] as const satisfies readonly FixtureExpectation[];
 
-const C06B1_FIXTURES: FixtureExpectation[] = [
+const C06B1_FIXTURES: readonly FixtureExpectation[] = [
   {
     name: "wallet-amount-good",
     projectPath: "fixtures/wallet-amount-good",
@@ -78,16 +83,28 @@ const C06B1_FIXTURES: FixtureExpectation[] = [
   }
 ];
 
+const FULL_FIXTURES: readonly FixtureExpectation[] = [
+  ...FIXTURES,
+  ...C06B1_FIXTURES
+];
+
 export async function runFixtureDemo(
-  repoRoot = process.cwd()
+  repoRoot = process.cwd(),
+  fixtures: readonly FixtureExpectation[] = FULL_FIXTURES
 ): Promise<FixtureValidationResult[]> {
   const results: FixtureValidationResult[] = [];
 
-  for (const fixture of [...FIXTURES, ...C06B1_FIXTURES]) {
+  for (const fixture of fixtures) {
     results.push(await scanFixture(repoRoot, fixture));
   }
 
   return results;
+}
+
+export function sortedUniqueRuleIds(
+  findings: readonly { ruleId: string }[]
+): string[] {
+  return Array.from(new Set(findings.map(({ ruleId }) => ruleId))).sort();
 }
 
 export function fixtureMatchesExpectation(
@@ -154,6 +171,7 @@ async function scanFixture(
       warning: report.summary.warning,
       info: report.summary.info,
       findings: report.findings.length,
+      ruleIds: sortedUniqueRuleIds(report.findings),
       expected,
       matched: false
     };
@@ -171,6 +189,7 @@ async function scanFixture(
       warning: 0,
       info: 0,
       findings: 0,
+      ruleIds: [],
       expected,
       matched: false,
       error: error instanceof Error ? error.message : String(error)

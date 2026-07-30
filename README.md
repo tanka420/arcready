@@ -3,7 +3,7 @@
 Arc-specific static CI quality gate and integration-pattern validator for wallets, bridges, App Kit integrations, and dApps.
 
 [![ArcReady Example](https://github.com/tanka420/arcready/actions/workflows/arcready-example.yml/badge.svg)](https://github.com/tanka420/arcready/actions/workflows/arcready-example.yml)
-[![Release](https://img.shields.io/github/v/release/tanka420/arcready?include_prereleases\&label=release)](https://github.com/tanka420/arcready/releases)
+[![Release](https://img.shields.io/github/v/release/tanka420/arcready?include_prereleases&label=release)](https://github.com/tanka420/arcready/releases)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)
 ![Node.js](https://img.shields.io/badge/Node.js-22%2B-green)
 ![npm](https://img.shields.io/badge/npm-arcready%400.3.0-blue)
@@ -45,6 +45,25 @@ Score: 75
 Status: fail
 Summary: 1 critical, 0 warning, 0 info
 ```
+
+### Reproducible Before/After Demo
+
+From a repository checkout, install the locked dependencies and run the
+checked-in broken/fixed demo pair:
+
+```powershell
+corepack pnpm install --frozen-lockfile
+corepack pnpm demo:fixtures
+```
+
+This command scans only `broken-arc-integration` followed by
+`fixed-arc-integration`. The broken project must demonstrate
+`wallet/ARC_CHAIN_METADATA`, `wallet/NO_BLOB_TX_ON_ARC`,
+`bridge/CCTP_DOMAIN_26`, and `app-kit/APPKIT_CHAIN_IDENTIFIER_VALID`. The fixed
+project must finish with status pass, score 100, and zero findings.
+
+This is a deterministic static-analysis demonstration of those checked-in
+patterns, not universal Arc compatibility or runtime verification.
 
 ## Quick Start
 
@@ -234,21 +253,21 @@ Create `arcready.config.json` in the project you want to scan:
 
 `failOn` controls when the CLI exits non-zero:
 
-| Value | Behavior |
-| --- | --- |
-| `critical` | Fail only when critical findings exist |
-| `warning` | Fail when warning or critical findings exist |
-| `info` | Fail when any finding exists |
-| `none` | Never fail due to findings |
+| Value      | Behavior                                     |
+| ---------- | -------------------------------------------- |
+| `critical` | Fail only when critical findings exist       |
+| `warning`  | Fail when warning or critical findings exist |
+| `info`     | Fail when any finding exists                 |
+| `none`     | Never fail due to findings                   |
 
 The CLI `--fail-on` option overrides the config value.
 
 ## Presets
 
-| Preset | Focus | Example rules |
-| --- | --- | --- |
-| `wallet` | Wallet UX, chain metadata, fee display, finality | `ARC_CHAIN_METADATA`, `NO_ETH_GAS_LABEL`, `ONE_CONFIRMATION_FINAL` |
-| `bridge` | CCTP, finality, relayer gas, canonical USDC | `BRIDGE_CONFIRMATIONS_ONE`, `CCTP_DOMAIN_26`, `RELAYER_USES_USDC_FOR_GAS` |
+| Preset    | Focus                                                                | Example rules                                                                                                          |
+| --------- | -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `wallet`  | Wallet UX, chain metadata, fee display, finality                     | `ARC_CHAIN_METADATA`, `NO_ETH_GAS_LABEL`, `ONE_CONFIRMATION_FINAL`                                                     |
+| `bridge`  | CCTP, finality, relayer gas, canonical USDC                          | `BRIDGE_CONFIRMATIONS_ONE`, `CCTP_DOMAIN_26`, `RELAYER_USES_USDC_FOR_GAS`                                              |
 | `app-kit` | App Kit chain identifiers, RPC configuration, Unified Balance checks | `APPKIT_CHAIN_IDENTIFIER_VALID`, `APPKIT_CUSTOM_RPC_RECOMMENDED`, `UB_DELEGATE_REQUIRED`, `UB_FEE_EXPLANATION_PRESENT` |
 
 The deprecated `APPKIT_CAPABILITY_SUPPORTED` and
