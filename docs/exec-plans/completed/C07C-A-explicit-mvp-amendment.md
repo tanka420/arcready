@@ -2,9 +2,9 @@
 
 ## Status
 
-- Status: replacement decision record.
+- Status: Completed historical decision record.
 - Risk class: R3.
-- Parent plan: `docs/exec-plans/active/C07C.md`.
+- Parent plan: `docs/exec-plans/completed/C07C.md`.
 - Planning base: `1e595050373009994636bf9afef70500109f573b`.
 - Planning branch: `agent/c07c-a-explicit-mvp-plan`.
 - Rule: `wallet/NO_BLOB_TX_ON_ARC`.
@@ -27,7 +27,8 @@ Evidence:
 - targeted suite: 134/134 passed;
 - analyzer: 989 physical lines;
 - tests: 1,403 physical lines;
-- package boundary: unchanged at 7 files and 68,925 bytes;
+- package boundary at the rejected-candidate review: unchanged at 7 files and
+  the then-established 68,925-byte planning reference;
 - `prettier-ignore` directives: 40.
 
 Independent adversarial review rejected the candidate with:
@@ -146,7 +147,8 @@ A systemic architecture defect requires scope reduction, redesign, or a split.
 The replacement must preserve:
 
 - exactly 7 published files;
-- exactly 68,925 bytes in the C07C-A package smoke artifact;
+- the package boundary represented by the then-established 68,925-byte planning
+  reference;
 - no public viem analyzer exports or declarations;
 - no `viem` dependency;
 - lazy external TypeScript `5.9.3` handling;
@@ -167,19 +169,20 @@ Any drift is a stop condition.
 - [x] Candidate rejected: 1 blocker, 9 major, 0 minor.
 - [x] Conservative explicit-pattern MVP selected.
 - [x] Parent C07C plan aligned with the replacement direction.
-- [ ] Planning alignment independently approved and merged.
-- [ ] Replacement C07C-A implemented from fresh `main`.
-- [ ] Replacement C07C-A independently approved.
-- [ ] C07C-B thin integration started.
+- [x] Planning alignment independently approved and merged.
+- [x] Replacement C07C-A implemented from fresh `main`.
+- [x] Replacement C07C-A independently approved.
+- [x] C07C-B thin integration completed and independently approved.
 
-C07C-B remains blocked until replacement C07C-A is independently approved.
+The replacement planning, C07C-A implementation, and C07C-B integration are
+complete.
 
 ## Exit criteria for this planning alignment
 
-The scope is documentation only:
+The scope of this historical planning alignment was documentation only:
 
-- `docs/exec-plans/active/C07C.md`;
-- `docs/exec-plans/active/C07C-A-explicit-mvp-amendment.md`;
+- `docs/exec-plans/completed/C07C.md`;
+- `docs/exec-plans/completed/C07C-A-explicit-mvp-amendment.md`;
 - `docs/roadmap.md`;
 - `docs/rule-development-backlog.md`.
 
@@ -190,3 +193,14 @@ The alignment may merge only when:
 - no production, test, package, dependency, export, inventory, canonical,
   schema, scoring, reporter, or exit behavior changes;
 - implementation has not started from the planning branch.
+
+## Closeout note
+
+This amendment remains the historical record of the rejected candidate and the
+strategic reset. Final implementation, validation, review, package-baseline
+reconciliation, integration, and boundary evidence are recorded only in the
+parent completion record:
+
+```text
+docs/exec-plans/completed/C07C.md
+```

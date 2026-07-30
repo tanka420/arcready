@@ -1,7 +1,7 @@
 # ArcReady Rule Development Backlog
 
 **Status:** Active decision record
-**Last reviewed:** 2026-07-28
+**Last reviewed:** 2026-07-30
 **Applies to:** Active and proposed ArcReady static-analysis rules
 
 ## Purpose
@@ -89,16 +89,17 @@ The private canonical runtime remains exactly four rules.
 - Priority: P0.
 - Impact: Blocker.
 - Canonical status: Non-canonical.
-- C06B2 follows approved transaction-ownership work.
+- Completed transaction-ownership work unblocks separate C06B2 planning, but
+  C06B2 does not start automatically and remains sequenced after Demo/DX.
 
 ### `wallet/NO_BLOB_TX_ON_ARC`
 
-- Decision: Complete for C07B ethers; Build for C07C viem MVP.
+- Decision: Complete for C07B ethers and C07C viem explicit-pattern MVP.
 - Priority: P0.
 - Impact: Blocker.
 - Canonical status: Non-canonical.
-- Required capability: completed ethers ownership plus conservative viem
-  explicit-pattern ownership.
+- Completed capability: bounded ethers and conservative viem explicit-pattern
+  ownership and submission detection.
 - Expand viem only from concrete user patterns or separately approved work.
 
 ### `wallet/PREVRANDAO_NOT_SUPPORTED`
@@ -123,11 +124,11 @@ The private canonical runtime remains exactly four rules.
 - Impact: Recommendation.
 - Consolidate with bridge confirmation guidance.
 
-## C07C viem scope decision
+## Completed C07C viem scope
 
-C07C is an active bounded build with a conservative explicit-pattern contract.
+C07C completed a bounded conservative explicit-pattern contract.
 
-Supported initial value:
+Implemented bounded surface:
 
 - exact first-party viem imports;
 - exact `arcTestnet`;
@@ -219,7 +220,7 @@ It must not be used as an implementation base.
 
 - Native USDC versus ERC-20 USDC amount modeling.
 - Duplicate native and ERC-20 USDC presentation.
-- Arc transaction-submission ownership.
+- Evidence-driven expansion of unsupported transaction-submission patterns.
 - Indexer ordering by block number.
 - Ethereum-style reorg assumptions.
 - Native-value and USDC event reconciliation.
@@ -233,10 +234,10 @@ C06A   Complete: harden wallet/WALLET_NATIVE_USDC_DISPLAY
 C06B1  Complete: bounded read-side amount interpretation
 C07A   Complete: private ethers transaction ownership
 C07B   Complete: ethers-only NO_BLOB_TX_ON_ARC hardening
-C07C-A Build: conservative viem explicit-pattern MVP
-C07C-B Blocked: thin integration after C07C-A approval
+C07C-A Complete: conservative viem explicit-pattern MVP
+C07C-B Complete: thin integration of already-valid records
 Demo/DX Improve broken/fixed example, onboarding, and report clarity
-C06B2  Add write-side amount analysis after C07C
+C06B2  Plan write-side amount analysis after Demo/DX under its own plan
 C08    Research CCTP attestation control flow
 C09    Replace duplicate PREVRANDAO keyword rules
 C10    Add versioned App Kit compatibility analysis
