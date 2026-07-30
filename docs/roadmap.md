@@ -1,7 +1,7 @@
 # ArcReady Roadmap
 
-**Status:** Active roadmap after C07B, with C07C-A explicit-MVP redesign in progress
-**Last reviewed:** 2026-07-28
+**Status:** Active roadmap after completed C07C explicit-pattern integration
+**Last reviewed:** 2026-07-30
 
 ArcReady is an Arc-specific, repository-level static compatibility analyzer for
 projects being ported from Ethereum or other EVM environments to Arc.
@@ -146,34 +146,35 @@ Reports only structurally safe own decimal `type: 3` transactions with effective
 `proven-arc` ownership. Broad Arc/blob keyword matching was removed. The rule
 remains non-canonical.
 
-### C07C-A — Build: conservative viem explicit-pattern MVP
+### C07C-A — Complete: conservative viem explicit-pattern MVP
 
 The first broad local implementation candidate was rejected after independent
 adversarial review despite 134 passing targeted tests. It remains audit evidence
 and is not a merge candidate.
 
-The replacement supports only exact first-party viem imports, exact
+The completed implementation supports only exact first-party viem imports, exact
 `arcTestnet`, direct built-in HTTP transport, approved account routes, direct or
 one immutable same-file binding, exact `.sendTransaction(...)`, and exact own
 `type: "eip4844"` evidence.
 
-The replacement uses two private viem-specific modules and does not create a
+It uses two private viem-specific modules and does not create a
 shared AST framework. Wider blob inference, alias/mutation graphs, per-call
 overrides, custom hooks, alternate actions, and cross-file analysis are
 deferred.
 
-### C07C-B — Blocked: thin viem integration
+### C07C-B — Complete: thin viem integration
 
-Starts only after replacement C07C-A is independently approved.
+PR #40 integrated already-valid ethers and viem records, selected the earliest
+`callOffset`, and added no new semantic inference. Public output, scoring,
+schema, reporters, and exits remained unchanged. The rule remains non-canonical,
+and inventory remains 19 known / 17 default / 7 wallet / 4 canonical.
 
-The integration may combine already-valid ethers and viem records and choose
-the earliest `callOffset`. It must not add new viem inference or change public
-output, inventory, canonical status, scoring, schema, reporters, or exits.
+### C06B2 — Unblocked; planned after Demo/DX
 
-### C06B2 — Planned after C07C
-
-Write-side amount analysis remains behind transaction-ownership work. It must
-not inherit unnecessary semantic complexity from the rejected C07C-A design.
+Completed transaction-ownership work unblocks separate planning for write-side
+amount analysis. Demo/DX and adoption evidence remain the product priority
+before C06B2 starts, and C06B2 must not inherit unnecessary semantic complexity
+from the rejected C07C-A design.
 
 ### C08 — Research: CCTP attestation control flow
 
@@ -192,8 +193,8 @@ support tables. Do not keep hardening the deprecated generic capability guard.
 
 ## Adoption and developer-experience track
 
-After C07C integration, prioritize product usefulness before expanding deep
-semantic infrastructure:
+With C07C integration complete, prioritize product usefulness before expanding
+deep semantic infrastructure:
 
 1. maintain a small public broken/fixed demo project;
 2. improve onboarding and GitHub Action usage;
@@ -249,16 +250,11 @@ The following remain outside the near-term roadmap:
 
 ## Current recommended next step
 
-1. Complete independent planning review and merge the C07C-A explicit-MVP
-   alignment.
-2. Implement replacement C07C-A from fresh `main` on
-   `agent/c07c-a-viem-explicit-mvp`.
-3. Obtain independent adversarial review and correct until no known blocker
-   remains in the declared scope.
-4. Reduce scope, redesign, or split the work when review identifies a systemic
-   architecture defect.
-5. Implement only the thin C07C-B integration.
-6. Return focus to broken/fixed demo quality, developer experience, and adoption
-   evidence before opening deferred semantic families.
+1. Improve the broken/fixed demo, onboarding, and report clarity.
+2. Gather real unsupported-pattern and false-positive/negative evidence.
+3. Plan C06B2 separately using the completed transaction-ownership boundary.
+4. Continue C08/C09/C10 in the existing sequence.
+5. Reopen deferred C07C families only from concrete usage evidence or a
+   separately approved milestone.
 
-The private canonical runtime remains exactly four rules throughout C07C.
+The private canonical runtime remained exactly four rules throughout C07C.

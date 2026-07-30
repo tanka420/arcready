@@ -22,6 +22,11 @@ C06A hardening note: `wallet/WALLET_NATIVE_USDC_DISPLAY` now reuses a private bo
 
 C06B1 implementation note: `wallet/ARC_USDC_AMOUNT_CONVERSION` uses a private, lazy-loaded TypeScript AST analyzer for bounded same-file `.js` and `.ts` read-side amount interpretation. It distinguishes Arc native 18-decimal balances from the exact Arc USDC ERC-20 six-decimal interface, recognizes only exact `10^12` conversions, and remains non-canonical. Writes, events, duplicate presentation, imported ownership, inter-file flow, and runtime validation remain deferred.
 
+C07C implementation note: `wallet/NO_BLOB_TX_ON_ARC` now combines bounded
+same-file ethers and viem submissions. It requires exact ethers `type: 3` or
+exact viem `type: "eip4844"` at supported sinks with proven Arc ownership,
+fails closed outside the declared grammar, and remains non-canonical.
+
 ArcReady has a useful rule foundation for v0.2.0. The active rules are Arc-specific in intent, have direct unit coverage, and are backed by smoke fixtures for wallet, bridge, and App Kit presets. The main v0.3.0 risk is not missing product breadth; it is rule precision. Most current rules rely on regex and line-level text matching, which is acceptable for an early static CI gate but creates false positive risk in comments, docs, unrelated helper code, split configuration files, and variable-derived values.
 
 The recommended next implementation order is:
@@ -43,7 +48,7 @@ Phase 3 should remain static and CLI-first. SaaS, dashboards, authentication, da
 | `wallet/NO_ETH_GAS_LABEL`               | `noEthGasLabelRule`              | wallet  | critical | Arc-related content that labels gas or fees as ETH/gwei.                                                                               | `wallet-rules.test.ts`                                                      | `wallet-good` avoids it; no bad fixture target.                                                               | Arc-specific                           | Needs improvement    | Keep, but reduce line-level false positives in comments, copy, and non-UI strings.                  |
 | `wallet/ONE_CONFIRMATION_FINAL`         | `oneConfirmationFinalRule`       | wallet  | critical | Arc wallet flow waiting for more than one confirmation or showing generic confirming copy.                                             | `wallet-rules.test.ts`, `fixtures.test.ts`                                  | `wallet-bad` targets it; `wallet-good` avoids it.                                                             | Arc-specific                           | Needs improvement    | Keep, but split numeric confirmation checks from UI-copy heuristics.                                |
 | `wallet/PREVRANDAO_NOT_SUPPORTED`       | `prevrandaoNotSupportedRule`     | wallet  | critical | Arc-related wallet content using `block.prevrandao`, `PREVRANDAO`, or `mixHash`.                                                       | `wallet-rules.test.ts`                                                      | No dedicated bad fixture target.                                                                              | Arc-specific / EVM-specific            | Needs improvement    | Keep, but require stronger usage context and avoid documentation/comment hits.                      |
-| `wallet/NO_BLOB_TX_ON_ARC`              | `noBlobTxOnArcRule`              | wallet  | critical | Exact ethers Wallet or awaited JsonRpcSigner submission of an own decimal type-3 transaction with proven Arc ownership.                | `no-blob-tx-on-arc.test.ts`, `wallet-rules.test.ts`                         | Installed-package smoke covers a supported violation and former text-only false positive.                     | Arc-specific / ethers-specific         | Good                 | Preserve the bounded ethers-only C07B contract; viem remains deferred to C07C.                      |
+| `wallet/NO_BLOB_TX_ON_ARC`              | `noBlobTxOnArcRule`              | wallet  | critical | Bounded exact ethers type-3 and viem EIP-4844 submissions with proven Arc ownership.                                                   | Rule, viem analyzer, and wallet suites.                                     | Installed-package smoke covers a supported violation and former text-only false positive.                     | Arc-specific / ethers and viem         | Good                 | Preserve the bounded C07B/C07C contract; expand only from concrete usage evidence.                  |
 | `bridge/BRIDGE_CONFIRMATIONS_ONE`       | `bridgeConfirmationsOneRule`     | bridge  | critical | Arc bridge route or relayer config requiring more than one confirmation/finality block.                                                | `bridge-rules.test.ts`, `fixtures.test.ts`                                  | `bridge-bad` targets it; `bridge-good` avoids it.                                                             | Arc-specific                           | Good                 | Keep, but add realistic route and relayer fixtures.                                                 |
 | `bridge/CCTP_DOMAIN_26`                 | `cctpDomain26Rule`               | bridge  | critical | Arc CCTP config where the Arc domain is not `26`.                                                                                      | `bridge-rules.test.ts`                                                      | No dedicated bad fixture target; `bridge-good` includes `ARC_DOMAIN = 26`.                                    | Arc-specific                           | Good                 | Keep, but support more real config shapes.                                                          |
 | `bridge/NO_WRAPPED_USDC_ON_ARC`         | `noWrappedUsdcOnArcRule`         | bridge  | critical | Arc bridge content that refers to `USDC.e`, `wUSDC`, wrapped USDC, or bridged USDC.                                                    | `bridge-rules.test.ts`                                                      | `bridge-good` avoids it; no bad fixture target.                                                               | Arc-specific                           | Good                 | Keep, but add comment/doc and token-list edge cases.                                                |
@@ -90,8 +95,9 @@ These rules map to clear Arc-specific integration guidance and belong in ArcRead
 - `wallet/NO_ETH_GAS_LABEL`: Line-level matching can flag comments, docs, tests, or non-user-facing strings.
 - `wallet/ONE_CONFIRMATION_FINAL`: Numeric confirmation detection is useful, but generic "confirming" copy is too broad for a critical finding.
 - `wallet/PREVRANDAO_NOT_SUPPORTED`: Should distinguish executable usage from references in docs, comments, or defensive checks.
-- `wallet/NO_BLOB_TX_ON_ARC`: C07B now requires exact ethers provenance, sink,
-  Arc ownership, safe transaction structure, and own decimal `type: 3`.
+- `wallet/NO_BLOB_TX_ON_ARC`: C07B/C07C now require proven Arc ownership and
+  exact supported sinks with own exact ethers `type: 3` or viem
+  `type: "eip4844"` evidence.
 - `bridge/RELAYER_USES_USDC_FOR_GAS`: Current phrase matching is narrow and likely misses realistic relayer gas-token configuration mistakes.
 - `bridge/ATTESTATION_404_NOT_FATAL`: Needs stronger modeling of retryable 404 handling versus logging or typed error branches.
 - `bridge/NO_PREVRANDAO_RELAY_SELECTION`: Should require actual relay selection/randomness usage, not only nearby words.
@@ -107,7 +113,8 @@ These rules map to clear Arc-specific integration guidance and belong in ArcRead
 - `wallet/NO_ETH_GAS_LABEL`: Add UI-copy fixtures that separate real user-facing labels from comments and test data.
 - `wallet/PREVRANDAO_NOT_SUPPORTED`: Add an executable randomness usage fixture and a non-finding documentation/comment fixture.
 - `wallet/NO_BLOB_TX_ON_ARC`: Installed-package smoke now covers an exact
-  ethers Arc type-3 submission and documentation/blob-text non-finding.
+  ethers Arc type-3 submission and documentation/blob-text non-finding; focused
+  rule and viem analyzer suites cover the bounded viem integration.
 - `bridge/CCTP_DOMAIN_26`: Add realistic CCTP domain maps and constants imported into route config.
 - `bridge/RELAYER_USES_USDC_FOR_GAS`: Add relayer config fixtures using gas-token fields, environment variables, and setup docs.
 - `bridge/ATTESTATION_404_NOT_FATAL`: Add fixtures for retry loops, polling, typed HTTP errors, and fatal 404 handling.
@@ -120,9 +127,9 @@ These rules map to clear Arc-specific integration guidance and belong in ArcRead
 
 - `wallet/ARC_CHAIN_METADATA`: The message should identify whether the issue is missing `5042002`, wrong RPC metadata, or wrong explorer metadata.
 - `wallet/ONE_CONFIRMATION_FINAL`: The finding should separate "more than one confirmation" from generic pending UI copy, because the fixes differ.
-- `wallet/NO_BLOB_TX_ON_ARC`: C07B now names exact transaction type 3 and gives
-  the locked type-2 remediation without claiming that supporting fields prove
-  kind.
+- `wallet/NO_BLOB_TX_ON_ARC`: C07B/C07C name exact ethers type 3 or viem
+  EIP-4844 transaction evidence and retain the locked type-2 remediation
+  without claiming that supporting fields prove kind.
 - `bridge/RELAYER_USES_USDC_FOR_GAS`: The message should explicitly say Arc relayers should account for USDC gas, and the suggestion should point to the config field or setup text that needs changing.
 - `bridge/ATTESTATION_404_NOT_FATAL`: The suggestion should say that CCTP attestation 404s should be handled as pending/retryable, not fatal.
 - `app-kit/APPKIT_CAPABILITY_SUPPORTED`: The message should name the operation and the expected capability check pattern.
