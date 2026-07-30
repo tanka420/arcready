@@ -1,3 +1,6 @@
+import { createWalletClient, http } from "viem";
+import { arcTestnet } from "viem/chains";
+
 export const arcWalletChain = {
   name: "Arc Testnet",
   chainId: 1,
@@ -34,14 +37,18 @@ export function pickWalletOffer(block: { prevrandao: bigint }) {
   return Number(block.prevrandao % 4n);
 }
 
-export function buildArcPaymentTransaction() {
-  return {
-    chainId: 5042002,
+export async function submitArcPayment() {
+  const client = createWalletClient({
+    account: "0x0000000000000000000000000000000000000000",
+    chain: arcTestnet,
+    transport: http()
+  });
+
+  return client.sendTransaction({
     to: "0x0000000000000000000000000000000000000000",
     value: 0n,
-    type: 3,
-    maxFeePerBlobGas: 1n
-  };
+    type: "eip4844"
+  });
 }
 
 declare function waitForTransactionReceipt(input: {

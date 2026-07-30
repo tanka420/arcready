@@ -6,22 +6,31 @@ It resembles a small Arc wallet, bridge, and App Kit integration, but it include
 
 The project is static only. It does not call live Arc RPCs, Circle APIs, bridge services, or App Kit runtime APIs.
 
-## Role in the launch demo
+## Reproducible before/after demo
 
-Use this project as the realistic starting point. For the launch video, copy it into a temporary working directory, scan it, inspect the reported findings, and repair the flagged files using `../fixed-arc-integration` as the corrected reference state.
+From the repository root, run:
 
-Files to open during the repair:
+```powershell
+corepack pnpm demo:fixtures
+```
 
-- `src/wallet/arc-wallet.ts`
-- `src/bridge/cctp-bridge.ts`
-- `src/app-kit/app-kit.ts`
-- `arcready.config.json`
+The broken project must fail with at least one critical finding and include all
+four required findings:
 
-## Run ArcReady
+- `wallet/ARC_CHAIN_METADATA`
+- `wallet/NO_BLOB_TX_ON_ARC`
+- `bridge/CCTP_DOMAIN_26`
+- `app-kit/APPKIT_CHAIN_IDENTIFIER_VALID`
+
+Additional findings may also be shown. The companion fixed project must pass
+with score 100 and zero findings.
+
+## Standalone ArcReady scan
 
 ```powershell
 npx --yes arcready@0.3.0 scan .
 npx --yes arcready@0.3.0 scan --format html --out arcready-report.html
 ```
 
-Expected result: ArcReady should produce findings across the wallet and bridge presets, plus App Kit warnings.
+The standalone scan has the same broken-project expectation: fail, at least one
+critical finding, and all four required rule IDs above.

@@ -1130,7 +1130,7 @@ describe("runtime boundaries and diagnostic ordering", () => {
     expect(publicSource).not.toContain("runInternalScanV2");
   });
 
-  it("records the intended C07B demo finding-count change", async () => {
+  it("records the intended DX01 demo finding-count change", async () => {
     const broken = await runScan(
       join(repoRoot, "examples", "demo-projects", "broken-arc-integration")
     );
@@ -1138,12 +1138,12 @@ describe("runtime boundaries and diagnostic ordering", () => {
       join(repoRoot, "examples", "demo-projects", "fixed-arc-integration")
     );
 
-    expect(broken.report.findings).toHaveLength(15);
-    expect(
-      broken.report.findings.some(
-        ({ ruleId }) => ruleId === "wallet/NO_BLOB_TX_ON_ARC"
-      )
-    ).toBe(false);
+    const blobFindings = broken.report.findings.filter(
+      ({ ruleId }) => ruleId === "wallet/NO_BLOB_TX_ON_ARC"
+    );
+
+    expect(broken.report.findings).toHaveLength(16);
+    expect(blobFindings).toHaveLength(1);
     expect(fixed.report.findings).toHaveLength(0);
   });
 

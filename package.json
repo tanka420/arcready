@@ -9,7 +9,7 @@
   "scripts": {
     "build": "corepack pnpm -r build",
     "validate:fixtures": "tsx scripts/demo-fixtures.ts",
-    "demo:fixtures": "tsx scripts/demo-fixtures.ts",
+    "demo:fixtures": "tsx scripts/demo-before-after.ts",
     "smoke:package": "tsx scripts/smoke-package.ts",
     "test": "corepack pnpm -r test",
     "test:workflow": "vitest run scripts/create-review-bundle.test.ts",
