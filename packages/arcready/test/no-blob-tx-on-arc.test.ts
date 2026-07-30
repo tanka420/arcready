@@ -9,10 +9,15 @@ import {
   terminalReporter
 } from "../src/index.js";
 import type { Finding, RuleContext } from "../src/index.js";
-import { selectEarliestC07BViolation } from "../rules/wallet/no-blob-tx-on-arc.js";
+import {
+  selectEarliestC07BViolation,
+  selectEarliestC07CViolation
+} from "../rules/wallet/no-blob-tx-on-arc.js";
 import type { EthersTransactionSubmission } from "../rules/wallet/arc-transaction-submission-analyzer.js";
+import type { ViemTransactionSubmission } from "../rules/wallet/viem-transaction-submission-analyzer.js";
 
 const ARC_RPC = "https://rpc.testnet.arc.network";
+const ADDRESS = "0x1111111111111111111111111111111111111111";
 const MESSAGE =
   "Arc transaction submission uses EIP-4844 transaction type 3, which Arc does not support.";
 const SUGGESTED_FIX =
@@ -37,6 +42,30 @@ const provider = new JsonRpcProvider("${ARC_RPC}");
 const signer = await provider.getSigner();
 ${setup}
 signer.sendTransaction(${transaction});`;
+}
+
+function viemJsonRpcSource(
+  request = `{ type: "eip4844" }`,
+  transport = "http()",
+  clientReceiver = "client"
+): string {
+  const client =
+    clientReceiver === "client"
+      ? `const client = createWalletClient({ chain: arcTestnet, transport: ${transport}, account: "${ADDRESS}" });
+client`
+      : `createWalletClient({ chain: arcTestnet, transport: ${transport}, account: "${ADDRESS}" })`;
+  return `import { createWalletClient, http } from "viem";
+import { arcTestnet } from "viem/chains";
+${client}.sendTransaction(${request});`;
+}
+
+function viemPrivateKeySource(request = `{ type: "eip4844" }`): string {
+  return `import { createWalletClient, http } from "viem";
+import { arcTestnet } from "viem/chains";
+import { privateKeyToAccount } from "viem/accounts";
+const account = privateKeyToAccount(secret);
+const client = createWalletClient({ chain: arcTestnet, transport: http("${ARC_RPC}"), account: account });
+client.sendTransaction(${request});`;
 }
 
 async function runRule(
@@ -104,7 +133,34 @@ function submission(
   };
 }
 
-describe("wallet/NO_BLOB_TX_ON_ARC C07B acceptance", () => {
+function viemSubmission(
+  callOffset: number,
+  overrides: Partial<ViemTransactionSubmission> = {}
+): ViemTransactionSubmission {
+  return {
+    provenance: "viem-wallet-client",
+    sink: "sendTransaction",
+    structuralSafety: "proven-safe",
+    ownership: "proven-arc",
+    accountRoute: "json-rpc-address",
+    transactionKind: "proven-blob",
+    evidenceToken: "eip4844",
+    callOffset,
+    ...overrides
+  };
+}
+
+function viemSubmissionWithInvalidField(
+  key: keyof ViemTransactionSubmission,
+  value: unknown
+): ViemTransactionSubmission {
+  return {
+    ...viemSubmission(1),
+    [key]: value
+  } as ViemTransactionSubmission;
+}
+
+describe("wallet/NO_BLOB_TX_ON_ARC C07C-B acceptance", () => {
   describe("B01-B02, B07, and R06 exact positive submissions", () => {
     it("B01 finds an Arc Wallet direct exact type-3 transaction", async () => {
       const findings = await runRule(
@@ -162,6 +218,33 @@ const signer = (new Wallet(key, (provider)));
       );
       expect(findings).toHaveLength(1);
       expectExactFinding(findings[0]);
+    });
+  });
+
+  describe("C07C-B viem public integration positives", () => {
+    it("finds a direct Arc wallet client with a JSON-RPC account and http()", async () => {
+      const findings = await runRule(
+        viemJsonRpcSource(`{ type: "eip4844" }`, "http()", "direct")
+      );
+      expect(findings).toHaveLength(1);
+      expectExactFinding(findings[0]);
+    });
+
+    it("finds one bound Arc wallet client with a private-key account and exact Arc RPC", async () => {
+      const findings = await runRule(viemPrivateKeySource());
+      expect(findings).toHaveLength(1);
+      expectExactFinding(findings[0]);
+    });
+
+    it("reports a viem-only source when the ethers analyzer contributes no records", async () => {
+      const findings = await runRule(viemJsonRpcSource());
+      expect(findings).toHaveLength(1);
+      expectExactFinding(findings[0]);
+    });
+
+    it("keeps an unsupported viem near-match silent", async () => {
+      const findings = await runRule(viemJsonRpcSource(`{ type: "eip1559" }`));
+      expect(findings).toEqual([]);
     });
   });
 
@@ -424,6 +507,133 @@ second.sendTransaction = replacement;`
     });
   });
 
+  describe("C07C-B mixed-family aggregation and combined selection", () => {
+    it("emits one finding for valid ethers and viem sinks in one file after one read", async () => {
+      const source = `${walletSource("{ type: 3 }")}
+${viemJsonRpcSource()}`;
+      const readFile = vi.fn(async () => source);
+      const findings = await runRule(source, { readFile });
+      expect(findings).toHaveLength(1);
+      expectExactFinding(findings[0]);
+      expect(readFile).toHaveBeenCalledTimes(1);
+      expect(readFile).toHaveBeenCalledWith("src/submit.ts");
+    });
+
+    it("emits one finding for multiple valid viem sinks", async () => {
+      const source = `import { createWalletClient, http } from "viem";
+import { arcTestnet } from "viem/chains";
+const first = createWalletClient({ chain: arcTestnet, transport: http(), account: "${ADDRESS}" });
+first.sendTransaction({ type: "eip4844" });
+const second = createWalletClient({ chain: arcTestnet, transport: http("${ARC_RPC}"), account: "${ADDRESS}" });
+second.sendTransaction({ type: "eip4844" });`;
+      const findings = await runRule(source);
+      expect(findings).toHaveLength(1);
+      expectExactFinding(findings[0]);
+    });
+
+    it("reports later valid viem when an earlier ethers sink is invalid", async () => {
+      const source = `${walletSource("{ type: 2 }")}
+${viemJsonRpcSource()}`;
+      const findings = await runRule(source);
+      expect(findings).toHaveLength(1);
+      expectExactFinding(findings[0]);
+    });
+
+    it("reports later valid ethers when an earlier viem sink is invalid", async () => {
+      const source = `${viemJsonRpcSource(`{ type: "eip1559" }`)}
+${walletSource("{ type: 3 }")}`;
+      const findings = await runRule(source);
+      expect(findings).toHaveLength(1);
+      expectExactFinding(findings[0]);
+    });
+
+    it("selects valid viem-only and delegates ethers-only behavior", () => {
+      const ethers = submission(20);
+      const viemRecord = viemSubmission(10);
+      expect(selectEarliestC07CViolation([], [viemRecord])).toBe(viemRecord);
+      expect(selectEarliestC07CViolation([ethers], [])).toBe(ethers);
+      expect(selectEarliestC07CViolation([ethers], [])).toBe(
+        selectEarliestC07BViolation([ethers])
+      );
+    });
+
+    it("selects the globally earliest valid record without depending on input order", () => {
+      const ethersEarly = submission(20);
+      const ethersLate = submission(80);
+      const viemEarly = viemSubmission(10);
+      const viemLate = viemSubmission(90);
+      const permutations = [
+        {
+          ethers: [ethersLate, ethersEarly],
+          viem: [viemLate, viemEarly]
+        },
+        {
+          ethers: [ethersEarly, ethersLate],
+          viem: [viemEarly, viemLate]
+        },
+        {
+          ethers: [ethersLate, ethersEarly],
+          viem: [viemEarly, viemLate]
+        }
+      ];
+
+      for (const candidates of permutations) {
+        const ethersBefore = [...candidates.ethers];
+        const viemBefore = [...candidates.viem];
+        expect(
+          selectEarliestC07CViolation(candidates.ethers, candidates.viem)
+        ).toBe(viemEarly);
+        expect(candidates.ethers).toEqual(ethersBefore);
+        expect(candidates.viem).toEqual(viemBefore);
+      }
+    });
+
+    it("skips invalid earlier records from both families", () => {
+      const invalidEthers = submission(1, { ownership: "proven-non-arc" });
+      const invalidViem = viemSubmissionWithInvalidField(
+        "transactionKind",
+        "proven-non-blob"
+      );
+      const validViem = viemSubmission(30);
+      const validEthers = submission(40);
+      expect(
+        selectEarliestC07CViolation(
+          [invalidEthers, validEthers],
+          [invalidViem, validViem]
+        )
+      ).toBe(validViem);
+    });
+
+    it("keeps the ethers record by object identity on an exact offset tie", () => {
+      const ethers = submission(10);
+      const viemRecord = viemSubmission(10);
+      expect(selectEarliestC07CViolation([ethers], [viemRecord])).toBe(ethers);
+    });
+
+    it.each([
+      ["provenance", "lookalike-client"],
+      ["sink", "writeContract"],
+      ["structuralSafety", "unknown"],
+      ["ownership", "proven-non-arc"],
+      ["accountRoute", "custom-account"],
+      ["transactionKind", "proven-non-blob"],
+      ["evidenceToken", "eip1559"]
+    ] as const)("rejects a viem record with mutated %s", (field, value) => {
+      const invalid = viemSubmissionWithInvalidField(field, value);
+      expect(selectEarliestC07CViolation([], [invalid])).toBeUndefined();
+    });
+
+    it("accepts both exact viem account routes", () => {
+      const jsonRpc = viemSubmission(20);
+      const privateKey = viemSubmission(10, {
+        accountRoute: "private-key-local-account"
+      });
+      expect(selectEarliestC07CViolation([], [jsonRpc, privateKey])).toBe(
+        privateKey
+      );
+    });
+  });
+
   describe("F01-F08 exact finding, aggregation, and observable boundaries", () => {
     it("F01/R07 locks the exact message, fix, identity, severity, docs, and file", async () => {
       const findings = await runRule(walletSource("{ type: 3 }"));
@@ -475,7 +685,7 @@ signer.sendTransaction({ type: 3, blobs: [blob] });`
     it("F04 preserves file order and repeated deterministic output", async () => {
       const files = ["src/z-submit.ts", "src/a-submit.ts"];
       const sources = {
-        [files[0]]: walletSource("{ type: 3 }"),
+        [files[0]]: viemJsonRpcSource(),
         [files[1]]: jsonRpcSignerSource("{ type: 3 }")
       };
       const first = await runRule("", { files, sources });
@@ -492,7 +702,7 @@ signer.sendTransaction({ type: 3, blobs: [blob] });`
     it.each(["info", "warning", "critical"] as const)(
       "F05 honors %s severity override without changing the contract",
       async (severity) => {
-        const findings = await runRule(walletSource("{ type: 3 }"), {
+        const findings = await runRule(viemJsonRpcSource(), {
           rules: { "wallet/NO_BLOB_TX_ON_ARC": severity }
         });
         expect(findings).toHaveLength(1);
@@ -501,7 +711,7 @@ signer.sendTransaction({ type: 3, blobs: [blob] });`
     );
 
     it("F06 does not read or analyze files when explicitly disabled", async () => {
-      const readFile = vi.fn(async () => walletSource("{ type: 3 }"));
+      const readFile = vi.fn(async () => viemJsonRpcSource());
       const findings = await runRule("", {
         rules: { "wallet/NO_BLOB_TX_ON_ARC": "off" },
         readFile
@@ -511,11 +721,16 @@ signer.sendTransaction({ type: 3, blobs: [blob] });`
     });
 
     it("F07 remains in wallet preset and absent from bridge-only preset", () => {
-      expect(getRulesForPresets(["wallet"]).map(({ id }) => id)).toContain(
+      const walletRules = getRulesForPresets(["wallet"]);
+      expect(walletRules).toHaveLength(7);
+      expect(walletRules.map(({ id }) => id)).toContain(
         "wallet/NO_BLOB_TX_ON_ARC"
       );
       expect(getRulesForPresets(["bridge"]).map(({ id }) => id)).not.toContain(
         "wallet/NO_BLOB_TX_ON_ARC"
+      );
+      expect(getRulesForPresets(["wallet", "bridge", "app-kit"])).toHaveLength(
+        17
       );
     });
 
@@ -524,7 +739,7 @@ signer.sendTransaction({ type: 3, blobs: [blob] });`
         `const chainId = 5042002;
 const docs = "Arc EIP-4844 blob transaction type: 3";`
       );
-      const violation = await runRule(walletSource("{ type: 3 }"));
+      const violation = await runRule(viemJsonRpcSource());
       const cleanReport = createScanReport("clean", falsePositive);
       const violationReport = createScanReport("violation", violation);
       expect(cleanReport).toMatchObject({
@@ -550,7 +765,7 @@ const docs = "Arc EIP-4844 blob transaction type: 3";`
     });
   });
 
-  describe("V01-V06 C07C-family deferral and legacy fallback removal", () => {
+  describe("V01-V06 unsupported viem boundaries and legacy fallback removal", () => {
     it.each([
       [
         "V01 viem sendTransaction",

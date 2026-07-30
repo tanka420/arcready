@@ -16,7 +16,7 @@ ArcReady does not perform live Arc RPC checks, Circle API checks, on-chain trans
 | Wallet  | `wallet/NO_ETH_GAS_LABEL`               | Critical | Checks Arc wallet fee UI text for ETH or gwei gas labels.                                                                  |
 | Wallet  | `wallet/ONE_CONFIRMATION_FINAL`         | Critical | Checks Arc wallet transaction flows for Ethereum-style multi-confirmation waits.                                           |
 | Wallet  | `wallet/PREVRANDAO_NOT_SUPPORTED`       | Critical | Checks Arc wallet code for active PREVRANDAO or mixHash assumptions.                                                       |
-| Wallet  | `wallet/NO_BLOB_TX_ON_ARC`              | Critical | Checks exact proven-Arc ethers submissions for an own decimal EIP-4844 transaction type 3.                                 |
+| Wallet  | `wallet/NO_BLOB_TX_ON_ARC`              | Critical | Checks exact supported ethers and viem EIP-4844 transaction submissions in proven Arc flows.                               |
 | Bridge  | `bridge/BRIDGE_CONFIRMATIONS_ONE`       | Critical | Checks Arc bridge and relayer flows for more than one required confirmation.                                               |
 | Bridge  | `bridge/CCTP_DOMAIN_26`                 | Critical | Checks Arc CCTP domain configuration for domain `26`.                                                                      |
 | Bridge  | `bridge/NO_WRAPPED_USDC_ON_ARC`         | Critical | Checks Arc bridge routes for wrapped or bridged USDC as the Arc-side asset.                                                |
@@ -132,7 +132,7 @@ ArcReady does not perform live Arc RPC checks, Circle API checks, on-chain trans
 
 - Preset: Wallet
 - Severity: Critical
-- What it detects: Exact ethers v6 `Wallet` or awaited `JsonRpcSigner` submissions of an own decimal `type: 3` transaction through a proven Arc provider.
+- What it detects: Exact ethers v6 `Wallet` or awaited `JsonRpcSigner` submissions of an own decimal `type: 3` transaction through a proven Arc provider. It also detects exact named-import viem Arc Testnet wallet clients using direct built-in `http()` or the exact Arc RPC, an approved JSON-RPC address or `privateKeyToAccount` route, exact dot `sendTransaction`, and an own `type: "eip4844"`. Supported viem values may be direct or use one immutable same-file `const` where the approved grammar allows it.
 - Why it matters: Arc does not support EIP-4844 type-3 transaction submissions.
 - Example bad pattern:
 
@@ -144,8 +144,20 @@ ArcReady does not perform live Arc RPC checks, Circle API checks, on-chain trans
   signer.sendTransaction({ type: 3 });
   ```
 
+  ```ts
+  import { createWalletClient, http } from "viem";
+  import { arcTestnet } from "viem/chains";
+
+  const client = createWalletClient({
+    chain: arcTestnet,
+    transport: http(),
+    account: "0x1111111111111111111111111111111111111111"
+  });
+  client.sendTransaction({ type: "eip4844" });
+  ```
+
 - Suggested fix: Submit a type-2 EIP-1559 transaction on Arc instead (`type: 2`) and remove any blob-only fields present in the submitted transaction.
-- Static-analysis limitation: ArcReady supports bounded same-file `.js` and `.ts` ethers flows only. Imported/cross-file values, wrappers, inferred transaction type, JSX/TSX, runtime state, and all viem/C07C flows remain unsupported.
+- Static-analysis limitation: ArcReady supports only bounded same-file plain `.js` and `.ts` flows and fails closed on unsupported forms. JSX/TSX, imported or cross-file values, wrappers, depth-two or branching aliases, inferred blob evidence, per-call chain or account overrides, custom transports or actions, generic alias/data-flow analysis, and runtime state remain unsupported.
 
 ## Bridge preset
 
