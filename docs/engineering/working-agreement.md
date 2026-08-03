@@ -2,328 +2,299 @@
 
 ## Purpose
 
-This document defines the default development workflow for ArcReady. It applies
-to future milestones, bug fixes, rule work, canonicalization, CLI and reporter
-changes, dependency work, releases, and repository maintenance.
+ArcReady uses a product-led, evidence-gated delivery model:
 
-The workflow is risk-based rather than ceremony-based. It removes redundant
-work while preserving the strongest appropriate quality gate.
+```text
+product problem
+→ bounded evidence
+→ time-boxed architecture spike
+→ early architecture decision
+→ working vertical slice
+→ risk-based regression expansion
+→ final independent review
+→ adoption gate
+```
+
+The workflow is risk-based rather than ceremony-based. It preserves truthful,
+fail-closed analysis while preventing small milestones from becoming open-ended
+research programs.
+
+## Product north star
+
+ArcReady is an Arc-specific, local-first, CI-friendly static compatibility gate.
+It should detect a small set of common Arc integration problems with findings
+that developers can trust and act on.
+
+ArcReady is not a generic EVM linter, compiler, security auditor, transaction
+simulator, runtime verifier, hosted dashboard, or general-purpose
+program-analysis platform.
+
+New work should proceed only when:
+
+1. Arc developers realistically encounter the problem;
+2. ArcReady can detect it within a narrow, truthful, maintainable boundary;
+3. the finding gives the developer a clear corrective action.
 
 ## Priority order
 
-1. Product correctness.
-2. Technical correctness.
-3. Evidence quality and fail-closed behavior.
-4. Resolution of known blockers.
-5. Maintainability and truthful documentation.
-6. Time and token efficiency.
+1. Product value.
+2. Product correctness.
+3. Technical correctness.
+4. Evidence quality and fail-closed behavior.
+5. Resolution of known blockers.
+6. Maintainability.
+7. Time and token efficiency.
 
-When speed conflicts with required evidence, review, or validation, quality wins.
+Quality wins when speed conflicts with a required boundary. Ceremony that does
+not improve the boundary should be removed.
 
 ## Risk classes
 
-### R0 — Documentation or metadata only
+### R0 — Documentation or metadata without policy impact
 
-Examples:
-
-- typo corrections
-- date or link updates
-- wording that does not change rule policy or product claims
+Examples include typo, date, link, or wording corrections that do not change
+product, rule, review, or merge policy.
 
 Minimum process:
 
-1. define the narrow scope
-2. edit
-3. inspect the diff
-4. run relevant formatting or documentation checks
-5. rely on CI before merge
+1. define the narrow scope;
+2. edit;
+3. inspect the exact diff;
+4. run relevant formatting or documentation checks;
+5. rely on required CI before merge.
 
-### R1 — Local settled-contract change
+### R1 — Settled local contract or governance change
 
-Examples:
-
-- message correction
-- focused regression fix
-- local helper change with an existing contract
+Examples include focused regression fixes, local helper changes under an
+established contract, and workflow documentation that changes process but not
+runtime behavior.
 
 Minimum process:
 
-1. write a short task contract
-2. implement with a regression test
-3. run targeted validation
-4. self-review the exact diff
-5. run the full gate once the change is stable
-6. obtain normal PR review
+1. write a short task contract;
+2. implement the narrow change;
+3. add regression evidence when behavior changes;
+4. run targeted validation;
+5. inspect the exact diff;
+6. run the full gate only when required by the affected boundary;
+7. obtain normal PR review.
 
-### R2 — Rule hardening or bounded analyzer
-
-Examples:
-
-- new ownership path
-- source or sink classification
-- viem or ethers support
-- fail-closed syntax expansion
+### R2 — Rule hardening or bounded analyzer behavior
 
 Required process:
 
-1. create or update an exec plan
-2. lock the supported and unsupported surface
-3. define the threat model and acceptance matrix
-4. implement in reviewable slices
-5. run targeted validation during development
-6. obtain independent adversarial review before release-candidate validation
-7. correct until no known blocker remains
-8. run the full gate
-9. prepare a release candidate and final review
+1. write a short product brief and why-now statement;
+2. verify the first-party premise and repository baseline;
+3. run a time-boxed architecture spike;
+4. record one bounded architecture decision;
+5. obtain architecture review before expanding fixtures;
+6. implement one end-to-end vertical slice;
+7. expand regressions according to demonstrated risk;
+8. run targeted validation during development;
+9. obtain one final independent adversarial implementation review;
+10. run the full repository gate on the stable candidate;
+11. merge only after exact-head CI and required review pass.
 
 ### R3 — Architecture or external contract
 
-Examples:
-
-- canonical runtime changes
-- FindingV2, CoverageV2, or ScanResultV2 changes
-- public API, schema, scoring, or exit behavior
-- shared AST infrastructure
-- runtime dependency changes
-
 Required process:
 
-1. research first-party premises and repository constraints
-2. compare viable designs and record the decision
-3. independently review the plan
-4. split implementation into bounded PRs when practical
-5. prove backward compatibility or document an approved break
-6. perform independent adversarial review
-7. run the full gate and package-level validation
-8. merge only after explicit contract and boundary proof
+1. write a product and compatibility brief;
+2. research first-party premises and repository constraints;
+3. compare viable designs in a time-boxed spike;
+4. independently review the architecture decision;
+5. split implementation into bounded vertical slices;
+6. prove backward compatibility or document an approved break;
+7. perform final independent adversarial review;
+8. run full and package-level validation;
+9. merge only after explicit contract, migration, and boundary proof.
 
 ## Standard lifecycle
 
-### 0. Intake and classification
+### 0. Intake and product evidence
 
-Record:
+Record the user problem, why it matters now, available evidence, risk class,
+scope, non-goals, and go/defer/research/replace/retire decision.
 
-- user or developer problem
-- expected product value
-- risk class
-- initial scope and non-goals
-- go, defer, research, replace, or retire decision
+Do not begin implementation only because a legacy rule or roadmap entry exists.
 
-Do not begin implementation merely because a legacy rule already exists.
+### 1. Baseline and premise
 
-### 1. Baseline and evidence
+Verify branch, exact HEAD, clean working tree, relationship to `origin/main`,
+relevant source and tests, and first-party premises.
 
-Verify:
+Stop on a material baseline or premise conflict.
 
-- expected branch and exact HEAD
-- clean working tree and index
-- relationship to `origin/main`
-- package and tool versions when relevant
-- current source, tests, roadmap, catalog, and quality-audit state
-- first-party external premise for unstable or integration-specific behavior
+### 2. Time-boxed architecture spike
 
-Stop on a material baseline mismatch. Do not silently rebase the task onto an
-unknown state.
+R2 and R3 work should normally begin with a spike lasting approximately half a
+day to two working days.
 
-### 2. Specification proportional to risk
+A spike may include:
 
-`R0` and most `R1` work may use a short task note.
+- 5–10 complete examples;
+- one private prototype;
+- dependency-source inspection;
+- the hardest representative tests;
+- comparison of reuse versus a new private helper.
 
-`R2` and `R3` work use an exec plan based on
-`docs/exec-plans/TEMPLATE.md`. The plan must define:
+A spike must not change public output, build a speculative framework, create a
+large fixture matrix, or claim production readiness.
 
-- product goal
-- supported surface
-- unsupported surface
-- evidence and ownership model
-- ambiguity policy
-- threat model
-- acceptance matrix
-- implementation slices
-- validation and exit criteria
+If the spike does not establish a viable bounded approach, defer, split, or
+retire the milestone before writing a large plan.
 
-The plan is a source of truth, not a copy of every repository invariant.
+### 3. Proportional specification
 
-### 3. Adversarial design review before code
+R0 and most R1 work use a short task note.
 
-For `R2` and `R3`, attempt to break the design before implementation.
+R2 and R3 use `docs/exec-plans/TEMPLATE.md`. The plan is a decision record, not a
+duplicate implementation.
 
-Mutate positive examples across:
+The complete fixture inventory belongs in executable test data or a manifest,
+not duplicated manually across the plan, roadmap, and backlog.
 
-- ownership and sibling networks
-- lexical scope and shadowing
-- imports and reassignment
-- spread, computed, duplicate, omitted, and malformed syntax
-- library and API identity
-- source, sink, and call-site relationships
-- unsupported wrappers and cross-file flow
+### 4. Architecture review before fixture expansion
 
-Update the plan and matrix before code when a missing semantic class is found.
+For R2 and R3, independently challenge ownership, source and sink identity,
+imports, shadowing, reassignment, malformed syntax, wrappers, cross-file flow,
+accidental generalization, and public boundaries.
 
-### 4. Implementation in bounded slices
+A Class C architecture defect pauses implementation. Redesign or split the work
+before adding more fixtures.
 
-Prefer slices with one clear responsibility and test boundary. Avoid large
-multi-purpose analyzers when smaller components can express the contract.
+### 5. Working vertical slice
 
-Do not create a generic framework in anticipation of hypothetical consumers.
-Extract shared infrastructure only after the common semantics are demonstrated.
+Prefer the smallest end-to-end path:
 
-### 5. Fast development loop
+```text
+source
+→ analyzer
+→ candidate
+→ rule selection
+→ finding or safe result
+→ executable test
+```
+
+The slice may remain private until review, but it must exercise the real
+integration path.
+
+### 6. Risk-based regression expansion
+
+After the slice works, add regressions for demonstrated risks such as wrong
+network, address, ABI, function, sink, aliases, shadowing, malformed syntax,
+boundaries, overflow, ordering, sibling isolation, and legacy preservation.
+
+Fixture count is not a quality target.
+
+### 7. Fast development loop
 
 During implementation:
 
-1. edit one bounded slice
-2. run targeted tests
-3. run the relevant build or type check
-4. inspect the diff
-5. add or mutate counterexamples
-6. correct and repeat
+1. edit one bounded behavior;
+2. run targeted tests;
+3. run the relevant build or type check;
+4. inspect the exact diff;
+5. add the smallest regression that proves the correction;
+6. repeat.
 
-Do not create a release bundle or run every repository-wide check after each
-small correction.
+Do not run every repository-wide check after each small correction.
 
-The active exec plan owns its targeted command list; there is no single generic
-fast gate that is correct for every milestone.
-
-### 6. Independent pre-RC review
-
-Before full validation, an independent reviewer examines:
-
-- contract adherence
-- architecture and coupling
-- unsupported behavior that is accidentally accepted
-- false-positive and false-negative counterexamples
-- claim-versus-code accuracy
-- scope drift
-
-The reviewer must do more than confirm existing tests pass.
-
-### 7. Correction and escalation
-
-There is no numerical cap on corrections.
+### 8. Correction and escalation
 
 Classify each defect:
 
-- **A — local defect:** fix locally, add a regression test, rerun targeted checks
-- **B — missing contract class:** update the spec, add the entire mutation family,
-  and review the semantic group
-- **C — architecture defect:** pause patching, redesign or split the work, then
-  review the new plan
+- **A — local defect:** fix locally and add a regression;
+- **B — missing contract class:** update the bounded contract and representative
+  mutation family;
+- **C — architecture defect:** stop patching and redesign, split, defer, or retire.
 
-Repeated defects from the same class are evidence that a local patch is no
-longer sufficient.
+There is no arbitrary cap on unrelated local defects. However, two consecutive
+review/correction cycles exposing the same B or C root cause require a scope cut,
+milestone split, or architecture reset.
 
-### 8. Release-candidate full gate
+Do not expand fixtures while the architecture boundary is moving.
 
-Run only after source-level review is stable:
+### 9. Final independent review
+
+A stable R2 or R3 implementation receives one complete independent adversarial
+review. Another full review is required only when a correction materially
+changes the approved architecture or external contract.
+
+### 10. Release-candidate gate
+
+Run after source-level review is stable:
 
 ```text
 corepack pnpm verify:full
 ```
 
-Then perform milestone-specific built CLI, fixture, package-size, schema,
-canonical, inventory, or public API checks as required by the plan.
+Then run milestone-specific CLI, fixture, package, schema, canonical, inventory,
+or public API checks.
 
-If the candidate changes after a failure or review finding, rerun affected
-targeted checks and the complete release-candidate gate.
+### 11. Pull request and merge
 
-### 9. Review artifact or draft PR
+The PR must state the product problem, why now, risk, architecture decision or
+spike result, demonstrated vertical slice, exact scope, validation, review,
+boundary impact, and residual limitations.
 
-Prepare a review bundle only for a real candidate, not every working revision.
-Use candidate names such as `pre-rc`, `rc1`, `rc2`, and `approved` rather than
-turning each local fix into a new release version.
+Merge only when required checks and reviews pass on the exact head commit.
 
-The bundle should contain machine-readable metadata, an exact patch, validation
-evidence, and hashes. Use `corepack pnpm review:bundle -- ...` when applicable.
+### 12. Post-merge adoption gate
 
-### 10. Final review and merge
+Do not automatically broaden a merged analyzer.
 
-Merge only when all required exit criteria pass on the exact candidate commit.
+A follow-up should normally require a real user or repository report, repeated
+unsupported patterns, a first-party premise change, two real consumers needing
+the same stable capability, or measured false-positive/false-negative evidence.
 
-Do not merge with:
+## Single source of truth
 
-- a known blocker
-- unsupported claims in docs
-- unexplained scope drift
-- failing or missing required CI
-- unresolved canonical, inventory, public API, or dependency impact
+Use one executable source for generated evidence:
 
-### 11. Post-merge learning
+- fixture manifests own counts and distributions;
+- validation scripts compute generated summaries;
+- code owns implemented behavior;
+- plans own approved intent and boundaries;
+- roadmap and backlog own priority and status only.
 
-Record a short retrospective only when it creates reusable value, such as:
-
-- a defect found materially late
-- repeated defects from one semantic class
-- an architecture reversal
-- a CI, packaging, or review-bundle failure
-- a premise correction
-
-Convert the lesson to the narrowest durable asset:
-
-- rule-specific issue → regression test
-- analyzer-wide issue → checklist, helper, or mutation family
-- workflow issue → script or working-agreement update
-- product premise issue → catalog, roadmap, or backlog decision
-
-Do not turn `AGENTS.md` into a history of individual bugs.
+Do not maintain the same counts or matrices manually in multiple documents.
 
 ## Validation model
 
-### Targeted validation
-
-Used repeatedly during development. It should cover the changed component,
-its nearest consumers, and high-risk regressions.
-
-### Full validation
-
-Used for a stable candidate and required before merge for runtime-affecting work.
-The repository command is:
+Use targeted validation repeatedly during development. Run full validation only
+when the candidate is stable and before merge for runtime-affecting work:
 
 ```text
 corepack pnpm verify:full
 ```
 
-CI and local development must use the same source command so the gate does not
-drift between environments.
-
-### Review is not replaced by validation
-
-Tests prove the cases encoded in tests. They do not prove that the supported
-surface is correctly defined or that all material counterexample classes were
-considered. `R2` and `R3` therefore require independent adversarial review.
+Tests do not independently establish that the product claim or supported surface
+is correct. R2 and R3 therefore require architecture review and final independent
+review, not repeated full reviews after every mechanical correction.
 
 ## Exit criteria
 
 A material milestone is complete only when:
 
-1. the product goal is met
-2. the premise is supported
-3. supported cases behave as specified
-4. material negative, ambiguous, and contradictory cases fail closed
-5. the threat model and acceptance matrix are covered
-6. no known blocker remains
-7. code, tests, docs, and claims agree
-8. targeted validation passes
-9. full validation passes
-10. independent review passes for `R2` and `R3`
-11. canonical, inventory, public API, dependency, and package boundaries are
-    proven or intentionally changed
-12. residual limitations are explicit
-13. required CI passes on the exact candidate commit
-
-This does not claim that all possible bugs are impossible. It establishes that
-no known blocker remains inside the declared and tested scope.
+1. the product problem and why-now case remain valid;
+2. the premise is supported;
+3. the supported surface behaves as specified;
+4. material unsupported cases fail closed;
+5. the vertical slice demonstrates end-to-end value;
+6. representative regressions pass;
+7. no known blocker remains;
+8. code, tests, docs, and claims agree;
+9. targeted validation passes;
+10. full validation passes when required;
+11. independent review passes for R2 and R3;
+12. canonical, inventory, public API, dependency, and package boundaries are
+    proven or intentionally changed;
+13. residual limitations are explicit;
+14. required CI passes on the exact candidate commit.
 
 ## Process metrics
 
-For `R2` and `R3`, record enough data to improve the workflow:
-
-- command durations
-- number of full-gate runs
-- number of release candidates
-- stage where each blocker was found
-- repeated semantic defect classes
-- false positives and false negatives on real or representative repositories
-- planning-to-merge elapsed time
-
-Optimize based on measured waste, not assumptions.
+For R2 and R3, record planning-to-first-slice time, planning-to-merge time, full
+gate runs, stage where blockers were found, repeated B/C root causes, fixture
+growth caused by real findings, and real false-positive/false-negative evidence.

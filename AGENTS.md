@@ -5,116 +5,144 @@
 ArcReady is an Arc-specific, local-first, CI-friendly static compatibility gate
 for wallet, bridge, App Kit, and dApp integration code.
 
-ArcReady is not a generic EVM linter, security auditor, compiler, transaction
-simulator, runtime monitor, or hosted dashboard.
+ArcReady should detect a small set of common Arc integration problems with
+findings that developers can trust and act on.
 
-Quality takes priority over speed. Time and token optimization may remove
-redundant or mechanical work, but must not weaken analysis, review, validation,
-acceptance criteria, or resolution of known blockers.
+ArcReady is not a generic EVM linter, security auditor, compiler, transaction
+simulator, runtime verifier, general-purpose program-analysis framework, or
+hosted dashboard.
+
+## Product decision test
+
+Before starting material work, confirm:
+
+1. Arc developers realistically encounter the problem;
+2. ArcReady can detect it within a narrow, truthful, maintainable boundary;
+3. the finding provides a clear corrective action.
+
+Defer, research, replace, or retire work that does not satisfy all three.
 
 ## Sources of truth
 
-Use each source for its proper role:
+- approved plans define intended behavior and boundaries;
+- executable code and tests show current behavior and regression evidence;
+- fixture manifests and validation scripts own generated counts and summaries;
+- CI workflows define executable merge gates;
+- this file defines the default repository operating contract;
+- the current task defines the requested delta within those boundaries.
 
-- approved product, architecture, and exec-plan documents define intended behavior
-- executable code and tests show current behavior and regression evidence
-- validation scripts and CI workflows define the executable merge gates
-- this `AGENTS.md` defines the default repository operating contract
-- the current task prompt defines the requested delta within those boundaries
-
-When these sources conflict materially, stop and report the conflict. Do not
-silently treat current code as the intended contract or let a task prompt weaken
-repository quality requirements.
-
-A task-specific approved exec plan may narrow scope, but it must not silently
-contradict the product contract or repository quality requirements.
+Stop and report material conflicts. Do not duplicate generated fixture,
+provenance, relation, or outcome counts across plans, roadmap, backlog, and tests.
 
 ## Required reading
 
-Before material work, read the relevant sections of:
+Before material work, read:
 
-- `docs/engineering/working-agreement.md`
-- `docs/engineering/static-analysis-review.md` for analyzer or rule work
-- the active file under `docs/exec-plans/active/`, when one exists
-- rule catalog, roadmap, and quality-audit documents relevant to the change
+- `docs/engineering/working-agreement.md`;
+- `docs/engineering/static-analysis-review.md` for analyzer or rule work;
+- the active exec plan when one exists;
+- relevant rule catalog, roadmap, and quality-audit sections.
 
 ## Risk classification
 
-Classify work before implementation:
-
-- `R0`: documentation or metadata with no runtime or policy impact
-- `R1`: local implementation change with a settled contract
-- `R2`: rule hardening or bounded analyzer behavior
+- `R0`: documentation or metadata with no runtime or policy impact;
+- `R1`: settled local implementation or governance change;
+- `R2`: rule hardening or bounded analyzer behavior;
 - `R3`: architecture, canonical runtime, schema, public API, dependency, scoring,
-  or exit-behavior change
+  or exit-behavior change.
 
-Use the smallest process that fully covers the risk. Do not skip required review
-or validation merely because a change is small in line count.
+Use the smallest process that fully covers the actual risk.
+
+## Default delivery model
+
+```text
+product brief
+→ baseline and premise
+→ time-boxed spike
+→ architecture review
+→ working vertical slice
+→ risk-based regression expansion
+→ final independent review
+→ full gate
+→ adoption gate
+```
+
+R2 and R3 work must run a spike and architecture review before a large plan or
+fixture matrix. Implement an end-to-end vertical slice before broad regression
+expansion.
+
+Do not build a generic framework for hypothetical consumers. Extract shared
+infrastructure only when at least two real consumers need the same stable
+semantics.
 
 ## Static-analysis principles
 
-- Critical findings require evidence tied to the relevant Arc-owned object,
-  client, provider, call, transaction, control-flow branch, or UI surface.
-- Do not combine unrelated file-level Arc text and error keywords into a
-  critical finding.
+- Critical findings require evidence tied to the relevant Arc-owned flow.
+- Do not combine unrelated file-level text into a critical finding.
 - Fail closed for ambiguous, conflicting, imported, computed, malformed,
-  reassigned, cross-file, or otherwise unsupported evidence.
-- Prefer a smaller truthful supported surface over broad speculative matching.
-- Do not claim support beyond the implemented and tested behavior.
-- Do not canonicalize a rule merely because its legacy detector exists.
+  reassigned, cross-file, or unsupported evidence.
+- Prefer a smaller truthful surface over broad speculative matching.
+- Do not claim support beyond implemented and tested behavior.
 - Keep advice-only guidance separate from compatibility blockers.
-- Extract shared infrastructure only when at least two real consumers need the
-  same stable semantics and regression tests prove behavior is preserved.
+- Fixture count is not a quality target.
+- Product value and truthful boundaries take precedence over framework breadth.
 
 ## Correction policy
 
-There is no fixed limit on correction rounds. Continue until no known blocker
-remains in the declared scope.
+- **A — local defect:** fix locally and add the smallest regression;
+- **B — missing contract class:** update the bounded contract and representative
+  mutation family;
+- **C — architecture defect:** stop patching and redesign, split, defer, or retire.
 
-When repeated defects share a cause, stop patching individual symptoms and
-escalate appropriately:
+Two consecutive review/correction cycles exposing the same B or C root cause
+require a scope cut, milestone split, or architecture reset.
 
-- local defect: fix locally and add a regression test
-- missing contract class: update the spec and add the full mutation family
-- architecture defect: redesign or split the work before continuing
+Do not expand fixtures while the architecture boundary is moving. A second full
+independent review is required only when a correction materially changes the
+approved architecture or external contract.
 
 ## Validation
 
-During implementation, run targeted tests and the smallest relevant build loop.
-Before merge, all runtime-affecting changes must pass the full repository gate:
+Use targeted tests and the smallest relevant build loop during development.
+
+Before merge, runtime-affecting changes must pass:
 
 ```text
 corepack pnpm verify:full
 ```
 
-Also inspect the exact diff, run the milestone-specific adversarial matrix, and
-confirm that code, tests, docs, inventory, canonical boundaries, and public
-claims agree.
+Inspect the exact diff and confirm code, tests, docs, inventory, canonical
+boundaries, package shape, and public claims agree.
 
-Passing tests is necessary but not sufficient for `R2` and `R3` work. These
-changes require independent adversarial review.
+R2 and R3 require architecture review and final independent adversarial review.
+Do not run the full repository gate after every mechanical correction.
+
+## Adoption gate
+
+Do not broaden a merged analyzer automatically.
+
+A follow-up should normally require a real repository or user report, repeated
+unsupported patterns, measured false-positive/false-negative evidence, a
+first-party premise change, or two real consumers requiring the same capability.
+
+Prefer hardening, report clarity, remediation quality, and real usage evidence
+over speculative analyzer expansion.
 
 ## Git and scope discipline
 
 - Verify branch, HEAD, base, and working-tree state before editing.
+- Keep governance changes separate from feature branches.
 - Do not include unrelated changes.
-- Do not use destructive Git commands to solve ordinary workflow problems.
-- Do not commit, push, create a PR, or merge unless the task explicitly
-  authorizes that action.
+- Do not use destructive Git commands for ordinary workflow problems.
+- Do not commit, push, create a PR, or merge unless explicitly authorized.
 - Default to a draft PR for agent-created changes.
 - Do not merge while a known blocker remains.
-- Preserve legacy output, canonical inventory, public API, package shape, and
-  dependency boundaries unless the approved scope explicitly changes them.
+- Preserve legacy output and public boundaries unless approved scope changes them.
 
 ## Change reporting
 
-Every material change report must state:
+State the product problem, why now, risk, architecture decision or spike result,
+files changed, demonstrated behavior, deliberately unchanged behavior,
+validation, review, limitations, and boundary impact.
 
-- goal and risk class
-- files changed
-- behavior changed and deliberately unchanged
-- validation run and its result
-- remaining limitations or unresolved decisions
-- canonical, inventory, public API, dependency, and package impact
-
-Do not describe confidence as proof. Record concrete evidence.
+Record concrete evidence rather than describing confidence as proof.
