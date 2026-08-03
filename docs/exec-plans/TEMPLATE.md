@@ -12,85 +12,120 @@ Base SHA:
 
 Last reviewed:
 
-## 1. Product goal
+## 1. Product brief
 
-Describe the user or developer problem and the value of solving it.
+### Problem
 
-## 2. Decision
+Describe the concrete user or developer problem.
 
-State whether the work is build, research, advice-only, replace, retire, or
-complete. Explain why it should be done now.
+### Why now
 
-## 3. Premise and sources
+Record the repository, user, issue, adoption, or first-party evidence that makes
+this work worth doing now.
 
-List first-party documentation, source, repository evidence, versions, access
-dates, and unresolved uncertainty.
+### Product value
 
-## 4. Current state
+State what the developer can do better after this milestone.
 
-Describe the existing behavior, architecture, tests, known limitations, and
-relevant inventory or canonical status.
+## 2. Decision and risk
 
-## 5. Scope
+Decision: Build | Research | Advice-only | Replace | Retire | Defer | Complete
+
+Explain the decision, risk class, and why a smaller or later change would be
+worse.
+
+## 3. Premise and uncertainty
+
+List first-party documentation and source, pinned versions or commits, access
+dates, repository evidence, and unresolved or conflicting premises.
+
+A conflicting premise must be blocked or separated from the build surface.
+
+## 4. Supported and unsupported surface
 
 ### Supported
 
-List exact files, languages, libraries, APIs, object shapes, bindings, evidence,
-sources, sinks, and outputs in scope.
+Define the smallest exact files, languages, libraries, APIs, object shapes,
+bindings, evidence, sources, sinks, and outputs in scope.
+
+### Unsupported
+
+List intentionally unsupported families. Unsupported behavior must not be
+described as safe.
 
 ### Non-goals
 
-List unsupported behavior explicitly.
+List public, runtime, schema, reporter, scoring, dependency, package, and
+follow-up work that this milestone does not change.
 
-## 6. Evidence and ownership model
+## 5. Architecture spike and decision
 
-Define proven Arc, proven non-Arc, unknown, and conflicting states. Describe how
-evidence propagates and where it must stop.
+### Spike
 
-## 7. Architecture options
+Record the time-box, representative examples, prototype result, difficult tests,
+dependency inspection, and assumptions disproved.
 
-Compare viable approaches, including regression risk, coupling, line count,
-testability, future reuse, and unnecessary generalization.
+### Options considered
+
+Compare only viable approaches.
 
 ### Chosen approach
 
-Record the decision and why rejected alternatives are worse.
+State the bounded evidence model, private/public boundary, and why the selected
+approach has the lowest justified complexity.
 
-## 8. Threat model
+### Stop conditions
 
-List false-positive and false-negative risks, including malformed, ambiguous,
-imported, computed, reassigned, multichain, sibling-scope, and library-lookalike
-cases relevant to this milestone.
+Define conditions that require scope cut, split, reset, defer, or retirement.
 
-## 9. Acceptance matrix
+Do not expand a large fixture matrix before this decision is reviewed.
 
-For each case record:
+## 6. Vertical-slice contract
 
-| ID | Class | Input shape | Expected result | Reason |
-| --- | --- | --- | --- | --- |
-| P01 | Positive |  |  |  |
-| N01 | Negative |  |  |  |
-| A01 | Ambiguous |  |  |  |
-| M01 | Malformed |  |  |  |
-| C01 | Contradictory |  |  |  |
+Define the first end-to-end path:
 
-## 10. Implementation slices
+```text
+source
+→ analyzer
+→ candidate
+→ rule selection
+→ finding or safe result
+→ executable test
+```
 
-For each slice record:
+Record the accepted example, safe or fail-closed example, expected output, legacy
+behavior, expected files, and production/test budgets.
 
-- goal
-- files added or changed
-- production and test line budget
-- dependencies
-- migration risk
-- targeted validation
-- stop conditions
+## 7. Representative regression classes
 
-## 11. Validation plan
+Record representative classes rather than duplicating the complete executable
+fixture inventory.
+
+| ID  | Class         | Representative mutation | Expected result | Risk covered |
+| --- | ------------- | ----------------------- | --------------- | ------------ |
+| P01 | Positive      |                         |                 |              |
+| S01 | Safe          |                         |                 |              |
+| N01 | Negative      |                         |                 |              |
+| A01 | Ambiguous     |                         |                 |              |
+| M01 | Malformed     |                         |                 |              |
+| C01 | Contradictory |                         |                 |              |
+
+The complete fixture matrix, counts, and summaries belong in one executable
+manifest or test-data source.
+
+## 8. Validation and review
 
 ### Targeted development commands
 
-List milestone-specific fast checks.
+List the smallest fast checks.
+
+### Architecture review
+
+Record the result before fixture expansion for R2/R3.
+
+### Final independent review
+
+Record the exact candidate and result for R2/R3.
 
 ### Full repository gate
 
@@ -101,60 +136,47 @@ corepack pnpm verify:full
 ### Additional release-candidate checks
 
 List built CLI, fixture, package, schema, inventory, canonical, performance, or
-real-repository checks required by the milestone.
+real-repository checks.
 
-## 12. Boundary impact
+## 9. Boundary impact and progress
 
-Record intended impact on:
+Record impact on legacy behavior, canonical runtime, FindingV2/CoverageV2/
+ScanResultV2, rule inventory, public API/schema, package contents, dependencies,
+reporters, scoring, and exit behavior.
 
-- legacy behavior
-- canonical runtime
-- FindingV2 / CoverageV2 / ScanResultV2
-- rule inventory and order
-- public API and schema
-- package contents and size
-- dependencies and licenses
-- reporters, scoring, and exit behavior
-
-Use `none` only after verification.
-
-## 13. Progress
+Progress:
 
 - [ ] baseline verified
+- [ ] product brief accepted
 - [ ] premise verified
-- [ ] plan reviewed
-- [ ] threat model approved
-- [ ] acceptance matrix approved
-- [ ] implementation complete
+- [ ] spike completed
+- [ ] architecture reviewed
+- [ ] vertical slice working
+- [ ] representative regressions complete
 - [ ] targeted validation passed
-- [ ] independent pre-RC review passed
+- [ ] final independent review passed
 - [ ] full validation passed
-- [ ] release-candidate review passed
 - [ ] documentation aligned
+- [ ] exact-head CI passed
 - [ ] merged
 
-## 14. Review findings
+## 10. Exit and completion record
 
-Track each finding with status, severity, root-cause class, correction, regression
-evidence, and review result.
+### Residual limitations
 
-## 15. Decision log
+List unsupported behavior and why it remains outside scope.
 
-Record material scope, architecture, or contract changes with date and rationale.
-Do not silently change the milestone contract during implementation.
+### Exit criteria
 
-## 16. Residual limitations
+Specialize the applicable criteria from
+`docs/engineering/working-agreement.md`.
 
-List unsupported cases and why they remain outside scope. Ensure product claims
-match these limits.
+### Completion record
 
-## 17. Exit criteria
+Record final commit, PR, validation summary, independent review result, boundary
+impact, and post-merge adoption evidence required before expansion.
 
-Copy and specialize the applicable criteria from
-`docs/engineering/working-agreement.md`. The milestone is not complete while a
-known blocker remains.
+### Decision log
 
-## 18. Completion record
-
-Record final commit, PR, validation summary, review result, and any reusable
-workflow lesson before moving the plan from `active/` to `completed/`.
+Record only material product, scope, architecture, or contract changes. Do not
+turn the plan into a history of every local correction.
