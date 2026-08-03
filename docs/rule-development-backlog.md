@@ -1,7 +1,7 @@
 # ArcReady Rule Development Backlog
 
 **Status:** Active decision record
-**Last reviewed:** 2026-07-30
+**Last reviewed:** 2026-08-01
 **Applies to:** Active and proposed ArcReady static-analysis rules
 
 ## Purpose
@@ -89,8 +89,39 @@ The private canonical runtime remains exactly four rules.
 - Priority: P0.
 - Impact: Blocker.
 - Canonical status: Non-canonical.
-- Completed transaction-ownership work unblocks separate C06B2 planning, but
-  C06B2 does not start automatically and remains sequenced after Demo/DX.
+- C06B2 planning is active under `docs/exec-plans/active/C06B2.md`.
+- Native write analysis is Research and blocked by contradictory first-party raw
+  `value` decimal premises.
+- The only candidate implementation surface is an exact viem local-account
+  transfer to canonical Arc USDC using one exact client, request, and direct
+  `parseEther` literal.
+- The approved architecture-reset plan defines seven provenance identities and
+  nine non-positional semantic source relations. Its 70 deterministic complete-source
+  fixtures separate analyzer stages from expression-evaluation classes and make
+  no live-submission or RPC-success claim; no controlled-RPC harness is planned.
+- Every fixture now has a ten-dimension syntax signature and exact derived REL
+  set. The distribution is 3 empty, 38 all-nine, and 29 partial mappings; usage
+  counts in relation-inventory order are 64, 62, 61, 64, 46, 46, 46, 64, and 61.
+- Exact-set equality rejects under-mapping and over-mapping. The validator has 33
+  negative mutations and 3 invariance cases, 36 mandatory cases total, plus one
+  explicit mapping-correction acceptance case.
+- Seven syntax-derived provenance booleans enforce exact declared/derived P-set
+  equality. The distribution is 3 empty, 41 all-seven, and 26 partial mappings;
+  P01–P07 usage counts are 64, 63, 61, 56, 64, 65, and 58.
+- The provenance validator has 16 negative mutations, 3 invariance cases, and 2
+  corrected N45/N46 acceptance cases, 21 provenance cases total.
+- Its thin existing-rule integration defines one private write-candidate kind
+  and a deterministic at-most-one read/write selection policy while preserving
+  C06B1 behavior when no write candidate exists. Candidate offsets are private
+  ordering metadata, emitted findings remain file-level, and expression-level
+  output is deferred to a separate R3 prerequisite.
+- `parseUnits`, conversions, multiple candidates, mutation-aware isolation, and
+  ethers are deferred to separately reviewed follow-ups.
+- Independent plan re-review passed on 2026-08-01 with blocker 0, major 0, and
+  minor 0. Implementation remains unauthorized pending a separate explicit
+  decision.
+- Arc RPC endpoint migration from the previously documented `.network` literal
+  to the current primary `.io` endpoint is a separate R2 maintenance follow-up.
 
 ### `wallet/NO_BLOB_TX_ON_ARC`
 
@@ -236,8 +267,10 @@ C07A   Complete: private ethers transaction ownership
 C07B   Complete: ethers-only NO_BLOB_TX_ON_ARC hardening
 C07C-A Complete: conservative viem explicit-pattern MVP
 C07C-B Complete: thin integration of already-valid records
-Demo/DX Improve broken/fixed example, onboarding, and report clarity
-C06B2  Plan write-side amount analysis after Demo/DX under its own plan
+DX01   Complete: broken/fixed demo, onboarding, and report clarity
+C06B2  Approved plan: native blocked; implementation requires separate
+       authorization
+RPC     Follow-up: separately plan Arc endpoint migration as R2 maintenance
 C08    Research CCTP attestation control flow
 C09    Replace duplicate PREVRANDAO keyword rules
 C10    Add versioned App Kit compatibility analysis
