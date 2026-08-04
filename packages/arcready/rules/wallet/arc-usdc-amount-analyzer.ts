@@ -783,16 +783,25 @@ const PROTECTED_WRITE_NAME =
   /^(?:createWalletClient|erc20Abi|http|parseEther|privateKeyToAccount|arcTestnet|PRIVATE_KEY|account|client)$/;
 const UINT256_MAX =
   "115792089237316195423570985008687907853269984665640564039457584007913129639935";
-export async function analyzeArcUsdcWriteAmountFoundation(
+type C06B2WriteCandidate = {
+  kind: "erc20-transfer-native18-amount";
+  callOffset: number;
+  amountOffset: number;
+  amountLength: number;
+  parserIdentity: "parseEther";
+  literal: string;
+  effectiveValue: bigint;
+};
+async function analyzeArcUsdcWriteAmount(
   filePath: string,
   source: string,
-  compilerLoader: () => Promise<unknown> = () => import("typescript")
+  compilerLoader: () => Promise<unknown>,
+  collectCandidates: boolean
 ) {
-  const empty = (status: string) => ({
-    status,
-    foundation: "unknown" as const,
-    amounts: []
-  });
+  const empty = (status: string) =>
+    collectCandidates
+      ? []
+      : { status, foundation: "unknown" as const, amounts: [] };
   if (!supportsArcUsdcAmountPath(filePath)) return empty("unsupported-file");
   let ts: TypeScript;
   try {
@@ -923,14 +932,14 @@ export async function analyzeArcUsdcWriteAmountFoundation(
       ? clientCall.arguments[0]
       : null;
   const properties = object?.properties ?? [];
-  const property = (index: number, name: string) => {
-    const item = properties[index];
+  const property = (items: readonly Node[], index: number, name: string) => {
+    const item = items[index];
     return item && ts.isPropertyAssignment(item) && id(item.name, name)
       ? item.initializer
       : null;
   };
-  const chain = property(1, "chain");
-  const transport = property(2, "transport");
+  const chain = property(properties, 1, "chain");
+  const transport = property(properties, 2, "transport");
   const validAccount =
     direct(account.initializer!, accountImport[0]!, "privateKeyToAccount", 1) &&
     bound(account.initializer!.arguments[0]!, key, "PRIVATE_KEY");
@@ -990,6 +999,100 @@ export async function analyzeArcUsdcWriteAmountFoundation(
     else if (!protectedWrite) ts.forEachChild(node, visitWrite);
   };
   visitWrite(sourceFile);
+  if (
+    !/^0x[0-9a-fA-F]{64}$/.test(string(key.initializer!) ?? "") ||
+    !validAccount ||
+    !validClient ||
+    hasAmbientProtected ||
+    protectedWrite
+  )
+    return empty("analyzed");
+  const acceptedAmount = (call: CallExpression) => {
+    const node = call.arguments[0]!;
+    const literal = string(node);
+    const match = literal?.match(/^(0|[1-9][0-9]*)(?:\.([0-9]{1,18}))?$/);
+    if (!match) return null;
+    const rawAmount = `${match[1]}${(match[2] ?? "").padEnd(18, "0")}`;
+    const normalized = rawAmount.replace(/^0+(?=[0-9])/, "");
+    const bounded =
+      normalized.length < UINT256_MAX.length ||
+      (normalized.length === UINT256_MAX.length && normalized <= UINT256_MAX);
+    return bounded
+      ? ([
+          {
+            parserIdentity: "parseEther" as const,
+            literal,
+            amountOffset: node.getStart(sourceFile),
+            effectiveValue: BigInt(normalized)
+          },
+          node
+        ] as const)
+      : null;
+  };
+  if (collectCandidates) {
+    const candidates: C06B2WriteCandidate[] = [];
+    visitExecutable(state, sourceFile, (call) => {
+      const callee = call.expression;
+      if (
+        !ts.isPropertyAccessExpression(callee) ||
+        !ts.isExpressionStatement(call.parent) ||
+        call.parent.parent !== sourceFile ||
+        callee.questionDotToken !== undefined ||
+        call.questionDotToken !== undefined ||
+        call.typeArguments !== undefined ||
+        call.arguments.length !== 1 ||
+        !bound(callee.expression, client, "client") ||
+        !id(callee.name, "writeContract")
+      )
+        return;
+      const request = call.arguments[0]!;
+      if (
+        !ts.isObjectLiteralExpression(request) ||
+        request.properties.length !== 4
+      )
+        return;
+      const address = property(request.properties, 0, "address");
+      const abi = property(request.properties, 1, "abi");
+      const functionName = property(request.properties, 2, "functionName");
+      const args = property(request.properties, 3, "args");
+      if (
+        address === null ||
+        string(address, ARC_USDC_ADDRESS) === null ||
+        abi === null ||
+        !bound(abi, root[1]!, "erc20Abi") ||
+        functionName === null ||
+        string(functionName, "transfer") === null ||
+        args === null ||
+        !ts.isArrayLiteralExpression(args) ||
+        args.elements.length !== 2
+      )
+        return;
+      const [recipient, amountExpression] = args.elements;
+      if (
+        recipient === undefined ||
+        ts.isOmittedExpression(recipient) ||
+        ts.isSpreadElement(recipient) ||
+        amountExpression === undefined ||
+        ts.isOmittedExpression(amountExpression) ||
+        ts.isSpreadElement(amountExpression) ||
+        !direct(amountExpression, root[3]!, "parseEther", 1)
+      )
+        return;
+      const amount = acceptedAmount(amountExpression);
+      if (!amount || amount[0].effectiveValue === 0n) return;
+      const [entry, node] = amount;
+      candidates.push({
+        kind: "erc20-transfer-native18-amount",
+        callOffset: call.getStart(sourceFile),
+        amountOffset: entry.amountOffset,
+        amountLength: node.end - node.getStart(sourceFile),
+        parserIdentity: entry.parserIdentity,
+        literal: entry.literal,
+        effectiveValue: entry.effectiveValue
+      });
+    });
+    return candidates;
+  }
   let parserCall: CallExpression | null | undefined = null;
   visitExecutable(state, sourceFile, (call) => {
     if (bound(call.expression, root[3]!, "parseEther"))
@@ -998,33 +1101,26 @@ export async function analyzeArcUsdcWriteAmountFoundation(
           ? call
           : undefined;
   });
-  if (
-    !/^0x[0-9a-fA-F]{64}$/.test(string(key.initializer!) ?? "") ||
-    !validAccount ||
-    !validClient ||
-    hasAmbientProtected ||
-    protectedWrite ||
-    !parserCall
-  )
-    return empty("analyzed");
-  const literal = string(parserCall.arguments[0]!);
-  const match = literal?.match(/^(0|[1-9][0-9]*)(?:\.([0-9]{1,18}))?$/);
-  if (!match) return { ...exact, amounts: [] };
-  const rawAmount = `${match[1]}${(match[2] ?? "").padEnd(18, "0")}`;
-  const normalized = rawAmount.replace(/^0+(?=[0-9])/, "");
-  const bounded =
-    normalized.length < UINT256_MAX.length ||
-    (normalized.length === UINT256_MAX.length && normalized <= UINT256_MAX);
-  if (!bounded) return { ...exact, amounts: [] };
-  return {
-    ...exact,
-    amounts: [
-      {
-        parserIdentity: "parseEther" as const,
-        literal,
-        amountOffset: parserCall.arguments[0]!.getStart(sourceFile),
-        effectiveValue: BigInt(normalized)
-      }
-    ]
-  };
+  if (!parserCall) return empty("analyzed");
+  const amount = acceptedAmount(parserCall);
+  return { ...exact, amounts: amount ? [amount[0]] : [] };
+}
+export function analyzeArcUsdcWriteAmountFoundation(
+  filePath: string,
+  source: string,
+  compilerLoader: () => Promise<unknown> = () => import("typescript")
+) {
+  return analyzeArcUsdcWriteAmount(filePath, source, compilerLoader, false);
+}
+export async function analyzeArcUsdcWriteAmountCandidates(
+  filePath: string,
+  source: string,
+  compilerLoader: () => Promise<unknown> = () => import("typescript")
+): Promise<readonly C06B2WriteCandidate[]> {
+  return (await analyzeArcUsdcWriteAmount(
+    filePath,
+    source,
+    compilerLoader,
+    true
+  )) as readonly C06B2WriteCandidate[];
 }
