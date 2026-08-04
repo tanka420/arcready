@@ -7,6 +7,7 @@ type BindingName = import("typescript").BindingName;
 type CallExpression = import("typescript").CallExpression;
 type ObjectLiteralExpression = import("typescript").ObjectLiteralExpression;
 type SourceFile = import("typescript").SourceFile;
+type ImportDeclaration = import("typescript").ImportDeclaration;
 export type ArcUsdcAmountIssueKind =
   | "native-read-as-erc20"
   | "erc20-read-as-native";
@@ -845,7 +846,7 @@ async function analyzeArcUsdcWriteAmount(
   };
   const imports = (module: string, names: readonly string[]) => {
     const matches = sourceFile.statements.filter(
-      (node) =>
+      (node): node is ImportDeclaration =>
         ts.isImportDeclaration(node) &&
         string(node.moduleSpecifier, module) !== null
     );
@@ -1009,7 +1010,7 @@ async function analyzeArcUsdcWriteAmount(
     return empty("analyzed");
   const acceptedAmount = (call: CallExpression) => {
     const node = call.arguments[0]!;
-    const literal = string(node);
+    const literal = string(node)!;
     const match = literal?.match(/^(0|[1-9][0-9]*)(?:\.([0-9]{1,18}))?$/);
     if (!match) return null;
     const rawAmount = `${match[1]}${(match[2] ?? "").padEnd(18, "0")}`;

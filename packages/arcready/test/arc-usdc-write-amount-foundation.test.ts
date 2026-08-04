@@ -1,9 +1,4 @@
 import { describe, expect, it, vi } from "vitest";
-import {
-  DEFAULT_CONFIG,
-  arcUsdcAmountConversionRule,
-  runRules
-} from "../src/index.js";
 import { analyzeArcUsdcWriteAmountFoundation } from "../rules/wallet/arc-usdc-amount-analyzer.js";
 
 const PRIVATE_KEY =
@@ -479,22 +474,5 @@ describe("C06B2 E1a exact write foundation", () => {
       foundation: "unknown",
       amounts: []
     });
-  });
-
-  it("does not change the existing public rule in E1a", async () => {
-    const source = exactSource();
-    const findings = await runRules([arcUsdcAmountConversionRule], {
-      projectRoot: "/fixture",
-      config: DEFAULT_CONFIG,
-      files: ["src/transfer.ts"],
-      detectedPresets: {
-        detectedPresets: ["wallet"],
-        confidence: "high",
-        reasons: ["test"]
-      },
-      readFile: async () => source
-    });
-
-    expect(findings).toEqual([]);
   });
 });

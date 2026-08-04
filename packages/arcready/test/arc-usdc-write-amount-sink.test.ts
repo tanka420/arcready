@@ -1,9 +1,4 @@
 import { describe, expect, it } from "vitest";
-import {
-  DEFAULT_CONFIG,
-  arcUsdcAmountConversionRule,
-  runRules
-} from "../src/index.js";
 import { analyzeArcUsdcWriteAmountCandidates } from "../rules/wallet/arc-usdc-amount-analyzer.js";
 
 const PRIVATE_KEY =
@@ -375,22 +370,5 @@ describe("C06B2 E2 exact write sink", () => {
     ]
   ] as const)("produces no candidate for %s", async (_name, mutate) => {
     await expectNone(mutate(exactSource()));
-  });
-
-  it("does not integrate E2 into the public rule", async () => {
-    const source = exactSource();
-    const findings = await runRules([arcUsdcAmountConversionRule], {
-      projectRoot: "/fixture",
-      config: DEFAULT_CONFIG,
-      files: ["src/transfer.ts"],
-      detectedPresets: {
-        detectedPresets: ["wallet"],
-        confidence: "high",
-        reasons: ["test"]
-      },
-      readFile: async () => source
-    });
-
-    expect(findings).toEqual([]);
   });
 });

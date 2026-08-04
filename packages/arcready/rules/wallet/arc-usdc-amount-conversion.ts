@@ -1,13 +1,20 @@
 import type { Rule } from "../../core/rules/index.js";
 import {
   analyzeArcUsdcAmountFile,
+  analyzeArcUsdcWriteAmountCandidates,
   supportsArcUsdcAmountPath
 } from "./arc-usdc-amount-analyzer.js";
-import type { ArcUsdcAmountIssueKind } from "./arc-usdc-amount-analyzer.js";
+import type { ArcUsdcAmountIssue } from "./arc-usdc-amount-analyzer.js";
 import { createWalletFinding } from "./helpers.js";
 
 const DOCS = "arc-usdc-amount-conversion";
-const TEXT: Record<ArcUsdcAmountIssueKind, readonly [string, string]> = {
+interface WriteCandidate {
+  readonly kind: "erc20-transfer-native18-amount";
+  readonly callOffset: number;
+}
+type AmountCandidate = ArcUsdcAmountIssue | WriteCandidate;
+type AmountCandidateKind = AmountCandidate["kind"];
+const TEXT: Record<AmountCandidateKind, readonly [string, string]> = {
   "native-read-as-erc20": [
     "An Arc native USDC balance uses 18-decimal units but is being interpreted as a six-decimal ERC-20 amount.",
     "Format the raw Arc native balance with 18 decimals, or divide the native integer amount by 10^12 before treating it as a six-decimal USDC amount."
@@ -15,8 +22,36 @@ const TEXT: Record<ArcUsdcAmountIssueKind, readonly [string, string]> = {
   "erc20-read-as-native": [
     "An Arc USDC ERC-20 amount uses six-decimal units but is being interpreted as an 18-decimal native amount.",
     "Format the Arc USDC ERC-20 balance with 6 decimals. Multiply by 10^12 only when converting it into an 18-decimal native amount."
+  ],
+  "erc20-transfer-native18-amount": [
+    "Arc USDC ERC-20 transfers use 6-decimal token units, but this amount is parsed with 18-decimal native units.",
+    "Parse the transfer amount with 6-decimal USDC units before passing it to transfer(...)."
   ]
 };
+const KIND_PRIORITY: Record<AmountCandidateKind, number> = {
+  "native-read-as-erc20": 0,
+  "erc20-read-as-native": 1,
+  "erc20-transfer-native18-amount": 2
+};
+
+export function selectArcUsdcAmountIssue(
+  reads: readonly ArcUsdcAmountIssue[],
+  writes: readonly WriteCandidate[]
+): AmountCandidate | undefined {
+  return [...reads, ...writes]
+    .map((candidate, index) => ({
+      candidate,
+      index,
+      offset: "offset" in candidate ? candidate.offset : candidate.callOffset
+    }))
+    .sort(
+      (left, right) =>
+        left.offset - right.offset ||
+        KIND_PRIORITY[left.candidate.kind] -
+          KIND_PRIORITY[right.candidate.kind] ||
+        left.index - right.index
+    )[0]?.candidate;
+}
 
 export const arcUsdcAmountConversionRule: Rule = {
   id: "wallet/ARC_USDC_AMOUNT_CONVERSION",
@@ -36,7 +71,12 @@ export const arcUsdcAmountConversionRule: Rule = {
       } catch {
         continue;
       }
-      const issue = (await analyzeArcUsdcAmountFile(filePath, source))[0];
+      const reads = await analyzeArcUsdcAmountFile(filePath, source);
+      const writes = await analyzeArcUsdcWriteAmountCandidates(
+        filePath,
+        source
+      );
+      const issue = selectArcUsdcAmountIssue(reads, writes);
       if (issue !== undefined) {
         findings.push(
           createWalletFinding(
