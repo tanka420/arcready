@@ -7,6 +7,7 @@ type BindingName = import("typescript").BindingName;
 type CallExpression = import("typescript").CallExpression;
 type ObjectLiteralExpression = import("typescript").ObjectLiteralExpression;
 type SourceFile = import("typescript").SourceFile;
+type ImportDeclaration = import("typescript").ImportDeclaration;
 export type ArcUsdcAmountIssueKind =
   | "native-read-as-erc20"
   | "erc20-read-as-native";
@@ -777,4 +778,350 @@ function exactFactor(state: AnalysisState, expression: Expression): boolean {
     bigintValue(state, target.left, false) === 10n &&
     bigintValue(state, target.right, true) === DECIMAL_OFFSET
   );
+}
+
+const PROTECTED_WRITE_NAME =
+  /^(?:createWalletClient|erc20Abi|http|parseEther|privateKeyToAccount|arcTestnet|PRIVATE_KEY|account|client)$/;
+const UINT256_MAX =
+  "115792089237316195423570985008687907853269984665640564039457584007913129639935";
+type C06B2WriteCandidate = {
+  kind: "erc20-transfer-native18-amount";
+  callOffset: number;
+  amountOffset: number;
+  amountLength: number;
+  parserIdentity: "parseEther";
+  literal: string;
+  effectiveValue: bigint;
+};
+async function analyzeArcUsdcWriteAmount(
+  filePath: string,
+  source: string,
+  compilerLoader: () => Promise<unknown>,
+  collectCandidates: boolean
+) {
+  const empty = (status: string) =>
+    collectCandidates
+      ? []
+      : { status, foundation: "unknown" as const, amounts: [] };
+  if (!supportsArcUsdcAmountPath(filePath)) return empty("unsupported-file");
+  let ts: TypeScript;
+  try {
+    ts = await import("typescript");
+    if ((await compilerLoader()) !== ts) return empty("compiler-unavailable");
+  } catch {
+    return empty("compiler-unavailable");
+  }
+  const sourceFile = ts.createSourceFile(
+    filePath,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    filePath.toLowerCase().endsWith(".js") ? ts.ScriptKind.JS : ts.ScriptKind.TS
+  );
+  const diagnostics = (
+    sourceFile as SourceFile & {
+      readonly parseDiagnostics: readonly import("typescript").Diagnostic[];
+    }
+  ).parseDiagnostics;
+  if (diagnostics.length > 0) return empty("malformed");
+  const state: AnalysisState = {
+    ts,
+    sourceFile,
+    bindings: collectBindings(ts, sourceFile)
+  };
+  const exact = { status: "analyzed" as const, foundation: "exact" as const };
+  const id = (node: Node, text: string): node is Identifier =>
+    ts.isIdentifier(node) &&
+    node.text === text &&
+    node.getText(sourceFile) === text;
+  const string = (node: Expression, text?: string) => {
+    if (!ts.isStringLiteral(node)) return null;
+    const raw = node.getText(sourceFile);
+    return (raw[0] === '"' || raw[0] === "'") &&
+      raw.at(-1) === raw[0] &&
+      raw.slice(1, -1) === node.text &&
+      (text === undefined || node.text === text)
+      ? node.text
+      : null;
+  };
+  const imports = (module: string, names: readonly string[]) => {
+    const matches = sourceFile.statements.filter(
+      (node): node is ImportDeclaration =>
+        ts.isImportDeclaration(node) &&
+        string(node.moduleSpecifier, module) !== null
+    );
+    if (matches.length !== 1) return null;
+    const declaration = matches[0]!;
+    const clause = declaration.importClause;
+    const named = clause?.namedBindings;
+    if (
+      declaration.attributes !== undefined ||
+      clause?.isTypeOnly !== false ||
+      clause?.name !== undefined ||
+      named === undefined ||
+      !ts.isNamedImports(named)
+    )
+      return null;
+    const items = [...named.elements];
+    return items.length === names.length &&
+      items.every(
+        (item, index) =>
+          !item.isTypeOnly &&
+          item.propertyName === undefined &&
+          id(item.name, names[index]!)
+      )
+      ? items
+      : null;
+  };
+  const constant = (name: string) => {
+    const declarations = sourceFile.statements.flatMap((statement) =>
+      ts.isVariableStatement(statement) &&
+      statement.modifiers === undefined &&
+      (statement.declarationList.flags & ts.NodeFlags.BlockScoped) ===
+        ts.NodeFlags.Const &&
+      statement.declarationList.declarations.length === 1
+        ? [...statement.declarationList.declarations]
+        : []
+    );
+    const matches = declarations.filter((item) => id(item.name, name));
+    return matches.length === 1 &&
+      matches[0]!.type === undefined &&
+      matches[0]!.exclamationToken === undefined &&
+      matches[0]!.initializer !== undefined
+      ? matches[0]!
+      : null;
+  };
+  const bound = (use: Node, expected: Node, name: string) =>
+    id(use, name) && resolveLexical(state, use)?.node === expected;
+  const direct = (
+    expression: Expression,
+    expected: Node,
+    name: string,
+    arity: number
+  ): expression is CallExpression =>
+    ts.isCallExpression(expression) &&
+    expression.questionDotToken === undefined &&
+    expression.typeArguments === undefined &&
+    expression.arguments.length === arity &&
+    bound(expression.expression, expected, name);
+  const root = imports("viem", [
+    "createWalletClient",
+    "erc20Abi",
+    "http",
+    "parseEther"
+  ]);
+  const accountImport = imports("viem/accounts", ["privateKeyToAccount"]);
+  const chainImport = imports("viem/chains", ["arcTestnet"]);
+  const key = constant("PRIVATE_KEY");
+  const account = constant("account");
+  const client = constant("client");
+  if (
+    !root ||
+    !accountImport ||
+    !chainImport ||
+    !key ||
+    !account ||
+    !client ||
+    root[0]!.pos >= accountImport[0]!.pos ||
+    accountImport[0]!.pos >= chainImport[0]!.pos
+  )
+    return empty("analyzed");
+  const clientCall = client.initializer!;
+  const object =
+    direct(clientCall, root[0]!, "createWalletClient", 1) &&
+    ts.isObjectLiteralExpression(clientCall.arguments[0]!)
+      ? clientCall.arguments[0]
+      : null;
+  const properties = object?.properties ?? [];
+  const property = (items: readonly Node[], index: number, name: string) => {
+    const item = items[index];
+    return item && ts.isPropertyAssignment(item) && id(item.name, name)
+      ? item.initializer
+      : null;
+  };
+  const chain = property(properties, 1, "chain");
+  const transport = property(properties, 2, "transport");
+  const validAccount =
+    direct(account.initializer!, accountImport[0]!, "privateKeyToAccount", 1) &&
+    bound(account.initializer!.arguments[0]!, key, "PRIVATE_KEY");
+  const validClient =
+    key.end < account.getStart(sourceFile) &&
+    account.end < client.getStart(sourceFile) &&
+    properties.length === 3 &&
+    ts.isShorthandPropertyAssignment(properties[0]!) &&
+    properties[0]!.objectAssignmentInitializer === undefined &&
+    bound(properties[0]!.name, account, "account") &&
+    chain !== null &&
+    bound(chain, chainImport[0]!, "arcTestnet") &&
+    transport !== null &&
+    direct(transport, root[2]!, "http", 0);
+  const protectedTarget = (node: Node): boolean => {
+    if (ts.isIdentifier(node)) return PROTECTED_WRITE_NAME.test(node.text);
+    if (
+      ts.isPropertyAccessExpression(node) ||
+      ts.isElementAccessExpression(node)
+    )
+      return false;
+    return ts.forEachChild(node, protectedTarget) === true;
+  };
+  const hasAmbientProtected = sourceFile.statements.some(
+    (node) =>
+      isAmbientRoot(ts, node) &&
+      ((ts.isVariableStatement(node) &&
+        node.declarationList.declarations.some((item) =>
+          protectedTarget(item.name)
+        )) ||
+        ((ts.isFunctionDeclaration(node) ||
+          ts.isClassDeclaration(node) ||
+          ts.isEnumDeclaration(node) ||
+          ts.isModuleDeclaration(node)) &&
+          node.name !== undefined &&
+          protectedTarget(node.name)))
+  );
+  let protectedWrite = false;
+  const visitWrite = (node: Node): void => {
+    const target =
+      ts.isBinaryExpression(node) &&
+      node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment &&
+      node.operatorToken.kind <= ts.SyntaxKind.LastAssignment
+        ? node.left
+        : (ts.isForInStatement(node) || ts.isForOfStatement(node)) &&
+            !ts.isVariableDeclarationList(node.initializer)
+          ? node.initializer
+          : (ts.isPrefixUnaryExpression(node) ||
+                ts.isPostfixUnaryExpression(node)) &&
+              (node.operator === ts.SyntaxKind.PlusPlusToken ||
+                node.operator === ts.SyntaxKind.MinusMinusToken)
+            ? node.operand
+            : ts.isDeleteExpression(node)
+              ? node.expression
+              : undefined;
+    if (target && protectedTarget(target)) protectedWrite = true;
+    else if (!protectedWrite) ts.forEachChild(node, visitWrite);
+  };
+  visitWrite(sourceFile);
+  if (
+    !/^0x[0-9a-fA-F]{64}$/.test(string(key.initializer!) ?? "") ||
+    !validAccount ||
+    !validClient ||
+    hasAmbientProtected ||
+    protectedWrite
+  )
+    return empty("analyzed");
+  const acceptedAmount = (call: CallExpression) => {
+    const node = call.arguments[0]!;
+    const literal = string(node)!;
+    const match = literal?.match(/^(0|[1-9][0-9]*)(?:\.([0-9]{1,18}))?$/);
+    if (!match) return null;
+    const rawAmount = `${match[1]}${(match[2] ?? "").padEnd(18, "0")}`;
+    const normalized = rawAmount.replace(/^0+(?=[0-9])/, "");
+    const bounded =
+      normalized.length < UINT256_MAX.length ||
+      (normalized.length === UINT256_MAX.length && normalized <= UINT256_MAX);
+    return bounded
+      ? ([
+          {
+            parserIdentity: "parseEther" as const,
+            literal,
+            amountOffset: node.getStart(sourceFile),
+            effectiveValue: BigInt(normalized)
+          },
+          node
+        ] as const)
+      : null;
+  };
+  if (collectCandidates) {
+    const candidates: C06B2WriteCandidate[] = [];
+    visitExecutable(state, sourceFile, (call) => {
+      const callee = call.expression;
+      if (
+        !ts.isPropertyAccessExpression(callee) ||
+        !ts.isExpressionStatement(call.parent) ||
+        call.parent.parent !== sourceFile ||
+        callee.questionDotToken !== undefined ||
+        call.questionDotToken !== undefined ||
+        call.typeArguments !== undefined ||
+        call.arguments.length !== 1 ||
+        !bound(callee.expression, client, "client") ||
+        !id(callee.name, "writeContract")
+      )
+        return;
+      const request = call.arguments[0]!;
+      if (
+        !ts.isObjectLiteralExpression(request) ||
+        request.properties.length !== 4
+      )
+        return;
+      const address = property(request.properties, 0, "address");
+      const abi = property(request.properties, 1, "abi");
+      const functionName = property(request.properties, 2, "functionName");
+      const args = property(request.properties, 3, "args");
+      if (
+        address === null ||
+        string(address, ARC_USDC_ADDRESS) === null ||
+        abi === null ||
+        !bound(abi, root[1]!, "erc20Abi") ||
+        functionName === null ||
+        string(functionName, "transfer") === null ||
+        args === null ||
+        !ts.isArrayLiteralExpression(args) ||
+        args.elements.length !== 2
+      )
+        return;
+      const [recipient, amountExpression] = args.elements;
+      if (
+        recipient === undefined ||
+        ts.isOmittedExpression(recipient) ||
+        ts.isSpreadElement(recipient) ||
+        amountExpression === undefined ||
+        ts.isOmittedExpression(amountExpression) ||
+        ts.isSpreadElement(amountExpression) ||
+        !direct(amountExpression, root[3]!, "parseEther", 1)
+      )
+        return;
+      const amount = acceptedAmount(amountExpression);
+      if (!amount || amount[0].effectiveValue === 0n) return;
+      const [entry, node] = amount;
+      candidates.push({
+        kind: "erc20-transfer-native18-amount",
+        callOffset: call.getStart(sourceFile),
+        amountOffset: entry.amountOffset,
+        amountLength: node.end - node.getStart(sourceFile),
+        parserIdentity: entry.parserIdentity,
+        literal: entry.literal,
+        effectiveValue: entry.effectiveValue
+      });
+    });
+    return candidates;
+  }
+  let parserCall: CallExpression | null | undefined = null;
+  visitExecutable(state, sourceFile, (call) => {
+    if (bound(call.expression, root[3]!, "parseEther"))
+      parserCall =
+        parserCall === null && direct(call, root[3]!, "parseEther", 1)
+          ? call
+          : undefined;
+  });
+  if (!parserCall) return empty("analyzed");
+  const amount = acceptedAmount(parserCall);
+  return { ...exact, amounts: amount ? [amount[0]] : [] };
+}
+export function analyzeArcUsdcWriteAmountFoundation(
+  filePath: string,
+  source: string,
+  compilerLoader: () => Promise<unknown> = () => import("typescript")
+) {
+  return analyzeArcUsdcWriteAmount(filePath, source, compilerLoader, false);
+}
+export async function analyzeArcUsdcWriteAmountCandidates(
+  filePath: string,
+  source: string,
+  compilerLoader: () => Promise<unknown> = () => import("typescript")
+): Promise<readonly C06B2WriteCandidate[]> {
+  return (await analyzeArcUsdcWriteAmount(
+    filePath,
+    source,
+    compilerLoader,
+    true
+  )) as readonly C06B2WriteCandidate[];
 }
