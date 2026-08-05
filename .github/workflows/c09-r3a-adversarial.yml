@@ -1,0 +1,50 @@
+name: C09 R3A Adversarial Probe
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout head branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install exact test-only parser
+        run: |
+          mkdir -p /tmp/c09-parser
+          npm install \
+            --prefix /tmp/c09-parser \
+            --ignore-scripts \
+            --no-package-lock \
+            @solidity-parser/parser@0.20.2
+
+      - name: Run lexical adversarial contract
+        shell: bash
+        run: |
+          set +e
+          C09_PARSER_ROOT=/tmp/c09-parser \
+            node docs/research/prototypes/c09-r3a-adversarial.mjs \
+            > /tmp/c09-r3a-adversarial.json
+          status=$?
+          cat /tmp/c09-r3a-adversarial.json
+          exit "$status"
+
+      - name: Upload adversarial result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: c09-r3a-adversarial
+          retention-days: 1
+          if-no-files-found: error
+          path: /tmp/c09-r3a-adversarial.json
