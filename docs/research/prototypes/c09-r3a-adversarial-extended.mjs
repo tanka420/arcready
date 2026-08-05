@@ -52,7 +52,7 @@ const cases = [
     id: "C09-R3A-ADV12",
     source: contract(`
   function observe() external view {
-    string memory note = "escaped quote: \\\" return relayers[seed % relayers.length]";
+    string memory note = "escaped quote: \x5c" return relayers[seed % relayers.length]";
     uint256 seed = block.prevrandao;
     note;
     seed;
@@ -152,7 +152,7 @@ const cases = [
     id: "C09-R3A-ADV21",
     source: contract(`
   function selectRelay() external view returns (address) {
-    uint256 seed = block /* comment with quote \" and emoji 🙂 */ .prevrandao;
+    uint256 seed = block /* comment with quote " and emoji 🙂 */ .prevrandao;
     return relayers[seed % relayers.length];
   }`),
     expected: expected({ bindingClass: "single-assignment" })
