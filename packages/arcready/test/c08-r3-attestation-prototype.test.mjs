@@ -37,15 +37,12 @@ describe("C08-R3 disposable control-flow prototype", () => {
   it("keeps every unsafe control-flow candidate blocked from public emission", () => {
     const unsafeResults = C08_R3_CASES.filter(
       (entry) => entry.controlFlowClass === "unsafe-candidate"
-    ).map((entry) =>
-      classifyC08R3Source(filePathFor(entry.id), entry.source)
-    );
+    ).map((entry) => classifyC08R3Source(filePathFor(entry.id), entry.source));
 
     expect(unsafeResults).toHaveLength(11);
     expect(
       unsafeResults.every(
-        (entry) =>
-          entry.publicFindingEligibility === "blocked-unvalidated-burn"
+        (entry) => entry.publicFindingEligibility === "blocked-unvalidated-burn"
       )
     ).toBe(true);
   });

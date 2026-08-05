@@ -9,9 +9,7 @@ export const C08_R3_ERRATA = Object.freeze([
   })
 ]);
 
-const ERRATA_BY_ID = new Map(
-  C08_R3_ERRATA.map((entry) => [entry.id, entry])
-);
+const ERRATA_BY_ID = new Map(C08_R3_ERRATA.map((entry) => [entry.id, entry]));
 
 export const C08_R3_CASES = Object.freeze(
   C08_R2_CASES.map((entry) => {

@@ -38,7 +38,8 @@ function unwrap(expression) {
 
 function numericLiteralValue(expression) {
   const current = unwrap(expression);
-  if (ts.isNumericLiteral(current)) return Number(current.text.replaceAll("_", ""));
+  if (ts.isNumericLiteral(current))
+    return Number(current.text.replaceAll("_", ""));
   if (
     ts.isPrefixUnaryExpression(current) &&
     current.operator === ts.SyntaxKind.MinusToken &&
@@ -51,7 +52,8 @@ function numericLiteralValue(expression) {
 
 function propertyNameText(name) {
   if (ts.isIdentifier(name) || ts.isPrivateIdentifier(name)) return name.text;
-  if (ts.isStringLiteralLike(name) || ts.isNumericLiteral(name)) return name.text;
+  if (ts.isStringLiteralLike(name) || ts.isNumericLiteral(name))
+    return name.text;
   return undefined;
 }
 
@@ -89,7 +91,8 @@ function findFunction(sourceFile) {
 function containsImport(sourceFile) {
   return sourceFile.statements.some(
     (statement) =>
-      ts.isImportDeclaration(statement) || ts.isImportEqualsDeclaration(statement)
+      ts.isImportDeclaration(statement) ||
+      ts.isImportEqualsDeclaration(statement)
   );
 }
 
@@ -124,8 +127,7 @@ function sourcePairSupported(sourceFile) {
     if (name === "domain") domain = numericLiteralValue(property.initializer);
   }
   return (
-    (chainId === 5042002 && domain === 26) ||
-    (chainId === 1 && domain === 0)
+    (chainId === 5042002 && domain === 26) || (chainId === 1 && domain === 0)
   );
 }
 
@@ -166,13 +168,15 @@ function resolveFunctionConst(functionNode, name) {
 }
 
 function hasShadowedFetch(functionNode) {
-  return collectNodes(
-    functionNode,
-    (node) =>
-      (ts.isVariableDeclaration(node) || ts.isParameter(node)) &&
-      ts.isIdentifier(node.name) &&
-      node.name.text === "fetch"
-  ).length > 0;
+  return (
+    collectNodes(
+      functionNode,
+      (node) =>
+        (ts.isVariableDeclaration(node) || ts.isParameter(node)) &&
+        ts.isIdentifier(node.name) &&
+        node.name.text === "fetch"
+    ).length > 0
+  );
 }
 
 function classifyLoop(functionNode) {
@@ -250,7 +254,8 @@ function hashBindingSupported(functionNode, hashName) {
   if (hashName === "transactionHash") {
     return functionNode.parameters.some(
       (parameter) =>
-        ts.isIdentifier(parameter.name) && parameter.name.text === "transactionHash"
+        ts.isIdentifier(parameter.name) &&
+        parameter.name.text === "transactionHash"
     );
   }
   const declaration = resolveFunctionConst(functionNode, hashName);
@@ -294,7 +299,9 @@ function isResponseStatusAccess(expression, status) {
       numericLiteralValue(right) === status
     );
   };
-  return check(current.left, current.right) || check(current.right, current.left);
+  return (
+    check(current.left, current.right) || check(current.right, current.left)
+  );
 }
 
 function isCombined404And429(expression) {
@@ -326,12 +333,17 @@ function isResponseNotOk(expression) {
 
 function isBodyEmpty(expression) {
   const text = unwrap(expression).getText().replaceAll(/\s+/g, "");
-  return text === "body.messages.length===0" || text === "0===body.messages.length";
+  return (
+    text === "body.messages.length===0" || text === "0===body.messages.length"
+  );
 }
 
 function isMessagePending(expression) {
   const text = unwrap(expression).getText().replaceAll(/\s+/g, "");
-  return text === 'message.status==="pending"' || text === '"pending"===message.status';
+  return (
+    text === 'message.status==="pending"' ||
+    text === '"pending"===message.status'
+  );
 }
 
 function isMessageComplete(expression) {
@@ -395,7 +407,10 @@ function classifyBranch(action, safeAction) {
 function isBodyDeclaration(statement) {
   if (!ts.isVariableStatement(statement)) return false;
   return statement.declarationList.declarations.some((declaration) => {
-    if (!ts.isIdentifier(declaration.name) || declaration.name.text !== "body") {
+    if (
+      !ts.isIdentifier(declaration.name) ||
+      declaration.name.text !== "body"
+    ) {
       return false;
     }
     if (declaration.initializer === undefined) return false;
@@ -412,15 +427,17 @@ function isBodyDeclaration(statement) {
 }
 
 function hasEarlyResponseJson(loop, firstStatusStart) {
-  return collectNodes(
-    loop.statement,
-    (node) =>
-      ts.isCallExpression(node) &&
-      ts.isPropertyAccessExpression(node.expression) &&
-      isIdentifierNamed(node.expression.expression, "response") &&
-      node.expression.name.text === "json" &&
-      node.getStart() < firstStatusStart
-  ).length > 0;
+  return (
+    collectNodes(
+      loop.statement,
+      (node) =>
+        ts.isCallExpression(node) &&
+        ts.isPropertyAccessExpression(node.expression) &&
+        isIdentifierNamed(node.expression.expression, "response") &&
+        node.expression.name.text === "json" &&
+        node.getStart() < firstStatusStart
+    ).length > 0
+  );
 }
 
 function hasFinalTimeout(functionNode, loop) {
@@ -433,7 +450,10 @@ function hasFinalTimeout(functionNode, loop) {
 }
 
 export function classifyC08R3Source(filePath, source) {
-  if (!/\.(?:js|ts)$/i.test(filePath) || /\.(?:jsx|tsx|d\.ts)$/i.test(filePath)) {
+  if (
+    !/\.(?:js|ts)$/i.test(filePath) ||
+    /\.(?:jsx|tsx|d\.ts)$/i.test(filePath)
+  ) {
     return result(UNSUPPORTED, "unsupported-file-kind");
   }
   const scriptKind = filePath.toLowerCase().endsWith(".js")
@@ -449,19 +469,27 @@ export function classifyC08R3Source(filePath, source) {
   if (sourceFile.parseDiagnostics.length > 0 || containsJsx(sourceFile)) {
     return result(UNSUPPORTED, "parse-or-jsx");
   }
-  if (containsImport(sourceFile)) return result(UNSUPPORTED, "imported-evidence");
-  if (!sourcePairSupported(sourceFile)) return result(UNSUPPORTED, "source-pair");
+  if (containsImport(sourceFile))
+    return result(UNSUPPORTED, "imported-evidence");
+  if (!sourcePairSupported(sourceFile))
+    return result(UNSUPPORTED, "source-pair");
 
   const functionNode = findFunction(sourceFile);
   if (functionNode === undefined) return result(UNSUPPORTED, "poll-function");
-  if (hasShadowedFetch(functionNode)) return result(UNSUPPORTED, "shadowed-fetch");
+  if (hasShadowedFetch(functionNode))
+    return result(UNSUPPORTED, "shadowed-fetch");
 
   const loopInfo = classifyLoop(functionNode);
   if (!loopInfo.supported) return result(UNSUPPORTED, "loop-ownership");
   const { loop } = loopInfo;
   const fetchBinding = findFetchBinding(loop);
   if (fetchBinding === undefined) return result(UNSUPPORTED, "fetch-ownership");
-  if (!urlSupported(functionNode, urlExpression(functionNode, fetchBinding.argument))) {
+  if (
+    !urlSupported(
+      functionNode,
+      urlExpression(functionNode, fetchBinding.argument)
+    )
+  ) {
     return result(UNSUPPORTED, "url-ownership");
   }
 
@@ -487,7 +515,11 @@ export function classifyC08R3Source(filePath, source) {
   const branchOther = ifStatements.find((statement) =>
     isResponseNotOk(statement.expression)
   );
-  if (branch404 === undefined || branch429 === undefined || branchOther === undefined) {
+  if (
+    branch404 === undefined ||
+    branch429 === undefined ||
+    branchOther === undefined
+  ) {
     return result(UNSUPPORTED, "status-model");
   }
   const firstStatusStart = Math.min(
@@ -501,7 +533,9 @@ export function classifyC08R3Source(filePath, source) {
 
   const bodyDeclarations = statements.filter(isBodyDeclaration);
   if (bodyDeclarations.length !== 1) return result(UNSUPPORTED, "body-binding");
-  const emptyBranch = ifStatements.find((statement) => isBodyEmpty(statement.expression));
+  const emptyBranch = ifStatements.find((statement) =>
+    isBodyEmpty(statement.expression)
+  );
   const pendingBranch = ifStatements.find((statement) =>
     isMessagePending(statement.expression)
   );
