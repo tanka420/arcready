@@ -370,6 +370,84 @@ assert.equal(
   "blocked-unsupported"
 );
 
+const transformedReturnedCall = classifySoliditySource({
+  parser,
+  source: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+contract Extra {
+  function normalize(uint256 value) internal pure returns (uint256) { return value; }
+  function observe() external view returns (uint256) {
+    return normalize(block.prevrandao);
+  }
+}
+`
+});
+assert.equal(transformedReturnedCall.sinkClass, "unsupported");
+assert.equal(
+  transformedReturnedCall.publicEmissionEligibility,
+  "blocked-unsupported"
+);
+
+const wrappedKeccakResult = classifySoliditySource({
+  parser,
+  source: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+contract Extra {
+  function normalize(uint256 value) internal pure returns (uint256) { return value; }
+  function orderingKey(uint256 item) external view returns (uint256) {
+    return normalize(uint256(keccak256(abi.encode(item, block.prevrandao))));
+  }
+}
+`
+});
+assert.equal(wrappedKeccakResult.sinkClass, "unsupported");
+assert.equal(
+  wrappedKeccakResult.publicEmissionEligibility,
+  "blocked-unsupported"
+);
+
+const mutatedAssemblyAssignment = classifySoliditySource({
+  parser,
+  source: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+contract Extra {
+  address[] internal members;
+  function pick() external view returns (address) {
+    uint256 seed;
+    assembly { seed := prevrandao() }
+    seed += 1;
+    return members[seed % members.length];
+  }
+}
+`
+});
+assert.equal(mutatedAssemblyAssignment.bindingClass, "reassigned");
+assert.equal(
+  mutatedAssemblyAssignment.publicEmissionEligibility,
+  "blocked-unsupported"
+);
+
+const mutatedAssemblyUnary = classifySoliditySource({
+  parser,
+  source: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+contract Extra {
+  address[] internal members;
+  function pick() external view returns (address) {
+    uint256 seed;
+    assembly { seed := prevrandao() }
+    seed++;
+    return members[seed % members.length];
+  }
+}
+`
+});
+assert.equal(mutatedAssemblyUnary.bindingClass, "reassigned");
+assert.equal(
+  mutatedAssemblyUnary.publicEmissionEligibility,
+  "blocked-unsupported"
+);
+
 if (failures.length === 0) {
-  process.stdout.write("C09-R3-A adversarial checks: 17 passed\n");
+  process.stdout.write("C09-R3-A adversarial checks: 21 passed\n");
 }

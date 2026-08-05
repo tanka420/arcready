@@ -383,12 +383,25 @@ function isAbiEncodeCall(node) {
 }
 
 function classifyKeccakSink(expression, sourceKind) {
-  const calls = [
-    ...(expression?.type === "FunctionCall" ? [expression] : []),
-    ...descendants(expression, (node) => node.type === "FunctionCall")
-  ];
-  const keccak = calls.find((node) => functionCallName(node) === "keccak256");
-  if (!keccak) return null;
+  const directCast =
+    expression?.type === "FunctionCall" &&
+    DIRECT_CAST_NAMES.has(directCastName(expression)) &&
+    (expression.arguments ?? []).length === 1;
+  const root = directCast ? expression.arguments[0] : expression;
+  const keccak =
+    root?.type === "FunctionCall" && functionCallName(root) === "keccak256"
+      ? root
+      : null;
+  if (!keccak) {
+    const hasNestedKeccak = containsNode(
+      expression,
+      (node) =>
+        node.type === "FunctionCall" && functionCallName(node) === "keccak256"
+    );
+    return hasNestedKeccak
+      ? { sinkClass: "unsupported", bindingClass: "direct" }
+      : null;
+  }
 
   const argumentsList = keccak.arguments ?? [];
   if (argumentsList.length !== 1 || !isAbiEncodeCall(argumentsList[0])) {
@@ -456,11 +469,7 @@ function classifyDirectSink(functionNode, sourceKind) {
     const keccakResult = classifyKeccakSink(expression, sourceKind);
     if (keccakResult) return keccakResult;
 
-    if (
-      expression.type === "MemberAccess" ||
-      (expression.type === "FunctionCall" &&
-        containsSourceNode(expression, sourceKind))
-    ) {
+    if (isExactDirectSourceExpression(expression, sourceKind)) {
       return { sinkClass: "safe-observation", bindingClass: "none" };
     }
   }
@@ -593,6 +602,21 @@ function assemblyBindingFacts(functionNode) {
     return {
       sourceClass: "unsupported-source",
       bindingClass: "unsupported",
+      sinkClass: "unsupported"
+    };
+  }
+  const laterAssignments = assignmentNodes(
+    functionNode,
+    exact.targetName
+  ).filter((node) => nodeStart(node) > nodeEnd(exact.inlineNode));
+  const laterUnaryMutations = unaryMutationNodes(
+    functionNode,
+    exact.targetName
+  ).filter((node) => nodeStart(node) > nodeEnd(exact.inlineNode));
+  if (laterAssignments.length > 0 || laterUnaryMutations.length > 0) {
+    return {
+      sourceClass: "assembly-prevrandao",
+      bindingClass: "reassigned",
       sinkClass: "unsupported"
     };
   }
