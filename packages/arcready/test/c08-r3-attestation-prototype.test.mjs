@@ -32,6 +32,12 @@ const SAFE_COMPLETE_BRANCH = `    if (message.status === "complete" && message.a
       return message;
     }`;
 
+const SAFE_MESSAGE_BINDING = "    const message = body.messages[0];";
+const SAFE_FOR_CONDITION = "attempt < MAX_ATTEMPTS";
+const SAFE_POLL_SIGNATURE =
+  "async function pollArcAttestation(transactionHash: string) {";
+const SAFE_FINAL_REFERENCE = "void pollArcAttestation;";
+
 describe("C08-R3 disposable control-flow prototype", () => {
   it.each(C08_R3_CASES)(
     "$id matches the pinned C08-R2 classification with explicit R3 errata",
@@ -94,6 +100,24 @@ describe("C08-R3 disposable control-flow prototype", () => {
     if (message.status === "complete" && message.attestation) {
       return null;
     }`
+    );
+    expect(classifyC08R3Source("fixture.ts", source).controlFlowClass).toBe(
+      "unsupported"
+    );
+  });
+
+  it("fails closed when combined and separate status branches coexist", () => {
+    const combinedBranch = `    if (
+      response.status === 404 ||
+      response.status === 429
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, 5_000));
+      continue;
+    }`;
+    const source = replaceExactlyOnce(
+      SAFE_ANCHOR,
+      SAFE_404_BRANCH,
+      `${combinedBranch}\n\n${SAFE_404_BRANCH}`
     );
     expect(classifyC08R3Source("fixture.ts", source).controlFlowClass).toBe(
       "unsupported"

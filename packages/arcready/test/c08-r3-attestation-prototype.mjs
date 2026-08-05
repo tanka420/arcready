@@ -71,11 +71,147 @@ function findTopLevelConst(sourceFile, name) {
   return matches.length === 1 ? matches[0] : undefined;
 }
 
+function findTopLevelLet(sourceFile, name) {
+  const matches = [];
+  for (const statement of sourceFile.statements) {
+    if (!ts.isVariableStatement(statement)) continue;
+    if ((statement.declarationList.flags & ts.NodeFlags.Let) === 0) continue;
+    for (const declaration of statement.declarationList.declarations) {
+      if (ts.isIdentifier(declaration.name) && declaration.name.text === name) {
+        matches.push(declaration);
+      }
+    }
+  }
+  return matches.length === 1 ? matches[0] : undefined;
+}
+
+function positiveTopLevelNumericConst(sourceFile, name) {
+  const declaration = findTopLevelConst(sourceFile, name);
+  if (declaration?.initializer === undefined) return false;
+  const value = numericLiteralValue(declaration.initializer);
+  return value !== undefined && Number.isFinite(value) && value > 0;
+}
+
+function isDateNowCall(expression) {
+  const current = unwrap(expression);
+  return (
+    ts.isCallExpression(current) &&
+    current.arguments.length === 0 &&
+    ts.isPropertyAccessExpression(current.expression) &&
+    ts.isIdentifier(current.expression.expression) &&
+    current.expression.expression.text === "Date" &&
+    current.expression.name.text === "now"
+  );
+}
+
+function deadlineConstSupported(sourceFile) {
+  const declaration = findTopLevelConst(sourceFile, "DEADLINE_MS");
+  if (declaration?.initializer === undefined) return false;
+  const initializer = unwrap(declaration.initializer);
+  if (
+    !ts.isBinaryExpression(initializer) ||
+    initializer.operatorToken.kind !== ts.SyntaxKind.PlusToken
+  ) {
+    return false;
+  }
+  const pair = (dateSide, offsetSide) => {
+    const offset = numericLiteralValue(offsetSide);
+    return (
+      isDateNowCall(dateSide) &&
+      offset !== undefined &&
+      Number.isFinite(offset) &&
+      offset > 0
+    );
+  };
+  return (
+    pair(initializer.left, initializer.right) ||
+    pair(initializer.right, initializer.left)
+  );
+}
+
+function exactAttemptCondition(expression) {
+  const current = unwrap(expression);
+  return (
+    ts.isBinaryExpression(current) &&
+    current.operatorToken.kind === ts.SyntaxKind.LessThanToken &&
+    ts.isIdentifier(unwrap(current.left)) &&
+    unwrap(current.left).text === "attempt" &&
+    ts.isIdentifier(unwrap(current.right)) &&
+    unwrap(current.right).text === "MAX_ATTEMPTS"
+  );
+}
+
+function exactDeadlineCondition(expression) {
+  const current = unwrap(expression);
+  return (
+    ts.isBinaryExpression(current) &&
+    current.operatorToken.kind === ts.SyntaxKind.LessThanToken &&
+    isDateNowCall(current.left) &&
+    ts.isIdentifier(unwrap(current.right)) &&
+    unwrap(current.right).text === "DEADLINE_MS"
+  );
+}
+
+function exactAttemptInitializer(initializer) {
+  if (
+    initializer === undefined ||
+    !ts.isVariableDeclarationList(initializer) ||
+    (initializer.flags & ts.NodeFlags.Let) === 0 ||
+    initializer.declarations.length !== 1
+  ) {
+    return false;
+  }
+  const declaration = initializer.declarations[0];
+  return (
+    ts.isIdentifier(declaration.name) &&
+    declaration.name.text === "attempt" &&
+    declaration.initializer !== undefined &&
+    numericLiteralValue(declaration.initializer) === 0
+  );
+}
+
+function isAttemptIncrementExpression(expression) {
+  const current = unwrap(expression);
+  if (
+    (ts.isPostfixUnaryExpression(current) ||
+      ts.isPrefixUnaryExpression(current)) &&
+    current.operator === ts.SyntaxKind.PlusPlusToken &&
+    ts.isIdentifier(current.operand) &&
+    current.operand.text === "attempt"
+  ) {
+    return true;
+  }
+  return (
+    ts.isBinaryExpression(current) &&
+    current.operatorToken.kind === ts.SyntaxKind.PlusEqualsToken &&
+    ts.isIdentifier(unwrap(current.left)) &&
+    unwrap(current.left).text === "attempt" &&
+    numericLiteralValue(current.right) === 1
+  );
+}
+
+function topLevelAttemptSupported(sourceFile) {
+  const declaration = findTopLevelLet(sourceFile, "attempt");
+  return (
+    declaration?.initializer !== undefined &&
+    numericLiteralValue(declaration.initializer) === 0
+  );
+}
+
+function directAttemptIncrementCount(loop) {
+  return loop.statement.statements.filter(
+    (statement) =>
+      ts.isExpressionStatement(statement) &&
+      isAttemptIncrementExpression(statement.expression)
+  ).length;
+}
+
 function findFunction(sourceFile) {
   const matches = [];
   function visit(node) {
     if (
       ts.isFunctionDeclaration(node) &&
+      node.parent === sourceFile &&
       node.name?.text === "pollArcAttestation" &&
       node.body !== undefined
     ) {
@@ -172,19 +308,22 @@ function resolveFunctionConst(functionNode, name) {
   return matches.length === 1 ? matches[0] : undefined;
 }
 
-function hasShadowedFetch(functionNode) {
+function hasShadowedFetch(sourceFile) {
   return (
     collectNodes(
-      functionNode,
+      sourceFile,
       (node) =>
-        (ts.isVariableDeclaration(node) || ts.isParameter(node)) &&
-        ts.isIdentifier(node.name) &&
-        node.name.text === "fetch"
+        ((ts.isVariableDeclaration(node) || ts.isParameter(node)) &&
+          ts.isIdentifier(node.name) &&
+          node.name.text === "fetch") ||
+        (ts.isFunctionDeclaration(node) &&
+          node.name !== undefined &&
+          node.name.text === "fetch")
     ).length > 0
   );
 }
 
-function classifyLoop(functionNode) {
+function classifyLoop(functionNode, sourceFile) {
   const loops = collectNodes(
     functionNode.body,
     (node) => ts.isForStatement(node) || ts.isWhileStatement(node)
@@ -195,32 +334,39 @@ function classifyLoop(functionNode) {
   if (!ts.isBlock(loop.statement)) return { supported: false };
 
   if (ts.isForStatement(loop)) {
-    const conditionText = loop.condition?.getText() ?? "";
-    const incrementText = loop.incrementor?.getText() ?? "";
-    const initializerText = loop.initializer?.getText() ?? "";
     const bounded =
-      /\battempt\s*=\s*0\b/.test(initializerText) &&
-      /\battempt\s*<\s*MAX_ATTEMPTS\b/.test(conditionText) &&
-      /(?:attempt\s*\+=\s*1|attempt\+\+|\+\+attempt)/.test(incrementText);
+      exactAttemptInitializer(loop.initializer) &&
+      loop.condition !== undefined &&
+      exactAttemptCondition(loop.condition) &&
+      loop.incrementor !== undefined &&
+      isAttemptIncrementExpression(loop.incrementor) &&
+      positiveTopLevelNumericConst(sourceFile, "MAX_ATTEMPTS");
     return bounded
       ? { supported: true, bounded: true, loop }
       : { supported: false };
   }
 
-  const conditionText = loop.expression.getText();
-  if (conditionText === "true") {
+  if (loop.expression.kind === ts.SyntaxKind.TrueKeyword) {
     return { supported: true, bounded: false, loop };
   }
-  const boundedAttempt = /\battempt\s*<\s*MAX_ATTEMPTS\b/.test(conditionText);
-  const boundedDeadline = /Date\.now\(\)\s*<\s*DEADLINE_MS/.test(conditionText);
-  if (!boundedAttempt && !boundedDeadline) return { supported: false };
-  if (boundedAttempt) {
-    const bodyText = loop.statement.getText();
-    if (!/(?:attempt\s*\+=\s*1|attempt\+\+|\+\+attempt)/.test(bodyText)) {
-      return { supported: false };
-    }
+
+  if (exactAttemptCondition(loop.expression)) {
+    const bounded =
+      positiveTopLevelNumericConst(sourceFile, "MAX_ATTEMPTS") &&
+      topLevelAttemptSupported(sourceFile) &&
+      directAttemptIncrementCount(loop) === 1;
+    return bounded
+      ? { supported: true, bounded: true, loop }
+      : { supported: false };
   }
-  return { supported: true, bounded: true, loop };
+
+  if (exactDeadlineCondition(loop.expression)) {
+    return deadlineConstSupported(sourceFile)
+      ? { supported: true, bounded: true, loop }
+      : { supported: false };
+  }
+
+  return { supported: false };
 }
 
 function findFetchBinding(loop) {
@@ -273,17 +419,16 @@ function hashBindingSupported(functionNode, hashName) {
 
 function urlSupported(functionNode, expression) {
   if (expression === undefined) return false;
-  const text = expression.getText();
-  if (!/iris-api(?:-sandbox)?\.circle\.com/.test(text)) return false;
-  if (!/\/v2\/messages\//.test(text)) return false;
-  if (!/SOURCE\.domain/.test(text)) return false;
-  if (!/\?transactionHash=/.test(text)) return false;
-  if (/process\.env|IRIS_API_URL|CHAIN_CONFIGS|\/v1\/|\?nonce=/.test(text)) {
-    return false;
+  const text = expression.getText().replaceAll(/\s+/g, "");
+  const patterns = [
+    /^`https:\/\/iris-api(?:-sandbox)?\.circle\.com\/v2\/messages\/\$\{SOURCE\.domain\}`\+`\?transactionHash=\$\{([A-Za-z_$][\w$]*)\}`$/,
+    /^`https:\/\/iris-api(?:-sandbox)?\.circle\.com\/v2\/messages\/\$\{SOURCE\.domain\}\?transactionHash=\$\{([A-Za-z_$][\w$]*)\}`$/
+  ];
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match !== null) return hashBindingSupported(functionNode, match[1]);
   }
-  const hashMatch = text.match(/\?transactionHash=\\?\$\{([A-Za-z_$][\w$]*)\}/);
-  if (hashMatch === null) return false;
-  return hashBindingSupported(functionNode, hashMatch[1]);
+  return false;
 }
 
 function isResponseStatusAccess(expression, status) {
@@ -360,14 +505,19 @@ function isMessageComplete(expression) {
 }
 
 function directNumericDelay(statement) {
-  if (!ts.isExpressionStatement(statement)) return false;
+  if (!ts.isExpressionStatement(statement)) return undefined;
   const expression = unwrap(statement.expression);
-  if (!ts.isAwaitExpression(expression)) return false;
+  if (!ts.isAwaitExpression(expression)) return undefined;
   const text = expression.expression.getText().replaceAll(/\s+/g, "");
-  return (
-    /^newPromise\(\(resolve\)=>setTimeout\(resolve,\d[\d_]*\)\)$/.test(text) ||
-    /^newPromise\(resolve=>setTimeout\(resolve,\d[\d_]*\)\)$/.test(text)
-  );
+  const patterns = [
+    /^newPromise\(\(resolve\)=>setTimeout\(resolve,(\d[\d_]*)\)\)$/,
+    /^newPromise\(resolve=>setTimeout\(resolve,(\d[\d_]*)\)\)$/
+  ];
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match !== null) return Number(match[1].replaceAll("_", ""));
+  }
+  return undefined;
 }
 
 function directReturnAction(statement) {
@@ -389,11 +539,14 @@ function directReturnAction(statement) {
 function branchAction(ifStatement) {
   const statements = directStatements(ifStatement.thenStatement);
   let hasDelay = false;
+  let hasZeroDelay = false;
   let hasContinue = false;
   let terminal;
   for (const statement of statements) {
-    if (directNumericDelay(statement)) {
-      hasDelay = true;
+    const delay = directNumericDelay(statement);
+    if (delay !== undefined) {
+      if (delay > 0) hasDelay = true;
+      else hasZeroDelay = true;
       continue;
     }
     if (ts.isContinueStatement(statement)) {
@@ -416,7 +569,13 @@ function branchAction(ifStatement) {
   }
   if (terminal !== undefined && statements.length === 1) return terminal;
   if (hasContinue && hasDelay && statements.length === 2) return "retry-delay";
-  if (hasContinue && !hasDelay && statements.length === 1) return "retry-tight";
+  if (
+    hasContinue &&
+    (hasZeroDelay || (!hasDelay && statements.length === 1)) &&
+    statements.length <= 2
+  ) {
+    return "retry-tight";
+  }
   return "unsupported";
 }
 
@@ -446,6 +605,31 @@ function isBodyDeclaration(statement) {
       call.expression.name.text === "json"
     );
   });
+}
+
+function isMessageDeclaration(statement) {
+  if (!ts.isVariableStatement(statement)) return false;
+  if ((statement.declarationList.flags & ts.NodeFlags.Const) === 0)
+    return false;
+  if (statement.declarationList.declarations.length !== 1) return false;
+  const declaration = statement.declarationList.declarations[0];
+  if (
+    !ts.isIdentifier(declaration.name) ||
+    declaration.name.text !== "message" ||
+    declaration.initializer === undefined
+  ) {
+    return false;
+  }
+  const initializer = unwrap(declaration.initializer);
+  return (
+    ts.isElementAccessExpression(initializer) &&
+    initializer.argumentExpression !== undefined &&
+    numericLiteralValue(initializer.argumentExpression) === 0 &&
+    ts.isPropertyAccessExpression(unwrap(initializer.expression)) &&
+    ts.isIdentifier(unwrap(initializer.expression).expression) &&
+    unwrap(initializer.expression).expression.text === "body" &&
+    unwrap(initializer.expression).name.text === "messages"
+  );
 }
 
 function hasEarlyResponseJson(loop, firstStatusStart) {
@@ -498,10 +682,10 @@ export function classifyC08R3Source(filePath, source) {
 
   const functionNode = findFunction(sourceFile);
   if (functionNode === undefined) return result(UNSUPPORTED, "poll-function");
-  if (hasShadowedFetch(functionNode))
+  if (hasShadowedFetch(sourceFile))
     return result(UNSUPPORTED, "shadowed-fetch");
 
-  const loopInfo = classifyLoop(functionNode);
+  const loopInfo = classifyLoop(functionNode, sourceFile);
   if (!loopInfo.supported) return result(UNSUPPORTED, "loop-ownership");
   const { loop } = loopInfo;
   const fetchBinding = findFetchBinding(loop);
@@ -520,7 +704,17 @@ export function classifyC08R3Source(filePath, source) {
   const combinedMatches = ifStatements.filter((statement) =>
     isCombined404And429(statement.expression)
   );
-  if (combinedMatches.length > 1) {
+  const status404Matches = ifStatements.filter((statement) =>
+    isResponseStatusAccess(statement.expression, 404)
+  );
+  const status429Matches = ifStatements.filter((statement) =>
+    isResponseStatusAccess(statement.expression, 429)
+  );
+  if (
+    combinedMatches.length > 1 ||
+    (combinedMatches.length === 1 &&
+      (status404Matches.length > 0 || status429Matches.length > 0))
+  ) {
     return result(UNSUPPORTED, "duplicate-combined-status");
   }
   const combined = combinedMatches[0];
@@ -532,12 +726,10 @@ export function classifyC08R3Source(filePath, source) {
     );
   }
 
-  const branch404 = findExactlyOne(ifStatements, (statement) =>
-    isResponseStatusAccess(statement.expression, 404)
-  );
-  const branch429 = findExactlyOne(ifStatements, (statement) =>
-    isResponseStatusAccess(statement.expression, 429)
-  );
+  const branch404 =
+    status404Matches.length === 1 ? status404Matches[0] : undefined;
+  const branch429 =
+    status429Matches.length === 1 ? status429Matches[0] : undefined;
   const branchOther = findExactlyOne(ifStatements, (statement) =>
     isResponseNotOk(statement.expression)
   );
@@ -559,6 +751,10 @@ export function classifyC08R3Source(filePath, source) {
 
   const bodyDeclarations = statements.filter(isBodyDeclaration);
   if (bodyDeclarations.length !== 1) return result(UNSUPPORTED, "body-binding");
+  const messageDeclarations = statements.filter(isMessageDeclaration);
+  if (messageDeclarations.length !== 1) {
+    return result(UNSUPPORTED, "message-binding");
+  }
   const emptyBranch = findExactlyOne(ifStatements, (statement) =>
     isBodyEmpty(statement.expression)
   );
