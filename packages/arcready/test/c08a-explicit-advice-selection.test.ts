@@ -10,10 +10,7 @@ import {
   getRulesForScan,
   runScan
 } from "../src/index.js";
-import type {
-  ArcReadyRuleLevel,
-  ProjectDetection
-} from "../src/index.js";
+import type { ArcReadyRuleLevel, ProjectDetection } from "../src/index.js";
 
 const ruleId = "bridge/ATTESTATION_404_NOT_FATAL";
 const temporaryRoots: string[] = [];
@@ -59,9 +56,9 @@ describe("C08A explicit advice selection", () => {
   );
 
   it("does not select the rule when its level is missing or off", () => {
-    expect(getRulesForScan(["bridge"], detection).map((rule) => rule.id)).not.toContain(
-      ruleId
-    );
+    expect(
+      getRulesForScan(["bridge"], detection).map((rule) => rule.id)
+    ).not.toContain(ruleId);
     expect(
       getRulesForScan(["bridge"], detection, { [ruleId]: "off" }).map(
         (rule) => rule.id
@@ -103,11 +100,16 @@ describe("C08A explicit advice selection", () => {
     ["missing", {}],
     ["off", { [ruleId]: "off" }],
     ["unknown", { "bridge/UNKNOWN_ADVICE": "critical" }]
-  ] as const)("does not run the rule for %s configuration", async (_name, rules) => {
-    const { report } = await runScan(createProject(rules));
+  ] as const)(
+    "does not run the rule for %s configuration",
+    async (_name, rules) => {
+      const { report } = await runScan(createProject(rules));
 
-    expect(report.findings.map((finding) => finding.ruleId)).not.toContain(ruleId);
-  });
+      expect(report.findings.map((finding) => finding.ruleId)).not.toContain(
+        ruleId
+      );
+    }
+  );
 });
 
 function createProject(
@@ -116,7 +118,11 @@ function createProject(
   const projectRoot = mkdtempSync(join(tmpdir(), "arcready-c08a-e1-"));
   temporaryRoots.push(projectRoot);
 
-  writeFixture(projectRoot, "package.json", JSON.stringify({ name: "c08a-e1" }));
+  writeFixture(
+    projectRoot,
+    "package.json",
+    JSON.stringify({ name: "c08a-e1" })
+  );
   writeFixture(
     projectRoot,
     "arcready.config.json",

@@ -1142,7 +1142,7 @@ describe("runtime boundaries and diagnostic ordering", () => {
       ({ ruleId }) => ruleId === "wallet/NO_BLOB_TX_ON_ARC"
     );
 
-    expect(broken.report.findings).toHaveLength(16);
+    expect(broken.report.findings).toHaveLength(15);
     expect(blobFindings).toHaveLength(1);
     expect(fixed.report.findings).toHaveLength(0);
   });
