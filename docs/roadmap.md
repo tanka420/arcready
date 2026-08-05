@@ -223,8 +223,6 @@ or earlier if usage evidence shows no material value.
 
 ### C09 — Replace: shared Solidity `PREVRANDAO` value dependency
 
-### C09 — Replace: shared Solidity `PREVRANDAO` value dependency
-
 Replace duplicate wallet and bridge keyword rules with one evidence-backed rule.
 Do not preserve unsupported blanket `mixHash` equivalence.
 

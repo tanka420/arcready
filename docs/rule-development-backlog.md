@@ -194,8 +194,6 @@ It must not be used as an implementation base.
 
 ### `bridge/NO_PREVRANDAO_RELAY_SELECTION`
 
-### `bridge/NO_PREVRANDAO_RELAY_SELECTION`
-
 - Decision: Replace.
 - Priority: P1.
 - Impact: Required change.
