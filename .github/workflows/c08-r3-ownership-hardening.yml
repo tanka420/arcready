@@ -1,0 +1,637 @@
+name: C08 R3 Ownership Hardening
+
+on:
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  harden:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout head branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.1
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: corepack pnpm install --frozen-lockfile
+
+      - name: Apply structural ownership hardening
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(text, old, new, label):
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{label}: expected exactly one match, got {count}")
+              return text.replace(old, new, 1)
+
+          def replace_section(text, start, end, new, label):
+              if text.count(start) != 1 or text.count(end) != 1:
+                  raise SystemExit(
+                      f"{label}: markers start={text.count(start)} end={text.count(end)}"
+                  )
+              start_index = text.index(start)
+              end_index = text.index(end, start_index)
+              return text[:start_index] + new + text[end_index:]
+
+          prototype_path = Path("packages/arcready/test/c08-r3-attestation-prototype.mjs")
+          prototype = prototype_path.read_text(encoding="utf-8")
+
+          helpers = r'''function findTopLevelLet(sourceFile, name) {
+            const matches = [];
+            for (const statement of sourceFile.statements) {
+              if (!ts.isVariableStatement(statement)) continue;
+              if ((statement.declarationList.flags & ts.NodeFlags.Let) === 0) continue;
+              for (const declaration of statement.declarationList.declarations) {
+                if (ts.isIdentifier(declaration.name) && declaration.name.text === name) {
+                  matches.push(declaration);
+                }
+              }
+            }
+            return matches.length === 1 ? matches[0] : undefined;
+          }
+
+          function positiveTopLevelNumericConst(sourceFile, name) {
+            const declaration = findTopLevelConst(sourceFile, name);
+            if (declaration?.initializer === undefined) return false;
+            const value = numericLiteralValue(declaration.initializer);
+            return value !== undefined && Number.isFinite(value) && value > 0;
+          }
+
+          function isDateNowCall(expression) {
+            const current = unwrap(expression);
+            return (
+              ts.isCallExpression(current) &&
+              current.arguments.length === 0 &&
+              ts.isPropertyAccessExpression(current.expression) &&
+              ts.isIdentifier(current.expression.expression) &&
+              current.expression.expression.text === "Date" &&
+              current.expression.name.text === "now"
+            );
+          }
+
+          function deadlineConstSupported(sourceFile) {
+            const declaration = findTopLevelConst(sourceFile, "DEADLINE_MS");
+            if (declaration?.initializer === undefined) return false;
+            const initializer = unwrap(declaration.initializer);
+            if (
+              !ts.isBinaryExpression(initializer) ||
+              initializer.operatorToken.kind !== ts.SyntaxKind.PlusToken
+            ) {
+              return false;
+            }
+            const pair = (dateSide, offsetSide) => {
+              const offset = numericLiteralValue(offsetSide);
+              return (
+                isDateNowCall(dateSide) &&
+                offset !== undefined &&
+                Number.isFinite(offset) &&
+                offset > 0
+              );
+            };
+            return pair(initializer.left, initializer.right) || pair(initializer.right, initializer.left);
+          }
+
+          function exactAttemptCondition(expression) {
+            const current = unwrap(expression);
+            return (
+              ts.isBinaryExpression(current) &&
+              current.operatorToken.kind === ts.SyntaxKind.LessThanToken &&
+              ts.isIdentifier(unwrap(current.left)) &&
+              unwrap(current.left).text === "attempt" &&
+              ts.isIdentifier(unwrap(current.right)) &&
+              unwrap(current.right).text === "MAX_ATTEMPTS"
+            );
+          }
+
+          function exactDeadlineCondition(expression) {
+            const current = unwrap(expression);
+            return (
+              ts.isBinaryExpression(current) &&
+              current.operatorToken.kind === ts.SyntaxKind.LessThanToken &&
+              isDateNowCall(current.left) &&
+              ts.isIdentifier(unwrap(current.right)) &&
+              unwrap(current.right).text === "DEADLINE_MS"
+            );
+          }
+
+          function exactAttemptInitializer(initializer) {
+            if (
+              initializer === undefined ||
+              !ts.isVariableDeclarationList(initializer) ||
+              (initializer.flags & ts.NodeFlags.Let) === 0 ||
+              initializer.declarations.length !== 1
+            ) {
+              return false;
+            }
+            const declaration = initializer.declarations[0];
+            return (
+              ts.isIdentifier(declaration.name) &&
+              declaration.name.text === "attempt" &&
+              declaration.initializer !== undefined &&
+              numericLiteralValue(declaration.initializer) === 0
+            );
+          }
+
+          function isAttemptIncrementExpression(expression) {
+            const current = unwrap(expression);
+            if (
+              (ts.isPostfixUnaryExpression(current) || ts.isPrefixUnaryExpression(current)) &&
+              current.operator === ts.SyntaxKind.PlusPlusToken &&
+              ts.isIdentifier(current.operand) &&
+              current.operand.text === "attempt"
+            ) {
+              return true;
+            }
+            return (
+              ts.isBinaryExpression(current) &&
+              current.operatorToken.kind === ts.SyntaxKind.PlusEqualsToken &&
+              ts.isIdentifier(unwrap(current.left)) &&
+              unwrap(current.left).text === "attempt" &&
+              numericLiteralValue(current.right) === 1
+            );
+          }
+
+          function topLevelAttemptSupported(sourceFile) {
+            const declaration = findTopLevelLet(sourceFile, "attempt");
+            return (
+              declaration?.initializer !== undefined &&
+              numericLiteralValue(declaration.initializer) === 0
+            );
+          }
+
+          function directAttemptIncrementCount(loop) {
+            return loop.statement.statements.filter(
+              (statement) =>
+                ts.isExpressionStatement(statement) &&
+                isAttemptIncrementExpression(statement.expression)
+            ).length;
+          }
+
+          '''
+          prototype = replace_once(
+              prototype,
+              "function findFunction(sourceFile) {",
+              helpers + "function findFunction(sourceFile) {",
+              "insert structural helpers"
+          )
+
+          prototype = replace_once(
+              prototype,
+              '''      ts.isFunctionDeclaration(node) &&
+                node.name?.text === "pollArcAttestation" &&
+                node.body !== undefined
+          ''',
+              '''      ts.isFunctionDeclaration(node) &&
+                node.parent === sourceFile &&
+                node.name?.text === "pollArcAttestation" &&
+                node.body !== undefined
+          ''',
+              "require top-level poll function"
+          )
+
+          prototype = replace_section(
+              prototype,
+              "function hasShadowedFetch(",
+              "function classifyLoop(",
+              r'''function hasShadowedFetch(sourceFile) {
+            return (
+              collectNodes(
+                sourceFile,
+                (node) =>
+                  ((ts.isVariableDeclaration(node) || ts.isParameter(node)) &&
+                    ts.isIdentifier(node.name) &&
+                    node.name.text === "fetch") ||
+                  (ts.isFunctionDeclaration(node) &&
+                    node.name !== undefined &&
+                    node.name.text === "fetch")
+              ).length > 0
+            );
+          }
+
+          ''',
+              "replace fetch shadow proof"
+          )
+
+          prototype = replace_section(
+              prototype,
+              "function classifyLoop(",
+              "function findFetchBinding(",
+              r'''function classifyLoop(functionNode, sourceFile) {
+            const loops = collectNodes(
+              functionNode.body,
+              (node) => ts.isForStatement(node) || ts.isWhileStatement(node)
+            );
+            if (loops.length !== 1) return { supported: false };
+            const loop = loops[0];
+            if (loop.parent !== functionNode.body) return { supported: false };
+            if (!ts.isBlock(loop.statement)) return { supported: false };
+
+            if (ts.isForStatement(loop)) {
+              const bounded =
+                exactAttemptInitializer(loop.initializer) &&
+                loop.condition !== undefined &&
+                exactAttemptCondition(loop.condition) &&
+                loop.incrementor !== undefined &&
+                isAttemptIncrementExpression(loop.incrementor) &&
+                positiveTopLevelNumericConst(sourceFile, "MAX_ATTEMPTS");
+              return bounded
+                ? { supported: true, bounded: true, loop }
+                : { supported: false };
+            }
+
+            if (loop.expression.kind === ts.SyntaxKind.TrueKeyword) {
+              return { supported: true, bounded: false, loop };
+            }
+
+            if (exactAttemptCondition(loop.expression)) {
+              const bounded =
+                positiveTopLevelNumericConst(sourceFile, "MAX_ATTEMPTS") &&
+                topLevelAttemptSupported(sourceFile) &&
+                directAttemptIncrementCount(loop) === 1;
+              return bounded
+                ? { supported: true, bounded: true, loop }
+                : { supported: false };
+            }
+
+            if (exactDeadlineCondition(loop.expression)) {
+              return deadlineConstSupported(sourceFile)
+                ? { supported: true, bounded: true, loop }
+                : { supported: false };
+            }
+
+            return { supported: false };
+          }
+
+          ''',
+              "replace exact loop proof"
+          )
+
+          prototype = replace_section(
+              prototype,
+              "function urlSupported(",
+              "function isResponseStatusAccess(",
+              r'''function urlSupported(functionNode, expression) {
+            if (expression === undefined) return false;
+            const text = expression.getText().replaceAll(/\s+/g, "");
+            const patterns = [
+              /^`https:\/\/iris-api(?:-sandbox)?\.circle\.com\/v2\/messages\/\$\{SOURCE\.domain\}`\+`\?transactionHash=\$\{([A-Za-z_$][\w$]*)\}`$/,
+              /^`https:\/\/iris-api(?:-sandbox)?\.circle\.com\/v2\/messages\/\$\{SOURCE\.domain\}\?transactionHash=\$\{([A-Za-z_$][\w$]*)\}`$/
+            ];
+            for (const pattern of patterns) {
+              const match = text.match(pattern);
+              if (match !== null) return hashBindingSupported(functionNode, match[1]);
+            }
+            return false;
+          }
+
+          ''',
+              "replace exact endpoint proof"
+          )
+
+          prototype = replace_section(
+              prototype,
+              "function directNumericDelay(",
+              "function directReturnAction(",
+              r'''function directNumericDelay(statement) {
+            if (!ts.isExpressionStatement(statement)) return undefined;
+            const expression = unwrap(statement.expression);
+            if (!ts.isAwaitExpression(expression)) return undefined;
+            const text = expression.expression.getText().replaceAll(/\s+/g, "");
+            const patterns = [
+              /^newPromise\(\(resolve\)=>setTimeout\(resolve,(\d[\d_]*)\)\)$/,
+              /^newPromise\(resolve=>setTimeout\(resolve,(\d[\d_]*)\)\)$/
+            ];
+            for (const pattern of patterns) {
+              const match = text.match(pattern);
+              if (match !== null) return Number(match[1].replaceAll("_", ""));
+            }
+            return undefined;
+          }
+
+          ''',
+              "replace positive delay proof"
+          )
+
+          prototype = replace_section(
+              prototype,
+              "function branchAction(",
+              "function classifyBranch(",
+              r'''function branchAction(ifStatement) {
+            const statements = directStatements(ifStatement.thenStatement);
+            let hasDelay = false;
+            let hasZeroDelay = false;
+            let hasContinue = false;
+            let terminal;
+            for (const statement of statements) {
+              const delay = directNumericDelay(statement);
+              if (delay !== undefined) {
+                if (delay > 0) hasDelay = true;
+                else hasZeroDelay = true;
+                continue;
+              }
+              if (ts.isContinueStatement(statement)) {
+                hasContinue = true;
+                continue;
+              }
+              if (ts.isThrowStatement(statement)) {
+                terminal = "throw";
+                continue;
+              }
+              if (ts.isReturnStatement(statement)) {
+                terminal = directReturnAction(statement);
+                continue;
+              }
+              if (ts.isBreakStatement(statement)) {
+                terminal = "break";
+                continue;
+              }
+              return "unsupported";
+            }
+            if (terminal !== undefined && statements.length === 1) return terminal;
+            if (hasContinue && hasDelay && statements.length === 2) return "retry-delay";
+            if (
+              hasContinue &&
+              (hasZeroDelay || (!hasDelay && statements.length === 1)) &&
+              statements.length <= 2
+            ) {
+              return "retry-tight";
+            }
+            return "unsupported";
+          }
+
+          ''',
+              "replace zero-delay policy"
+          )
+
+          message_helper = r'''function isMessageDeclaration(statement) {
+            if (!ts.isVariableStatement(statement)) return false;
+            if ((statement.declarationList.flags & ts.NodeFlags.Const) === 0) return false;
+            if (statement.declarationList.declarations.length !== 1) return false;
+            const declaration = statement.declarationList.declarations[0];
+            if (
+              !ts.isIdentifier(declaration.name) ||
+              declaration.name.text !== "message" ||
+              declaration.initializer === undefined
+            ) {
+              return false;
+            }
+            const initializer = unwrap(declaration.initializer);
+            return (
+              ts.isElementAccessExpression(initializer) &&
+              initializer.argumentExpression !== undefined &&
+              numericLiteralValue(initializer.argumentExpression) === 0 &&
+              ts.isPropertyAccessExpression(unwrap(initializer.expression)) &&
+              ts.isIdentifier(unwrap(initializer.expression).expression) &&
+              unwrap(initializer.expression).expression.text === "body" &&
+              unwrap(initializer.expression).name.text === "messages"
+            );
+          }
+
+          '''
+          prototype = replace_once(
+              prototype,
+              "function hasEarlyResponseJson(loop, firstStatusStart) {",
+              message_helper + "function hasEarlyResponseJson(loop, firstStatusStart) {",
+              "insert message ownership proof"
+          )
+
+          prototype = replace_once(
+              prototype,
+              "if (hasShadowedFetch(functionNode))",
+              "if (hasShadowedFetch(sourceFile))",
+              "use source-wide fetch shadow proof"
+          )
+          prototype = replace_once(
+              prototype,
+              "const loopInfo = classifyLoop(functionNode);",
+              "const loopInfo = classifyLoop(functionNode, sourceFile);",
+              "pass source file to loop proof"
+          )
+
+          prototype = replace_section(
+              prototype,
+              "  const combinedMatches =",
+              "  const firstStatusStart =",
+              r'''  const combinedMatches = ifStatements.filter((statement) =>
+            isCombined404And429(statement.expression)
+          );
+          const status404Matches = ifStatements.filter((statement) =>
+            isResponseStatusAccess(statement.expression, 404)
+          );
+          const status429Matches = ifStatements.filter((statement) =>
+            isResponseStatusAccess(statement.expression, 429)
+          );
+          if (
+            combinedMatches.length > 1 ||
+            (combinedMatches.length === 1 &&
+              (status404Matches.length > 0 || status429Matches.length > 0))
+          ) {
+            return result(UNSUPPORTED, "duplicate-combined-status");
+          }
+          const combined = combinedMatches[0];
+          if (combined !== undefined) {
+            const action = branchAction(combined);
+            return result(
+              action === "retry-delay" ? UNSAFE : UNSUPPORTED,
+              "404-429-conflation"
+            );
+          }
+
+          const branch404 = status404Matches.length === 1 ? status404Matches[0] : undefined;
+          const branch429 = status429Matches.length === 1 ? status429Matches[0] : undefined;
+          const branchOther = findExactlyOne(ifStatements, (statement) =>
+            isResponseNotOk(statement.expression)
+          );
+          if (
+            branch404 === undefined ||
+            branch429 === undefined ||
+            branchOther === undefined
+          ) {
+            return result(UNSUPPORTED, "status-model");
+          }
+          ''',
+              "replace status cardinality proof"
+          )
+
+          prototype = replace_once(
+              prototype,
+              '''  const bodyDeclarations = statements.filter(isBodyDeclaration);
+            if (bodyDeclarations.length !== 1) return result(UNSUPPORTED, "body-binding");
+          ''',
+              '''  const bodyDeclarations = statements.filter(isBodyDeclaration);
+            if (bodyDeclarations.length !== 1) return result(UNSUPPORTED, "body-binding");
+            const messageDeclarations = statements.filter(isMessageDeclaration);
+            if (messageDeclarations.length !== 1) {
+              return result(UNSUPPORTED, "message-binding");
+            }
+          ''',
+              "require message ownership"
+          )
+
+          prototype_path.write_text(prototype, encoding="utf-8")
+
+          test_path = Path("packages/arcready/test/c08-r3-attestation-prototype.test.mjs")
+          test = test_path.read_text(encoding="utf-8")
+
+          test_constants = r'''const SAFE_429_BRANCH = `    if (response.status === 429) {
+            await new Promise((resolve) => setTimeout(resolve, 10_000));
+            continue;
+          }`;
+          const SAFE_MESSAGE_BINDING = "    const message = body.messages[0];";
+          const SAFE_FOR_CONDITION = "attempt < MAX_ATTEMPTS";
+          const SAFE_POLL_SIGNATURE =
+            "async function pollArcAttestation(transactionHash: string) {";
+          const SAFE_FINAL_REFERENCE = "void pollArcAttestation;";
+
+          '''
+          test = replace_once(
+              test,
+              "describe(\"C08-R3 disposable control-flow prototype\", () => {",
+              test_constants + "describe(\"C08-R3 disposable control-flow prototype\", () => {",
+              "insert hardening test constants"
+          )
+
+          adversarial_tests = r'''  it("fails closed on a deceptive Iris-host substring", () => {
+            const source = replaceExactlyOnce(
+              SAFE_ANCHOR,
+              "https://iris-api-sandbox.circle.com",
+              "https://evil.example/iris-api-sandbox.circle.com"
+            );
+            expect(classifyC08R3Source("fixture.ts", source).controlFlowClass).toBe(
+              "unsupported"
+            );
+          });
+
+          it("fails closed on an unbounded compound attempt condition", () => {
+            const source = replaceExactlyOnce(
+              SAFE_ANCHOR,
+              SAFE_FOR_CONDITION,
+              `${SAFE_FOR_CONDITION} || true`
+            );
+            expect(classifyC08R3Source("fixture.ts", source).controlFlowClass).toBe(
+              "unsupported"
+            );
+          });
+
+          it("fails closed on crossed message ownership", () => {
+            const source = replaceExactlyOnce(
+              SAFE_ANCHOR,
+              SAFE_MESSAGE_BINDING,
+              "    const message = other.messages[0];"
+            );
+            expect(classifyC08R3Source("fixture.ts", source).controlFlowClass).toBe(
+              "unsupported"
+            );
+          });
+
+          it("fails closed when top-level code shadows global fetch", () => {
+            const source = `const fetch = async () => new Response();\n${SAFE_ANCHOR}`;
+            expect(classifyC08R3Source("fixture.ts", source).controlFlowClass).toBe(
+              "unsupported"
+            );
+          });
+
+          it("fails closed on a nested poll helper", () => {
+            const source = replaceExactlyOnce(
+              replaceExactlyOnce(
+                SAFE_ANCHOR,
+                SAFE_POLL_SIGNATURE,
+                `function outer() {\n  ${SAFE_POLL_SIGNATURE}`
+              ),
+              SAFE_FINAL_REFERENCE,
+              `  ${SAFE_FINAL_REFERENCE}\n}\nvoid outer;`
+            );
+            expect(classifyC08R3Source("fixture.ts", source).controlFlowClass).toBe(
+              "unsupported"
+            );
+          });
+
+          it("classifies a zero-millisecond 404 retry as unsafe", () => {
+            const zeroDelayBranch = SAFE_404_BRANCH.replace("5_000", "0");
+            const source = replaceExactlyOnce(
+              SAFE_ANCHOR,
+              SAFE_404_BRANCH,
+              zeroDelayBranch
+            );
+            expect(classifyC08R3Source("fixture.ts", source)).toEqual(
+              expect.objectContaining({
+                controlFlowClass: "unsafe-candidate",
+                publicFindingEligibility: "blocked-unvalidated-burn"
+              })
+            );
+          });
+
+          it("fails closed when combined and separate status branches coexist", () => {
+            const combinedBranch = `    if (
+              response.status === 404 ||
+              response.status === 429
+            ) {
+              await new Promise((resolve) => setTimeout(resolve, 5_000));
+              continue;
+            }`;
+            const source = replaceExactlyOnce(
+              SAFE_ANCHOR,
+              `${SAFE_404_BRANCH}\n\n${SAFE_429_BRANCH}`,
+              `${combinedBranch}\n\n${SAFE_404_BRANCH}\n\n${SAFE_429_BRANCH}`
+            );
+            expect(classifyC08R3Source("fixture.ts", source).controlFlowClass).toBe(
+              "unsupported"
+            );
+          });
+
+          '''
+          test = replace_once(
+              test,
+              '''  it("keeps every unsafe control-flow candidate blocked from public emission", () => {
+          ''',
+              adversarial_tests + '''  it("keeps every unsafe control-flow candidate blocked from public emission", () => {
+          ''',
+              "insert structural adversarial tests"
+          )
+          test_path.write_text(test, encoding="utf-8")
+          PY
+
+      - name: Run focused validation
+        run: |
+          corepack pnpm exec prettier --write \
+            docs/research/C08-R3.md \
+            docs/research/fixtures/c08-r3-corpus.mjs \
+            packages/arcready/test/c08-r3-attestation-prototype.mjs \
+            packages/arcready/test/c08-r3-attestation-prototype.test.mjs
+          corepack pnpm exec prettier --check \
+            docs/research/C08-R3.md \
+            docs/research/fixtures/c08-r3-corpus.mjs \
+            packages/arcready/test/c08-r3-attestation-prototype.mjs \
+            packages/arcready/test/c08-r3-attestation-prototype.test.mjs
+          corepack pnpm --filter arcready exec vitest run test/c08-r3-attestation-prototype.test.mjs
+          git diff --check
+
+      - name: Commit hardening and self-clean
+        run: |
+          git rm .github/workflows/c08-r3-ownership-hardening.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            packages/arcready/test/c08-r3-attestation-prototype.mjs \
+            packages/arcready/test/c08-r3-attestation-prototype.test.mjs
+          git commit -m "test: prove C08-R3 structural ownership"
+          git push origin HEAD:${{ github.head_ref }}
