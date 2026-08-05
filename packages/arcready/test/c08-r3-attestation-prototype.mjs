@@ -145,6 +145,11 @@ function collectNodes(root, predicate) {
   return matches;
 }
 
+function findExactlyOne(items, predicate) {
+  const matches = items.filter(predicate);
+  return matches.length === 1 ? matches[0] : undefined;
+}
+
 function isIdentifierNamed(node, name) {
   return ts.isIdentifier(node) && node.text === name;
 }
@@ -365,6 +370,22 @@ function directNumericDelay(statement) {
   );
 }
 
+function directReturnAction(statement) {
+  if (statement.expression === undefined) return "return";
+  const expression = unwrap(statement.expression);
+  if (ts.isIdentifier(expression) && expression.text === "message") {
+    return "return-message";
+  }
+  if (
+    ts.isPropertyAccessExpression(expression) &&
+    isIdentifierNamed(expression.expression, "message") &&
+    expression.name.text === "attestation"
+  ) {
+    return "return-attestation";
+  }
+  return "return";
+}
+
 function branchAction(ifStatement) {
   const statements = directStatements(ifStatement.thenStatement);
   let hasDelay = false;
@@ -384,7 +405,7 @@ function branchAction(ifStatement) {
       continue;
     }
     if (ts.isReturnStatement(statement)) {
-      terminal = "return";
+      terminal = directReturnAction(statement);
       continue;
     }
     if (ts.isBreakStatement(statement)) {
@@ -401,7 +422,8 @@ function branchAction(ifStatement) {
 
 function classifyBranch(action, safeAction) {
   if (action === "unsupported") return UNSUPPORTED;
-  return action === safeAction ? SAFE : UNSAFE;
+  const safeActions = Array.isArray(safeAction) ? safeAction : [safeAction];
+  return safeActions.includes(action) ? SAFE : UNSAFE;
 }
 
 function isBodyDeclaration(statement) {
@@ -495,9 +517,13 @@ export function classifyC08R3Source(filePath, source) {
 
   const statements = [...loop.statement.statements];
   const ifStatements = statements.filter(ts.isIfStatement);
-  const combined = ifStatements.find((statement) =>
+  const combinedMatches = ifStatements.filter((statement) =>
     isCombined404And429(statement.expression)
   );
+  if (combinedMatches.length > 1) {
+    return result(UNSUPPORTED, "duplicate-combined-status");
+  }
+  const combined = combinedMatches[0];
   if (combined !== undefined) {
     const action = branchAction(combined);
     return result(
@@ -506,13 +532,13 @@ export function classifyC08R3Source(filePath, source) {
     );
   }
 
-  const branch404 = ifStatements.find((statement) =>
+  const branch404 = findExactlyOne(ifStatements, (statement) =>
     isResponseStatusAccess(statement.expression, 404)
   );
-  const branch429 = ifStatements.find((statement) =>
+  const branch429 = findExactlyOne(ifStatements, (statement) =>
     isResponseStatusAccess(statement.expression, 429)
   );
-  const branchOther = ifStatements.find((statement) =>
+  const branchOther = findExactlyOne(ifStatements, (statement) =>
     isResponseNotOk(statement.expression)
   );
   if (
@@ -533,13 +559,13 @@ export function classifyC08R3Source(filePath, source) {
 
   const bodyDeclarations = statements.filter(isBodyDeclaration);
   if (bodyDeclarations.length !== 1) return result(UNSUPPORTED, "body-binding");
-  const emptyBranch = ifStatements.find((statement) =>
+  const emptyBranch = findExactlyOne(ifStatements, (statement) =>
     isBodyEmpty(statement.expression)
   );
-  const pendingBranch = ifStatements.find((statement) =>
+  const pendingBranch = findExactlyOne(ifStatements, (statement) =>
     isMessagePending(statement.expression)
   );
-  const completeBranch = ifStatements.find((statement) =>
+  const completeBranch = findExactlyOne(ifStatements, (statement) =>
     isMessageComplete(statement.expression)
   );
   if (
@@ -556,7 +582,10 @@ export function classifyC08R3Source(filePath, source) {
     classifyBranch(branchAction(branchOther), "throw"),
     classifyBranch(branchAction(emptyBranch), "retry-delay"),
     classifyBranch(branchAction(pendingBranch), "retry-delay"),
-    classifyBranch(branchAction(completeBranch), "return")
+    classifyBranch(branchAction(completeBranch), [
+      "return-message",
+      "return-attestation"
+    ])
   ];
   if (checks.includes(UNSUPPORTED)) return result(UNSUPPORTED, "branch-shape");
   if (checks.includes(UNSAFE)) return result(UNSAFE, "unsafe-owned-branch");

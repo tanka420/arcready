@@ -12,6 +12,26 @@ function filePathFor(caseId) {
   return "fixture.ts";
 }
 
+function replaceExactlyOnce(source, from, to) {
+  const first = source.indexOf(from);
+  const last = source.lastIndexOf(from);
+  if (first < 0 || first !== last) {
+    throw new Error(`Expected exactly one adversarial replacement: ${from}`);
+  }
+  return source.slice(0, first) + to + source.slice(first + from.length);
+}
+
+const SAFE_ANCHOR = C08_R3_CASES.find((entry) => entry.id === "R2-A01")?.source;
+if (SAFE_ANCHOR === undefined) throw new Error("Missing C08-R3 safe anchor");
+
+const SAFE_404_BRANCH = `    if (response.status === 404) {
+      await new Promise((resolve) => setTimeout(resolve, 5_000));
+      continue;
+    }`;
+const SAFE_COMPLETE_BRANCH = `    if (message.status === "complete" && message.attestation) {
+      return message;
+    }`;
+
 describe("C08-R3 disposable control-flow prototype", () => {
   it.each(C08_R3_CASES)(
     "$id matches the pinned C08-R2 classification with explicit R3 errata",
@@ -32,6 +52,52 @@ describe("C08-R3 disposable control-flow prototype", () => {
         reason: "optional-semicolon-is-valid"
       })
     ]);
+  });
+
+  it("classifies a wrong complete return as unsafe", () => {
+    const source = replaceExactlyOnce(
+      SAFE_ANCHOR,
+      SAFE_COMPLETE_BRANCH,
+      `    if (message.status === "complete" && message.attestation) {
+      return null;
+    }`
+    );
+    expect(classifyC08R3Source("fixture.ts", source)).toEqual(
+      expect.objectContaining({
+        controlFlowClass: "unsafe-candidate",
+        publicFindingEligibility: "blocked-unvalidated-burn"
+      })
+    );
+  });
+
+  it("fails closed on duplicate owned 404 branches", () => {
+    const source = replaceExactlyOnce(
+      SAFE_ANCHOR,
+      SAFE_404_BRANCH,
+      `${SAFE_404_BRANCH}
+
+    if (response.status === 404) {
+      throw new Error("Conflicting duplicate 404 branch");
+    }`
+    );
+    expect(classifyC08R3Source("fixture.ts", source).controlFlowClass).toBe(
+      "unsupported"
+    );
+  });
+
+  it("fails closed on duplicate owned complete branches", () => {
+    const source = replaceExactlyOnce(
+      SAFE_ANCHOR,
+      SAFE_COMPLETE_BRANCH,
+      `${SAFE_COMPLETE_BRANCH}
+
+    if (message.status === "complete" && message.attestation) {
+      return null;
+    }`
+    );
+    expect(classifyC08R3Source("fixture.ts", source).controlFlowClass).toBe(
+      "unsupported"
+    );
   });
 
   it("keeps every unsafe control-flow candidate blocked from public emission", () => {
