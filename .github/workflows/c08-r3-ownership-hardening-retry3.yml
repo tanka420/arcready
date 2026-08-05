@@ -67,10 +67,17 @@ jobs:
           if removed != 1:
               raise SystemExit(f"SAFE_429_BRANCH removal: expected 1, got {removed}")
 
-          pattern = re.compile(
-              r'  it\("fails closed when combined and separate status branches coexist", \(\) => \{\n.*?\n  \}\);\n\n(?=  it\("keeps every unsafe control-flow candidate blocked from public emission")',
-              re.S,
-          )
+          title = "fails closed when combined and separate status branches coexist"
+          next_title = "keeps every unsafe control-flow candidate blocked from public emission"
+          title_position = text.index(title)
+          next_title_position = text.index(next_title, title_position + len(title))
+          block_start = text.rfind("  it(", 0, title_position)
+          block_end = text.rfind("  it(", 0, next_title_position)
+          if block_start < 0 or block_end <= block_start:
+              raise SystemExit(
+                  f"combined test bounds invalid: start={block_start} end={block_end}"
+              )
+
           replacement_lines = [
               '  it("fails closed when combined and separate status branches coexist", () => {',
               '    const combinedBranch = `    if (',
@@ -89,12 +96,10 @@ jobs:
               '      "unsupported"',
               '    );',
               '  });',
+              '',
           ]
-          replacement = "\n".join(replacement_lines) + "\n\n"
-          text, replaced = pattern.subn(replacement, text, count=1)
-          if replaced != 1:
-              raise SystemExit(f"combined test replacement: expected 1, got {replaced}")
-
+          replacement = "\n".join(replacement_lines) + "\n"
+          text = text[:block_start] + replacement + text[block_end:]
           path.write_text(text, encoding="utf-8")
           PY
 
