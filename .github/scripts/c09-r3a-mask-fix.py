@@ -107,31 +107,19 @@ replace_once(
     '''export function analyzeC09Source(parser, source, metadata = {}) {
   const unsupportedFutureSyntax = /pragma\\s+solidity\\s+[^;]*\\b0\\.9\\./.test(
     source
-  );
-''',
+  );''',
     '''export function analyzeC09Source(parser, source, metadata = {}) {
   const sourceCode = maskNonCode(source);
   const unsupportedFutureSyntax = /pragma\\s+solidity\\s+[^;]*\\b0\\.9\\./.test(
     sourceCode
-  );
-''',
+  );''',
     "masked source pragma",
 )
 
-for old, new, label in [
-    ("hasPotentialSelection(record.text)", "hasPotentialSelection(record.code)", "potential sink masking"),
-    ("/\\b[A-Za-z_$][\\w$]*\\.seed\\s*\\(/.test(record.text)", "/\\b[A-Za-z_$][\\w$]*\\.seed\\s*\\(/.test(record.code)", "cross contract call masking"),
-    ("new RegExp(`\\\\b${escapeRegExp(name)}\\\\s*\\\\(`).test(record.text)", "new RegExp(`\\\\b${escapeRegExp(name)}\\\\s*\\\\(`).test(record.code)", "cross function call masking"),
-    ("sinkForFunction(record.text, null)", "sinkForFunction(record.code, null)", "safe source masking"),
-    ("sourceBinding(record.text)", "sourceBinding(record.code)", "binding masking"),
-    ("sinkForFunction(record.text, binding)", "sinkForFunction(record.code, binding)", "sink masking"),
-    ("identifierAssignments(record.text, binding.name)", "identifierAssignments(record.code, binding.name)", "assignment masking"),
-    ("declarationCount(record.text, binding.name)", "declarationCount(record.code, binding.name)", "declaration masking"),
-]:
-    replace_once(old, new, label)
-
 text = PATH.read_text(encoding="utf-8")
-remaining = text.count("record.text")
-if remaining < 1:
-    raise SystemExit("expected remaining reportable-source record.text uses")
+record_text_count = text.count("record.text")
+if record_text_count < 8:
+    raise SystemExit(
+        f"expected at least eight record.text analysis uses, got {record_text_count}"
+    )
 PATH.write_text(text.replace("record.text", "record.code"), encoding="utf-8")
