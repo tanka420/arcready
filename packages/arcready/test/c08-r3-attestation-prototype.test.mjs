@@ -31,7 +31,6 @@ const SAFE_404_BRANCH = `    if (response.status === 404) {
 const SAFE_COMPLETE_BRANCH = `    if (message.status === "complete" && message.attestation) {
       return message;
     }`;
-
 const SAFE_MESSAGE_BINDING = "    const message = body.messages[0];";
 const SAFE_FOR_CONDITION = "attempt < MAX_ATTEMPTS";
 const SAFE_POLL_SIGNATURE =
@@ -103,6 +102,76 @@ describe("C08-R3 disposable control-flow prototype", () => {
     );
     expect(classifyC08R3Source("fixture.ts", source).controlFlowClass).toBe(
       "unsupported"
+    );
+  });
+
+  it("fails closed on a deceptive Iris-host substring", () => {
+    const source = replaceExactlyOnce(
+      SAFE_ANCHOR,
+      "https://iris-api-sandbox.circle.com",
+      "https://evil.example/iris-api-sandbox.circle.com"
+    );
+    expect(classifyC08R3Source("fixture.ts", source).controlFlowClass).toBe(
+      "unsupported"
+    );
+  });
+
+  it("fails closed on an unbounded compound attempt condition", () => {
+    const source = replaceExactlyOnce(
+      SAFE_ANCHOR,
+      SAFE_FOR_CONDITION,
+      `${SAFE_FOR_CONDITION} || true`
+    );
+    expect(classifyC08R3Source("fixture.ts", source).controlFlowClass).toBe(
+      "unsupported"
+    );
+  });
+
+  it("fails closed on crossed message ownership", () => {
+    const source = replaceExactlyOnce(
+      SAFE_ANCHOR,
+      SAFE_MESSAGE_BINDING,
+      "    const message = other.messages[0];"
+    );
+    expect(classifyC08R3Source("fixture.ts", source).controlFlowClass).toBe(
+      "unsupported"
+    );
+  });
+
+  it("fails closed when top-level code shadows global fetch", () => {
+    const source = `const fetch = async () => new Response();\n${SAFE_ANCHOR}`;
+    expect(classifyC08R3Source("fixture.ts", source).controlFlowClass).toBe(
+      "unsupported"
+    );
+  });
+
+  it("fails closed on a nested poll helper", () => {
+    const source = replaceExactlyOnce(
+      replaceExactlyOnce(
+        SAFE_ANCHOR,
+        SAFE_POLL_SIGNATURE,
+        `function outer() {\n  ${SAFE_POLL_SIGNATURE}`
+      ),
+      SAFE_FINAL_REFERENCE,
+      `  ${SAFE_FINAL_REFERENCE}\n}\nvoid outer;`
+    );
+    expect(classifyC08R3Source("fixture.ts", source).controlFlowClass).toBe(
+      "unsupported"
+    );
+  });
+
+  it("classifies a zero-millisecond 404 retry as unsafe", () => {
+    const zeroDelayBranch = SAFE_404_BRANCH.replace("5_000", "0");
+    const source = replaceExactlyOnce(
+      SAFE_ANCHOR,
+      SAFE_404_BRANCH,
+      zeroDelayBranch
+    );
+    expect(classifyC08R3Source("fixture.ts", source)).toEqual(
+      expect.objectContaining({
+        controlFlowClass: "unsafe-candidate",
+        publicFindingEligibility: "blocked-unvalidated-burn"
+      })
     );
   });
 
