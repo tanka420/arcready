@@ -1,7 +1,7 @@
 # ArcReady Roadmap
 
-**Status:** Active roadmap after completed C07C explicit-pattern integration
-**Last reviewed:** 2026-08-01
+**Status:** Active roadmap after completed C06B2 exact write MVP
+**Last reviewed:** 2026-08-05
 
 ArcReady is an Arc-specific, repository-level static compatibility analyzer for
 projects being ported from Ethereum or other EVM environments to Arc.
@@ -172,44 +172,34 @@ and inventory remains 19 known / 17 default / 7 wallet / 4 canonical.
 ### DX01 — Complete: broken/fixed demo and onboarding
 
 DX01 completed the post-C07C broken/fixed demo, onboarding, and report-clarity
-work. C06B2 planning may now proceed without broadening the completed Demo/DX
-scope.
+work. It cleared the way for the subsequent C06B2 planning and delivery without
+broadening the completed Demo/DX scope.
 
-### C06B2 — Approved plan: direct `parseEther` write MVP
+### C06B2 — Complete: direct `parseEther` write MVP
 
-The active plan is `docs/exec-plans/active/C06B2.md`. Native write analysis is
-Research and blocked because current first-party Arc sources conflict on raw
-native `value` decimals. The only candidate implementation surface is a bounded
-viem local-account transfer to canonical Arc USDC using one exact client,
-request, and direct nonzero `parseEther` literal. The approved
-architecture-reset plan defines seven unordered provenance identities and nine non-positional semantic
-source relations. Its 70 deterministic complete-source fixtures separate static
-analyzer stages from expression-evaluation classes and make no live submission,
-signing, funding, or RPC-success claim. No controlled-RPC harness is planned. A
-ten-dimension syntax signature now derives each fixture's exact REL set and
-rejects both under-mapping and over-mapping: 3 fixtures have empty sets, 38 have
-all nine relations, and 29 have partial sets. Usage counts in relation-inventory
-order are 64, 62, 61, 64, 46, 46, 46, 64, and 61. The semantic validator has 33
-negative mutations and 3 invariance cases, 36 mandatory cases total, plus one
-explicit mapping-correction acceptance case. Seven independent provenance
-booleans also derive exact P sets: 3 fixtures are empty, 41 retain all seven,
-and 26 are partial; P01–P07 usage counts are 64, 63, 61, 56, 64, 65, and 58.
-The provenance validator has 16 negative mutations, 3 invariance cases, and 2
-N45/N46 acceptance cases, 21 cases total. The thin final slice adds one
-private write-candidate kind to the existing rule and
-deterministically selects at most one read/write issue without changing legacy
-read-only behavior. Candidate offsets are private ordering metadata; emitted
-findings retain the existing file-level location. Expression-level emitted
-ranges require a separate R3 prerequisite. Parsers other than `parseEther`,
-conversions, bindings, multi-write analysis, mutation, and ethers remain
-separate follow-ups. Independent re-review passed on 2026-08-01 with blocker
-0, major 0, and minor 0. Implementation remains unauthorized until a separate
-explicit decision.
+PR #45 merged E1, E2, and E3 on 2026-08-04. The completed scope detects only an
+exact direct viem local-account transfer to canonical Arc Testnet USDC when the
+amount is a direct nonzero `parseEther` literal. It adds one private write
+candidate to `wallet/ARC_USDC_AMOUNT_CONVERSION` and deterministically selects
+at most one read/write issue while preserving C06B1 behavior when no write
+candidate exists.
 
-Current Arc documentation uses `https://rpc.testnet.arc.io`, while existing
-exact-literal ownership analyzers recognize the previously documented
-`.network` endpoint. RPC endpoint migration is a separate R2 maintenance
-follow-up and is not part of C06B2.
+E1, E2, and E3 each received an independent `APPROVE` with zero blocker, major,
+and minor findings, and the final `corepack pnpm verify:full` gate passed before
+merge. The rule remains non-canonical; inventory, public output, schemas,
+reporters, scoring, CLI exits, and legacy file-level finding behavior remain
+unchanged. The completed plan is
+`docs/exec-plans/completed/C06B2.md`.
+
+Native raw-value writes remain Research / blocked. `parseUnits`, conversions,
+wider bindings, mutation-aware expansion, ethers, and generalized write
+analysis remain deferred. C06B2 makes no live RPC, signing, funding, or
+transaction-success claim.
+
+Current official Arc documentation uses
+`https://rpc.testnet.arc.network`, which matches the existing analyzer literal.
+The proposed `.io` RPC migration was cancelled because no migration is
+required.
 
 ### C08 — Research: CCTP attestation control flow
 
@@ -285,15 +275,12 @@ The following remain outside the near-term roadmap:
 
 ## Current recommended next step
 
-1. Keep C06B2 implementation unauthorized until a separate explicit decision.
-2. Keep native write analysis blocked pending first-party premise clarification.
-3. Implement only the approved reduced local-account canonical ERC-20 transfer
-   MVP if separately authorized.
-4. Plan Arc RPC endpoint migration as separate R2 maintenance.
-5. Continue gathering real unsupported-pattern and false-positive/negative
+1. Begin C08 research on CCTP attestation control flow.
+2. Continue C09 and C10 in the existing sequence.
+3. Keep native write analysis blocked pending first-party premise clarification.
+4. Continue gathering real unsupported-pattern and false-positive/negative
    evidence.
-6. Continue C08/C09/C10 in the existing sequence.
-7. Reopen deferred C07C families only from concrete usage evidence or a
+5. Reopen deferred C06B2 or C07C families only from concrete usage evidence or a
    separately approved milestone.
 
 The private canonical runtime remained exactly four rules throughout C07C.
