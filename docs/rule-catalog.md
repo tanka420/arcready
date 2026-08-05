@@ -8,27 +8,27 @@ ArcReady does not perform live Arc RPC checks, Circle API checks, on-chain trans
 
 ## Summary table
 
-| Preset  | Rule ID                                 | Severity | Purpose                                                                                                                    |
-| ------- | --------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------- |
-| Wallet  | `wallet/ARC_CHAIN_METADATA`             | Critical | Checks bounded Arc-owned chain objects for literal chain ID errors and explicit Ethereum RPC/explorer endpoints.           |
-| Wallet  | `wallet/WALLET_NATIVE_USDC_DISPLAY`     | Critical | Checks bounded Arc-owned chain objects for explicit ETH/Ethereum names or non-USDC native-currency symbols.                |
-| Wallet  | `wallet/ARC_USDC_AMOUNT_CONVERSION`     | Critical | Checks proven Arc native and exact Arc USDC ERC-20 balance reads for direct 18-versus-6 decimal interpretation mismatches. |
-| Wallet  | `wallet/NO_ETH_GAS_LABEL`               | Critical | Checks Arc wallet fee UI text for ETH or gwei gas labels.                                                                  |
-| Wallet  | `wallet/ONE_CONFIRMATION_FINAL`         | Critical | Checks Arc wallet transaction flows for Ethereum-style multi-confirmation waits.                                           |
-| Wallet  | `wallet/PREVRANDAO_NOT_SUPPORTED`       | Critical | Checks Arc wallet code for active PREVRANDAO or mixHash assumptions.                                                       |
-| Wallet  | `wallet/NO_BLOB_TX_ON_ARC`              | Critical | Checks exact supported ethers and viem EIP-4844 transaction submissions in proven Arc flows.                               |
-| Bridge  | `bridge/BRIDGE_CONFIRMATIONS_ONE`       | Critical | Checks Arc bridge and relayer flows for more than one required confirmation.                                               |
-| Bridge  | `bridge/CCTP_DOMAIN_26`                 | Critical | Checks Arc CCTP domain configuration for domain `26`.                                                                      |
-| Bridge  | `bridge/NO_WRAPPED_USDC_ON_ARC`         | Critical | Checks Arc bridge routes for wrapped or bridged USDC as the Arc-side asset.                                                |
-| Bridge  | `bridge/RELAYER_USES_USDC_FOR_GAS`      | Critical | Checks Arc relayer funding and gas-token config for ETH gas assumptions.                                                   |
-| Bridge  | `bridge/ATTESTATION_404_NOT_FATAL`      | Critical | Checks CCTP attestation polling for fatal handling of retryable `404` responses.                                           |
-| Bridge  | `bridge/NO_PREVRANDAO_RELAY_SELECTION`  | Critical | Checks Arc relay selection for PREVRANDAO or mixHash randomness assumptions.                                               |
-| App Kit | `app-kit/APPKIT_CHAIN_IDENTIFIER_VALID` | Critical | Checks App Kit Arc chain identifiers for unsupported spellings.                                                            |
-| App Kit | `app-kit/APPKIT_CAPABILITY_SUPPORTED`   | Warning  | Deprecated, default-excluded detector with an unsupported generic capability-guard contract.                               |
-| App Kit | `app-kit/APPKIT_CUSTOM_RPC_RECOMMENDED` | Warning  | Checks App Kit Arc Testnet usage for implicit or shared RPC configuration.                                                 |
-| App Kit | `app-kit/UB_DELEGATE_REQUIRED`          | Warning  | Checks Unified Balance spend flows that may need delegate wallet handling.                                                 |
-| App Kit | `app-kit/UB_FEE_EXPLANATION_PRESENT`    | Warning  | Checks Unified Balance confirmation UI for missing fee or received-amount context.                                         |
-| App Kit | `app-kit/APPKIT_BRIDGE_MIN_AMOUNT_NOTE` | Warning  | Deprecated, default-excluded detector for an unsupported universal Arc bridge-minimum assumption.                          |
+| Preset  | Rule ID                                 | Severity | Purpose                                                                                                                             |
+| ------- | --------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Wallet  | `wallet/ARC_CHAIN_METADATA`             | Critical | Checks bounded Arc-owned chain objects for literal chain ID errors and explicit Ethereum RPC/explorer endpoints.                    |
+| Wallet  | `wallet/WALLET_NATIVE_USDC_DISPLAY`     | Critical | Checks bounded Arc-owned chain objects for explicit ETH/Ethereum names or non-USDC native-currency symbols.                         |
+| Wallet  | `wallet/ARC_USDC_AMOUNT_CONVERSION`     | Critical | Checks proven Arc native and exact Arc USDC ERC-20 balance reads for direct 18-versus-6 decimal interpretation mismatches.          |
+| Wallet  | `wallet/NO_ETH_GAS_LABEL`               | Critical | Checks Arc wallet fee UI text for ETH or gwei gas labels.                                                                           |
+| Wallet  | `wallet/ONE_CONFIRMATION_FINAL`         | Critical | Checks Arc wallet transaction flows for Ethereum-style multi-confirmation waits.                                                    |
+| Wallet  | `wallet/PREVRANDAO_NOT_SUPPORTED`       | Critical | Checks Arc wallet code for active PREVRANDAO or mixHash assumptions.                                                                |
+| Wallet  | `wallet/NO_BLOB_TX_ON_ARC`              | Critical | Checks exact supported ethers and viem EIP-4844 transaction submissions in proven Arc flows.                                        |
+| Bridge  | `bridge/BRIDGE_CONFIRMATIONS_ONE`       | Critical | Checks Arc bridge and relayer flows for more than one required confirmation.                                                        |
+| Bridge  | `bridge/CCTP_DOMAIN_26`                 | Critical | Checks Arc CCTP domain configuration for domain `26`.                                                                               |
+| Bridge  | `bridge/NO_WRAPPED_USDC_ON_ARC`         | Critical | Checks Arc bridge routes for wrapped or bridged USDC as the Arc-side asset.                                                         |
+| Bridge  | `bridge/RELAYER_USES_USDC_FOR_GAS`      | Critical | Checks Arc relayer funding and gas-token config for ETH gas assumptions.                                                            |
+| Bridge  | `bridge/ATTESTATION_404_NOT_FATAL`      | Info     | Deprecated, default-excluded low-confidence guidance for suspicious terminal handling near conditional attestation `404` responses. |
+| Bridge  | `bridge/NO_PREVRANDAO_RELAY_SELECTION`  | Critical | Checks Arc relay selection for PREVRANDAO or mixHash randomness assumptions.                                                        |
+| App Kit | `app-kit/APPKIT_CHAIN_IDENTIFIER_VALID` | Critical | Checks App Kit Arc chain identifiers for unsupported spellings.                                                                     |
+| App Kit | `app-kit/APPKIT_CAPABILITY_SUPPORTED`   | Warning  | Deprecated, default-excluded detector with an unsupported generic capability-guard contract.                                        |
+| App Kit | `app-kit/APPKIT_CUSTOM_RPC_RECOMMENDED` | Warning  | Checks App Kit Arc Testnet usage for implicit or shared RPC configuration.                                                          |
+| App Kit | `app-kit/UB_DELEGATE_REQUIRED`          | Warning  | Checks Unified Balance spend flows that may need delegate wallet handling.                                                          |
+| App Kit | `app-kit/UB_FEE_EXPLANATION_PRESENT`    | Warning  | Checks Unified Balance confirmation UI for missing fee or received-amount context.                                                  |
+| App Kit | `app-kit/APPKIT_BRIDGE_MIN_AMOUNT_NOTE` | Warning  | Deprecated, default-excluded detector for an unsupported universal Arc bridge-minimum assumption.                                   |
 
 ## Wallet preset
 
@@ -234,10 +234,11 @@ ArcReady does not perform live Arc RPC checks, Circle API checks, on-chain trans
 ### ATTESTATION_404_NOT_FATAL
 
 - Preset: Bridge
-- Severity: Critical
-- What it detects: CCTP attestation polling code that appears to treat HTTP `404` as a fatal bridge error instead of a pending/retryable state.
-- Why it matters: Early attestation polling can produce `404` while an attestation is not ready yet; treating it as terminal can break bridge UX.
-- Example bad pattern:
+- Severity: Info by default when explicitly selected; an explicit configured level remains authoritative.
+- Runtime status: Deprecated and default-excluded. The public ID remains available for compatibility opt-in during one deprecation period.
+- What it detects: A low-confidence proximity heuristic for CCTP-related source that appears to place HTTP `404` near terminal error language without nearby pending or retry guidance.
+- Why it matters: An attestation `404` can mean that Circle Iris has not observed or processed the source burn yet, but it can also indicate an incorrect transaction hash or source domain. The status alone proves neither safe retry nor terminal failure.
+- Example suspicious pattern:
 
   ```ts
   async function pollAttestation(response: Response) {
@@ -247,8 +248,8 @@ ArcReady does not perform live Arc RPC checks, Circle API checks, on-chain trans
   }
   ```
 
-- Suggested fix: Treat CCTP attestation `404` as a retryable pending state while polling, not as a terminal bridge failure.
-- Static-analysis limitation: ArcReady checks error-handling source patterns; it does not poll Circle services or validate bridge execution.
+- Suggested fix: Before treating an attestation `404` as pending, verify the source burn succeeded and the transaction hash and source domain are correct. Poll with a positive delay and a bounded timeout or cancellation path; handle `429` and unexpected non-OK responses separately; and distinguish empty messages, pending, and complete states.
+- Static-analysis limitation: This deprecated detector uses text proximity. It does not prove the Circle endpoint, request parameters, source burn, response ownership, polling loop, delay, bound, body state, or terminal action. Nearby retry words can suppress unrelated fatal handling, and unrelated nearby error text can produce a finding. C08-R3 found no bounded critical analyzer with meaningful first-party coverage, so this rule is optional advice rather than a default compatibility gate.
 
 ### NO_PREVRANDAO_RELAY_SELECTION
 

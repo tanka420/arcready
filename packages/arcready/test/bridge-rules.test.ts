@@ -1547,21 +1547,36 @@ describe("bridge rules", () => {
     ).resolves.toEqual([]);
   });
 
-  it("ATTESTATION_404_NOT_FATAL flags fatal 404 attestation handling", async () => {
+  it("ATTESTATION_404_NOT_FATAL emits conditional deprecated advice", async () => {
     const findings = await runBridgeRule(
       attestation404NotFatalRule,
       "async function pollAttestation(response) { // CCTP attestation\n if (response.status === 404) throw new Error('attestation failed');\n}"
     );
 
+    expect(attestation404NotFatalRule).toMatchObject({
+      defaultSeverity: "info",
+      description: expect.stringContaining("deprecated low-confidence")
+    });
     expect(findings[0]).toMatchObject({
       ruleId: "bridge/ATTESTATION_404_NOT_FATAL",
-      severity: "critical",
+      severity: "info",
       docs: "arc-cctp-attestation",
-      message: expect.stringContaining("HTTP 404"),
-      suggestedFix: expect.stringContaining("retryable pending")
+      message: expect.stringContaining("Deprecated CCTP guidance"),
+      suggestedFix: expect.stringContaining("verify the source burn succeeded")
     });
-  });
 
+    const suggestedFix = findings[0]?.suggestedFix ?? "";
+    expect(suggestedFix).toContain("transaction hash");
+    expect(suggestedFix).toContain("source domain");
+    expect(suggestedFix).toContain("positive delay");
+    expect(suggestedFix).toContain("bounded timeout or cancellation");
+    expect(suggestedFix).toContain("429");
+    expect(suggestedFix).toContain("unexpected non-OK");
+    expect(suggestedFix).toContain("empty messages");
+    expect(suggestedFix).toContain("pending");
+    expect(suggestedFix).toContain("complete");
+    expect(suggestedFix).not.toContain("404 as a retryable pending state");
+  });
   it("ATTESTATION_404_NOT_FATAL allows pending 404 handling", async () => {
     await expect(
       runBridgeRule(

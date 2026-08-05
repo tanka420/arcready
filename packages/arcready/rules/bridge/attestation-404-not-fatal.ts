@@ -9,14 +9,15 @@ import {
 } from "./helpers.js";
 
 const SUGGESTED_FIX =
-  "Treat CCTP attestation 404 as a retryable pending state while polling, not as a terminal bridge failure.";
+  "Before treating an attestation 404 as pending, verify the source burn succeeded and the transaction hash and source domain are correct. Poll with a positive delay and a bounded timeout or cancellation path; handle 429 and unexpected non-OK responses separately; and distinguish empty messages, pending, and complete states.";
 
 export const attestation404NotFatalRule: Rule = {
   id: "bridge/ATTESTATION_404_NOT_FATAL",
   name: "Attestation 404 not fatal",
-  description: "Detects fatal 404 handling in CCTP attestation polling.",
+  description:
+    "Provides deprecated low-confidence guidance for suspicious terminal handling near CCTP attestation HTTP 404 responses.",
   preset: "bridge",
-  defaultSeverity: "critical",
+  defaultSeverity: "info",
   docs: [BRIDGE_DOCS.attestation],
   async run(context) {
     const findings = [];
@@ -31,7 +32,7 @@ export const attestation404NotFatalRule: Rule = {
           createBridgeFinding(
             attestation404NotFatalRule,
             filePath,
-            "Arc bridge attestation polling appears to treat HTTP 404 as a fatal error.",
+            "Deprecated CCTP guidance: code appears to treat a nearby attestation HTTP 404 as terminal without visible pending or retry handling.",
             SUGGESTED_FIX,
             BRIDGE_DOCS.attestation
           )

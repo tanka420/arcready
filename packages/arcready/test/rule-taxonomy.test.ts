@@ -44,8 +44,8 @@ describe("internal rule taxonomy catalog", () => {
 
     expect(totals).toEqual({
       "stable-compatibility": 0,
-      "experimental-compatibility": 13,
-      advice: 4,
+      "experimental-compatibility": 12,
+      advice: 5,
       "needs-research": 0,
       "remove-or-replace": 2
     });
@@ -147,6 +147,28 @@ describe("internal rule taxonomy catalog", () => {
     );
   });
 
+  it("requires advice deprecation and maturity to agree", () => {
+    const activeAdvice = findMetadata("wallet/ONE_CONFIRMATION_FINAL");
+    const deprecatedAdvice = findMetadata("bridge/ATTESTATION_404_NOT_FATAL");
+
+    expect(
+      validateRuleMetadata({
+        ...activeAdvice,
+        maturity: "deprecated"
+      } as unknown as RuleMetadataInput)
+    ).toContain(
+      "wallet/ONE_CONFIRMATION_FINAL: advice deprecation and maturity must agree"
+    );
+
+    expect(
+      validateRuleMetadata({
+        ...deprecatedAdvice,
+        maturity: "prototype"
+      } as unknown as RuleMetadataInput)
+    ).toContain(
+      "bridge/ATTESTATION_404_NOT_FATAL: advice deprecation and maturity must agree"
+    );
+  });
   it("uses only official, dated documentation references", () => {
     const references: DocumentationReference[] = [];
     for (const metadata of ruleTaxonomyCatalog) {
@@ -166,21 +188,22 @@ describe("internal rule taxonomy catalog", () => {
     }
   });
 
-  it("locks the owner-approved attestation classification", () => {
+  it("locks the reviewed deprecated-advice attestation classification", () => {
     const attestation = findMetadata("bridge/ATTESTATION_404_NOT_FATAL");
 
     expect(attestation).toMatchObject({
-      taxonomy: "experimental-compatibility",
-      impact: "required-change",
-      recommendedDefaultEnabled: true,
+      taxonomy: "advice",
+      impact: "recommendation",
+      defaultConfidence: "low",
+      maturity: "deprecated",
+      recommendedDefaultEnabled: false,
       recommendedCiFailureEligible: false,
-      deprecated: false
+      deprecated: true
     });
     expect(attestation.rulePacks).toEqual(
       expect.arrayContaining(["bridge-cctp", "indexer-infrastructure"])
     );
   });
-
   it("does not expose taxonomy metadata through the public package API", () => {
     expect("ruleTaxonomyCatalog" in publicApi).toBe(false);
     expect("validateRuleMetadata" in publicApi).toBe(false);

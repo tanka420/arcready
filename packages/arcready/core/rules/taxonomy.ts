@@ -62,8 +62,7 @@ export type RuleApplicability = (typeof RULE_APPLICABILITY)[number];
 
 export const DOCUMENTATION_PUBLISHERS = ["Arc", "Circle"] as const;
 
-export type DocumentationPublisher =
-  (typeof DOCUMENTATION_PUBLISHERS)[number];
+export type DocumentationPublisher = (typeof DOCUMENTATION_PUBLISHERS)[number];
 
 export const DOCUMENTATION_SUPPORT_VALUES = [
   "direct",
@@ -136,14 +135,25 @@ interface ExperimentalCompatibilityMetadata extends RuleMetadataBase {
   deprecated: false;
 }
 
-interface AdviceMetadata extends RuleMetadataBase {
+interface ActiveAdviceMetadata extends RuleMetadataBase {
   taxonomy: "advice";
   impact: "recommendation";
+  maturity: "prototype" | "validated";
   recommendedDefaultEnabled: false;
   recommendedCiFailureEligible: false;
   deprecated: false;
 }
 
+interface DeprecatedAdviceMetadata extends RuleMetadataBase {
+  taxonomy: "advice";
+  impact: "recommendation";
+  maturity: "deprecated";
+  recommendedDefaultEnabled: false;
+  recommendedCiFailureEligible: false;
+  deprecated: true;
+}
+
+type AdviceMetadata = ActiveAdviceMetadata | DeprecatedAdviceMetadata;
 interface NeedsResearchMetadata extends RuleMetadataBase {
   taxonomy: "needs-research";
   impact: "not-applicable-until-researched";
@@ -200,7 +210,9 @@ export function validateRuleMetadata(metadata: RuleMetadataInput): string[] {
   }
 
   if (metadata.appliesTo.length === 0) {
-    errors.push(`${metadata.id}: at least one applicability target is required`);
+    errors.push(
+      `${metadata.id}: at least one applicability target is required`
+    );
   }
 
   if (
@@ -238,22 +250,40 @@ export function validateRuleMetadata(metadata: RuleMetadataInput): string[] {
 
   switch (metadata.taxonomy) {
     case "stable-compatibility":
-      if (metadata.impact !== "blocker" && metadata.impact !== "required-change") {
+      if (
+        metadata.impact !== "blocker" &&
+        metadata.impact !== "required-change"
+      ) {
         errors.push(`${metadata.id}: stable compatibility impact is invalid`);
       }
       if (metadata.defaultConfidence !== "high") {
-        errors.push(`${metadata.id}: stable compatibility requires high confidence`);
+        errors.push(
+          `${metadata.id}: stable compatibility requires high confidence`
+        );
       }
       if (metadata.maturity !== "validated") {
-        errors.push(`${metadata.id}: stable compatibility requires validated maturity`);
+        errors.push(
+          `${metadata.id}: stable compatibility requires validated maturity`
+        );
       }
-      if (!metadata.documentation.some((reference) => reference.support === "direct")) {
-        errors.push(`${metadata.id}: stable compatibility requires direct evidence`);
+      if (
+        !metadata.documentation.some(
+          (reference) => reference.support === "direct"
+        )
+      ) {
+        errors.push(
+          `${metadata.id}: stable compatibility requires direct evidence`
+        );
       }
       break;
     case "experimental-compatibility":
-      if (metadata.impact !== "blocker" && metadata.impact !== "required-change") {
-        errors.push(`${metadata.id}: experimental compatibility impact is invalid`);
+      if (
+        metadata.impact !== "blocker" &&
+        metadata.impact !== "required-change"
+      ) {
+        errors.push(
+          `${metadata.id}: experimental compatibility impact is invalid`
+        );
       }
       break;
     case "advice":
@@ -261,15 +291,26 @@ export function validateRuleMetadata(metadata: RuleMetadataInput): string[] {
         errors.push(`${metadata.id}: advice must use recommendation impact`);
       }
       if (metadata.recommendedDefaultEnabled) {
-        errors.push(`${metadata.id}: advice rules must be recommended disabled`);
+        errors.push(
+          `${metadata.id}: advice rules must be recommended disabled`
+        );
+      }
+      if (metadata.deprecated !== (metadata.maturity === "deprecated")) {
+        errors.push(
+          `${metadata.id}: advice deprecation and maturity must agree`
+        );
       }
       break;
     case "needs-research":
       if (metadata.impact !== "not-applicable-until-researched") {
-        errors.push(`${metadata.id}: research rules require the research impact`);
+        errors.push(
+          `${metadata.id}: research rules require the research impact`
+        );
       }
       if (metadata.recommendedDefaultEnabled) {
-        errors.push(`${metadata.id}: research rules must be recommended disabled`);
+        errors.push(
+          `${metadata.id}: research rules must be recommended disabled`
+        );
       }
       if ((metadata.researchGap?.trim().length ?? 0) === 0) {
         errors.push(`${metadata.id}: research rules require a research gap`);
@@ -277,10 +318,14 @@ export function validateRuleMetadata(metadata: RuleMetadataInput): string[] {
       break;
     case "remove-or-replace":
       if (metadata.impact !== "not-applicable-until-researched") {
-        errors.push(`${metadata.id}: removed rules require the research impact`);
+        errors.push(
+          `${metadata.id}: removed rules require the research impact`
+        );
       }
       if (metadata.recommendedDefaultEnabled) {
-        errors.push(`${metadata.id}: removed rules must be recommended disabled`);
+        errors.push(
+          `${metadata.id}: removed rules must be recommended disabled`
+        );
       }
       if (!metadata.deprecated || metadata.maturity !== "deprecated") {
         errors.push(`${metadata.id}: removed rules must be deprecated`);
@@ -351,7 +396,10 @@ function validateDocumentationReference(
     errors.push(`${ruleId}: documentation verification date is invalid`);
   }
 
-  if (reference.title.trim().length === 0 || reference.claim.trim().length === 0) {
+  if (
+    reference.title.trim().length === 0 ||
+    reference.claim.trim().length === 0
+  ) {
     errors.push(`${ruleId}: documentation title and claim are required`);
   }
 }
