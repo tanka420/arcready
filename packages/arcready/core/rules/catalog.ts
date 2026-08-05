@@ -225,11 +225,11 @@ export const ruleTaxonomyCatalog = [
     id: "bridge/ATTESTATION_404_NOT_FATAL",
     category: "bridge",
     rulePacks: ["bridge-cctp", "indexer-infrastructure"],
-    taxonomy: "experimental-compatibility",
-    impact: "required-change",
+    taxonomy: "advice",
+    impact: "recommendation",
     defaultConfidence: "low",
-    maturity: "prototype",
-    recommendedDefaultEnabled: true,
+    maturity: "deprecated",
+    recommendedDefaultEnabled: false,
     recommendedCiFailureEligible: false,
     appliesTo: ["attestation-poller"],
     documentation: [
@@ -245,12 +245,13 @@ export const ruleTaxonomyCatalog = [
       }
     ],
     rationale:
-      "Treating a valid pending 404 as terminal can stop a CCTP flow, while the conditional meaning of 404 prevents the current detector from being Stable.",
+      "The polling guidance remains useful, but HTTP 404 is conditional and the proximity regex cannot prove request provenance or control-flow ownership. C08 therefore removed the rule from default execution and retained it only as explicit deprecated advice.",
     detectorLimitations: [
       "The regex cannot distinguish a pending attestation from incorrect domains or transaction identifiers.",
-      "Nearby retry words do not prove correct polling or terminal-error handling."
+      "Nearby retry words do not prove correct polling, positive delay, a bounded exit, or terminal-error ownership.",
+      "The detector can conflate unrelated nearby branches and can miss terminal actions that do not use its matched keywords."
     ],
-    deprecated: false
+    deprecated: true
   },
   {
     id: "bridge/BRIDGE_CONFIRMATIONS_ONE",
