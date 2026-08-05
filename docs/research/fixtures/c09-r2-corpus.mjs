@@ -297,6 +297,7 @@ const sourceCases = [
     "C09-N08",
     sourceExpected({
       sourceClass: "no-source",
+      functionOwnership: "none",
       bindingClass: "none",
       sinkClass: "none",
       publicEmissionEligibility: "not-applicable"
@@ -310,6 +311,7 @@ const sourceCases = [
     "C09-N09",
     sourceExpected({
       sourceClass: "no-source",
+      functionOwnership: "none",
       bindingClass: "none",
       sinkClass: "none",
       publicEmissionEligibility: "not-applicable"
@@ -321,6 +323,7 @@ const sourceCases = [
     "C09-N10",
     sourceExpected({
       sourceClass: "no-source",
+      functionOwnership: "none",
       bindingClass: "none",
       sinkClass: "none",
       publicEmissionEligibility: "not-applicable"

@@ -15,16 +15,6 @@ const EXPECTED_FIELDS = [
   "publicEmissionEligibility"
 ];
 
-const CORPUS_ERRATA = new Map([
-  ["C09-N08", { functionOwnership: "none" }],
-  ["C09-N09", { functionOwnership: "none" }],
-  ["C09-N10", { functionOwnership: "none" }]
-]);
-
-function expectedFor(fixture) {
-  return { ...fixture.expected, ...(CORPUS_ERRATA.get(fixture.id) ?? {}) };
-}
-
 const failures = [];
 const results = [];
 for (const fixture of sourceCases) {
@@ -34,7 +24,7 @@ for (const fixture of sourceCases) {
     parser,
     evmTargetEvidence: fixture.evmTargetEvidence ?? null
   });
-  const expected = expectedFor(fixture);
+  const expected = fixture.expected;
   const mismatch = {};
   for (const field of EXPECTED_FIELDS) {
     if (actual[field] !== expected[field]) {
@@ -60,8 +50,7 @@ if (failures.length > 0) {
     ).length,
     unsupported: results.filter(
       (item) => item.actual.publicEmissionEligibility === "blocked-unsupported"
-    ).length,
-    corpusErrata: [...CORPUS_ERRATA.keys()]
+    ).length
   };
   process.stdout.write(`${JSON.stringify(summary, null, 2)}\n`);
 }
@@ -125,6 +114,188 @@ contract Extra {
 assert.equal(unsafeLength.sinkClass, "unsupported");
 assert.equal(unsafeLength.publicEmissionEligibility, "blocked-unsupported");
 
+const transformedSelection = classifySoliditySource({
+  parser,
+  source: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+contract Extra {
+  address[] internal members;
+  function pick() external view returns (address) {
+    return members[(block.prevrandao + 1) % members.length];
+  }
+}
+`
+});
+assert.equal(transformedSelection.sinkClass, "unsupported");
+assert.equal(
+  transformedSelection.publicEmissionEligibility,
+  "blocked-unsupported"
+);
+
+const transformedBinding = classifySoliditySource({
+  parser,
+  source: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+contract Extra {
+  address[] internal members;
+  function pick() external view returns (address) {
+    uint256 seed = block.prevrandao + 1;
+    return members[seed % members.length];
+  }
+}
+`
+});
+assert.equal(transformedBinding.sinkClass, "unsupported");
+assert.equal(
+  transformedBinding.publicEmissionEligibility,
+  "blocked-unsupported"
+);
+
+const arbitraryCallSelection = classifySoliditySource({
+  parser,
+  source: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+contract Extra {
+  address[] internal members;
+  function normalize(uint256 value) internal pure returns (uint256) { return value; }
+  function pick() external view returns (address) {
+    return members[normalize(block.prevrandao) % members.length];
+  }
+}
+`
+});
+assert.equal(arbitraryCallSelection.sinkClass, "unsupported");
+assert.equal(
+  arbitraryCallSelection.publicEmissionEligibility,
+  "blocked-unsupported"
+);
+
+const unaryMutation = classifySoliditySource({
+  parser,
+  source: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+contract Extra {
+  address[] internal members;
+  function pick() external view returns (address) {
+    uint256 seed = block.prevrandao;
+    seed++;
+    return members[seed % members.length];
+  }
+}
+`
+});
+assert.equal(unaryMutation.bindingClass, "reassigned");
+assert.equal(unaryMutation.publicEmissionEligibility, "blocked-unsupported");
+
+const assemblyCrossFunction = classifySoliditySource({
+  parser,
+  source: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+contract Extra {
+  address[] internal members;
+  function seed() internal view returns (uint256 value) {
+    assembly { value := prevrandao() }
+  }
+  function pick(uint256 value) external view returns (address) {
+    return members[value % members.length];
+  }
+}
+`
+});
+assert.equal(assemblyCrossFunction.functionOwnership, "cross-function");
+assert.equal(
+  assemblyCrossFunction.publicEmissionEligibility,
+  "blocked-unsupported"
+);
+
+const assemblyOwnedCandidate = classifySoliditySource({
+  parser,
+  source: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+contract Extra {
+  address[] internal members;
+  function observe() external pure returns (uint256) { return 1; }
+  function pick() external view returns (address) {
+    uint256 seed;
+    assembly { seed := prevrandao() }
+    return members[seed % members.length];
+  }
+}
+`
+});
+assert.equal(assemblyOwnedCandidate.contractOwnership, "single-contract");
+assert.equal(assemblyOwnedCandidate.functionOwnership, "same-function");
+assert.equal(
+  assemblyOwnedCandidate.publicEmissionEligibility,
+  "r3a-candidate-only"
+);
+
+const returnedZeroCheck = classifySoliditySource({
+  parser,
+  source: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+contract Extra {
+  function isArcCompatible() external view returns (bool) {
+    return block.prevrandao == 0;
+  }
+}
+`
+});
+assert.equal(returnedZeroCheck.sinkClass, "safe-observation");
+assert.equal(returnedZeroCheck.publicEmissionEligibility, "not-applicable");
+
+const transformedAuthorization = classifySoliditySource({
+  parser,
+  source: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+contract Extra {
+  function eligible(uint256 value) external view returns (bool) {
+    return value == block.prevrandao + 1;
+  }
+}
+`
+});
+assert.equal(transformedAuthorization.sinkClass, "unsupported");
+assert.equal(
+  transformedAuthorization.publicEmissionEligibility,
+  "blocked-unsupported"
+);
+
+const missingRangeParser = {
+  parse(source, options) {
+    const ast = parser.parse(source, options);
+    let removed = false;
+    const visit = (value) => {
+      if (!value || typeof value !== "object" || removed) return;
+      if (value.type === "MemberAccess" && value.memberName === "prevrandao") {
+        delete value.range;
+        removed = true;
+        return;
+      }
+      for (const child of Object.values(value)) {
+        if (Array.isArray(child)) child.forEach(visit);
+        else visit(child);
+      }
+    };
+    visit(ast);
+    return ast;
+  }
+};
+const missingRange = classifySoliditySource({
+  parser: missingRangeParser,
+  source: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+contract Extra {
+  address[] internal members;
+  function pick() external view returns (address) {
+    return members[block.prevrandao % members.length];
+  }
+}
+`
+});
+assert.equal(missingRange.sourceClass, "unsupported-source");
+assert.equal(missingRange.publicEmissionEligibility, "blocked-unsupported");
+
 if (failures.length === 0) {
-  process.stdout.write("C09-R3-A adversarial checks: passed\n");
+  process.stdout.write("C09-R3-A adversarial checks: 13 passed\n");
 }

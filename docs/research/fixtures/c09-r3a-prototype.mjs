@@ -1,5 +1,26 @@
 const COMPARISON_OPERATORS = new Set(["==", "!=", "<", ">", "<=", ">="]);
 const ASSIGNMENT_OPERATORS = new Set(["=", "+=", "-=", "*=", "/=", "%="]);
+const UNARY_MUTATION_OPERATORS = new Set(["++", "--", "delete"]);
+const DIRECT_CAST_NAMES = new Set(["uint", "uint256", "bytes32"]);
+const RANGE_REQUIRED_TYPES = new Set([
+  "SourceUnit",
+  "ContractDefinition",
+  "FunctionDefinition",
+  "VariableDeclarationStatement",
+  "ReturnStatement",
+  "EmitStatement",
+  "IfStatement",
+  "ForStatement",
+  "InlineAssemblyStatement",
+  "AssemblyAssignment",
+  "AssemblyCall",
+  "MemberAccess",
+  "Identifier",
+  "IndexAccess",
+  "BinaryOperation",
+  "UnaryOperation",
+  "FunctionCall"
+]);
 
 function isObject(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -88,6 +109,60 @@ function containsSourceNode(node, sourceKind) {
     return containsNode(node, isDifficulty);
   }
   return false;
+}
+
+function isExactSourceNode(node, sourceKind) {
+  if (sourceKind === "direct-prevrandao") return isDirectPrevrandao(node);
+  if (sourceKind === "difficulty-post-paris") return isDifficulty(node);
+  return false;
+}
+
+function directCastName(node) {
+  if (node?.type !== "FunctionCall") return null;
+  const expression = node.expression;
+  if (
+    expression?.type === "Identifier" ||
+    expression?.type === "ElementaryTypeName"
+  ) {
+    return expression.name;
+  }
+  if (expression?.type !== "ElementaryTypeNameExpression") return null;
+  if (typeof expression.typeName === "string") return expression.typeName;
+  return expression.typeName?.name ?? expression.typeName?.type ?? null;
+}
+
+function isExactDirectSourceExpression(node, sourceKind) {
+  if (isExactSourceNode(node, sourceKind)) return true;
+  return (
+    node?.type === "FunctionCall" &&
+    DIRECT_CAST_NAMES.has(directCastName(node)) &&
+    (node.arguments ?? []).length === 1 &&
+    isExactSourceNode(node.arguments[0], sourceKind)
+  );
+}
+
+function isExactAuthorizationSourceExpression(node, sourceKind) {
+  if (isExactDirectSourceExpression(node, sourceKind)) return true;
+  return (
+    node?.type === "BinaryOperation" &&
+    node.operator === "%" &&
+    isExactDirectSourceExpression(node.left, sourceKind) &&
+    node.right?.type === "NumberLiteral"
+  );
+}
+
+function hasMissingRelevantRange(ast) {
+  let missing = false;
+  walk(ast, (node) => {
+    if (
+      !missing &&
+      RANGE_REQUIRED_TYPES.has(node.type) &&
+      (!Array.isArray(node.range) || node.range.length !== 2)
+    ) {
+      missing = true;
+    }
+  });
+  return missing;
 }
 
 function functionNodes(contractNode) {
@@ -180,6 +255,18 @@ function assemblyFacts(functionNode) {
   return facts;
 }
 
+function assemblySourceNodes(contexts) {
+  const records = [];
+  for (const context of contexts) {
+    for (const fact of assemblyFacts(context.functionNode)) {
+      for (const node of fact.prevrandaoCalls) {
+        records.push({ node, kind: "assembly-prevrandao", ...context });
+      }
+    }
+  }
+  return records.sort((a, b) => nodeStart(a.node) - nodeStart(b.node));
+}
+
 function variableDeclarations(functionNode) {
   return descendants(
     functionNode,
@@ -202,6 +289,16 @@ function assignmentNodes(functionNode, name) {
       node.type === "BinaryOperation" &&
       ASSIGNMENT_OPERATORS.has(node.operator) &&
       isIdentifier(node.left, name)
+  ).sort((a, b) => nodeStart(a) - nodeStart(b));
+}
+
+function unaryMutationNodes(functionNode, name) {
+  return descendants(
+    functionNode,
+    (node) =>
+      node.type === "UnaryOperation" &&
+      UNARY_MUTATION_OPERATORS.has(node.operator) &&
+      isIdentifier(node.subExpression, name)
   ).sort((a, b) => nodeStart(a) - nodeStart(b));
 }
 
@@ -285,7 +382,7 @@ function functionCallName(node) {
 function classifyDirectSink(functionNode, sourceKind) {
   const selections = selectionFacts(functionNode);
   for (const selection of selections) {
-    if (containsSourceNode(selection.dependencyNode, sourceKind)) {
+    if (isExactDirectSourceExpression(selection.dependencyNode, sourceKind)) {
       return selection.exactLength
         ? { sinkClass: "selection", bindingClass: "direct" }
         : { sinkClass: "unsupported", bindingClass: "direct" };
@@ -301,7 +398,20 @@ function classifyDirectSink(functionNode, sourceKind) {
 
     if (
       expression.type === "BinaryOperation" &&
-      COMPARISON_OPERATORS.has(expression.operator)
+      expression.operator === "==" &&
+      ((isExactDirectSourceExpression(expression.left, sourceKind) &&
+        isZeroLiteral(expression.right)) ||
+        (isExactDirectSourceExpression(expression.right, sourceKind) &&
+          isZeroLiteral(expression.left)))
+    ) {
+      return { sinkClass: "safe-observation", bindingClass: "direct" };
+    }
+
+    if (
+      expression.type === "BinaryOperation" &&
+      COMPARISON_OPERATORS.has(expression.operator) &&
+      (isExactAuthorizationSourceExpression(expression.left, sourceKind) ||
+        isExactAuthorizationSourceExpression(expression.right, sourceKind))
     ) {
       return { sinkClass: "authorization", bindingClass: "direct" };
     }
@@ -367,7 +477,7 @@ function bindingFacts(functionNode, sourceKind) {
   for (const statement of declarations) {
     const name = variableName(statement);
     if (!name || !statement.initialValue) continue;
-    if (containsSourceNode(statement.initialValue, sourceKind)) {
+    if (isExactDirectSourceExpression(statement.initialValue, sourceKind)) {
       sourceBindings.push({ statement, name, kind: "single-assignment" });
     }
   }
@@ -380,7 +490,11 @@ function bindingFacts(functionNode, sourceKind) {
     const laterAssignments = assignmentNodes(functionNode, first.name).filter(
       (node) => nodeStart(node) > nodeEnd(first.statement)
     );
-    if (laterAssignments.length > 0) {
+    const laterUnaryMutations = unaryMutationNodes(
+      functionNode,
+      first.name
+    ).filter((node) => nodeStart(node) > nodeEnd(first.statement));
+    if (laterAssignments.length > 0 || laterUnaryMutations.length > 0) {
       return { bindingClass: "reassigned", sinkClass: "unsupported" };
     }
 
@@ -608,6 +722,8 @@ function classifyParsedSource({
 }) {
   const { contracts, contexts } = collectContexts(ast);
   const sourceNodes = directSourceNodes(ast);
+  const assemblySources = assemblySourceNodes(contexts);
+  const ownershipSourceNodes = [...sourceNodes, ...assemblySources];
   const allAssembly = contexts.flatMap(({ functionNode }) =>
     assemblyFacts(functionNode)
   );
@@ -620,7 +736,11 @@ function classifyParsedSource({
 
   const pragmaUnsupported = /pragma\s+solidity\s+[^;]*0\.9\./.test(source);
   if (pragmaUnsupported) {
-    const ownership = structuralOwnership(contracts, contexts, sourceNodes);
+    const ownership = structuralOwnership(
+      contracts,
+      contexts,
+      ownershipSourceNodes
+    );
     return {
       parseStatus: "unsupported-syntax",
       sourceClass: "unsupported-source",
@@ -633,7 +753,11 @@ function classifyParsedSource({
   }
 
   if (hasUnsupportedAssembly) {
-    const ownership = structuralOwnership(contracts, contexts, sourceNodes);
+    const ownership = structuralOwnership(
+      contracts,
+      contexts,
+      ownershipSourceNodes
+    );
     return {
       parseStatus: "parseable",
       sourceClass: "unsupported-source",
@@ -648,7 +772,7 @@ function classifyParsedSource({
   let sourceClass = "no-source";
   if (sourceNodes.some((item) => item.kind === "direct-prevrandao")) {
     sourceClass = "direct-prevrandao";
-  } else if (hasAssemblyPrevrandao) {
+  } else if (assemblySources.length > 0 && hasAssemblyPrevrandao) {
     sourceClass = "assembly-prevrandao";
   } else if (
     sourceNodes.some((item) => item.kind === "difficulty-post-paris")
@@ -656,7 +780,11 @@ function classifyParsedSource({
     sourceClass = "difficulty-post-paris";
   }
 
-  const ownership = sourceAndSinkOwnership(contracts, contexts, sourceNodes);
+  const ownership = sourceAndSinkOwnership(
+    contracts,
+    contexts,
+    ownershipSourceNodes
+  );
   const crossFunctionHelper = hasCrossFunctionHelperDependency(
     contexts,
     sourceNodes
@@ -683,7 +811,11 @@ function classifyParsedSource({
       bindingClass: "unsupported",
       sinkClass: "unsupported"
     };
-    const reportable = result.sinkClass === "selection";
+    const exactOwnership =
+      ownership.contractOwnership === "single-contract" &&
+      ownership.functionOwnership === "same-function";
+    const reportable = result.sinkClass === "selection" && exactOwnership;
+    const safe = result.sinkClass === "none" && exactOwnership;
     return {
       parseStatus: "parseable",
       sourceClass: result.sourceClass,
@@ -693,7 +825,7 @@ function classifyParsedSource({
       arcDeploymentOwnership: syntheticArcOwnership,
       publicEmissionEligibility: reportable
         ? "r3a-candidate-only"
-        : result.sinkClass === "none"
+        : safe
           ? "not-applicable"
           : "blocked-unsupported"
     };
@@ -787,6 +919,19 @@ function classifySoliditySource({
   } catch {
     return {
       parseStatus: "malformed",
+      sourceClass: "unsupported-source",
+      contractOwnership: "ambiguous",
+      functionOwnership: "ambiguous",
+      bindingClass: "unsupported",
+      sinkClass: "unsupported",
+      arcDeploymentOwnership: syntheticArcOwnership,
+      publicEmissionEligibility: "blocked-unsupported"
+    };
+  }
+
+  if (hasMissingRelevantRange(ast)) {
+    return {
+      parseStatus: "parseable",
       sourceClass: "unsupported-source",
       contractOwnership: "ambiguous",
       functionOwnership: "ambiguous",
