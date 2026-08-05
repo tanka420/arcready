@@ -1,0 +1,414 @@
+name: C08A E2 Finalize Retry 2
+
+on:
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout head branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.1
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: corepack pnpm install --frozen-lockfile
+
+      - name: Apply structural E2 policy patch
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import textwrap
+
+          def clean(value):
+              return textwrap.dedent(value).lstrip("\n")
+
+          def replace_once(path, old, new, label):
+              text = path.read_text(encoding="utf-8")
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{label}: expected one match, got {count}")
+              path.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          def replace_title_block(path, title, next_title, replacement, label):
+              text = path.read_text(encoding="utf-8")
+              title_position = text.index(title)
+              next_position = text.index(next_title, title_position + len(title))
+              block_start = text.rfind("  it(", 0, title_position)
+              block_end = text.rfind("  it(", 0, next_position)
+              if block_start < 0 or block_end <= block_start:
+                  raise SystemExit(
+                      f"{label}: invalid bounds start={block_start} end={block_end}"
+                  )
+              path.write_text(
+                  text[:block_start] + replacement + text[block_end:],
+                  encoding="utf-8",
+              )
+
+          taxonomy = Path("packages/arcready/core/rules/taxonomy.ts")
+          replace_once(
+              taxonomy,
+              clean('''
+              interface AdviceMetadata extends RuleMetadataBase {
+                taxonomy: "advice";
+                impact: "recommendation";
+                recommendedDefaultEnabled: false;
+                recommendedCiFailureEligible: false;
+                deprecated: false;
+              }
+              '''),
+              clean('''
+              interface ActiveAdviceMetadata extends RuleMetadataBase {
+                taxonomy: "advice";
+                impact: "recommendation";
+                maturity: "prototype" | "validated";
+                recommendedDefaultEnabled: false;
+                recommendedCiFailureEligible: false;
+                deprecated: false;
+              }
+
+              interface DeprecatedAdviceMetadata extends RuleMetadataBase {
+                taxonomy: "advice";
+                impact: "recommendation";
+                maturity: "deprecated";
+                recommendedDefaultEnabled: false;
+                recommendedCiFailureEligible: false;
+                deprecated: true;
+              }
+
+              type AdviceMetadata = ActiveAdviceMetadata | DeprecatedAdviceMetadata;
+              '''),
+              "deprecated advice type",
+          )
+          replace_once(
+              taxonomy,
+              clean('''
+                  case "advice":
+                    if (metadata.impact !== "recommendation") {
+                      errors.push(`${metadata.id}: advice must use recommendation impact`);
+                    }
+                    if (metadata.recommendedDefaultEnabled) {
+                      errors.push(`${metadata.id}: advice rules must be recommended disabled`);
+                    }
+                    break;
+              '''),
+              clean('''
+                  case "advice":
+                    if (metadata.impact !== "recommendation") {
+                      errors.push(`${metadata.id}: advice must use recommendation impact`);
+                    }
+                    if (metadata.recommendedDefaultEnabled) {
+                      errors.push(`${metadata.id}: advice rules must be recommended disabled`);
+                    }
+                    if (metadata.deprecated !== (metadata.maturity === "deprecated")) {
+                      errors.push(
+                        `${metadata.id}: advice deprecation and maturity must agree`
+                      );
+                    }
+                    break;
+              '''),
+              "advice validation",
+          )
+
+          catalog = Path("packages/arcready/core/rules/catalog.ts")
+          catalog_text = catalog.read_text(encoding="utf-8")
+          current_id = '    id: "bridge/ATTESTATION_404_NOT_FATAL",'
+          next_id = '    id: "bridge/BRIDGE_CONFIRMATIONS_ONE",'
+          current_position = catalog_text.index(current_id)
+          next_position = catalog_text.index(next_id, current_position)
+          entry_start = catalog_text.rfind("  {\n", 0, current_position)
+          entry_end = catalog_text.rfind("  {\n", 0, next_position)
+          if entry_start < 0 or entry_end <= entry_start:
+              raise SystemExit(
+                  f"runtime catalog bounds invalid: start={entry_start} end={entry_end}"
+              )
+          catalog_entry = clean('''
+            {
+              id: "bridge/ATTESTATION_404_NOT_FATAL",
+              category: "bridge",
+              rulePacks: ["bridge-cctp", "indexer-infrastructure"],
+              taxonomy: "advice",
+              impact: "recommendation",
+              defaultConfidence: "low",
+              maturity: "deprecated",
+              recommendedDefaultEnabled: false,
+              recommendedCiFailureEligible: false,
+              appliesTo: ["attestation-poller"],
+              documentation: [
+                {
+                  url: "https://developers.circle.com/cctp/howtos/resolve-stuck-attestation",
+                  title: "Resolve attestation issues",
+                  publisher: "Circle",
+                  claim:
+                    "An attestation API 404 can be an expected pending response that should continue polling, but it can also indicate incorrect request parameters.",
+                  support: "direct",
+                  verifiedAt: VERIFIED_AT,
+                  stability: "versioned"
+                }
+              ],
+              rationale:
+                "The polling guidance remains useful, but HTTP 404 is conditional and the proximity regex cannot prove request provenance or control-flow ownership. C08 therefore removed the rule from default execution and retained it only as explicit deprecated advice.",
+              detectorLimitations: [
+                "The regex cannot distinguish a pending attestation from incorrect domains or transaction identifiers.",
+                "Nearby retry words do not prove correct polling, positive delay, a bounded exit, or terminal-error ownership.",
+                "The detector can conflate unrelated nearby branches and can miss terminal actions that do not use its matched keywords."
+              ],
+              deprecated: true
+            },
+          ''')
+          catalog.write_text(
+              catalog_text[:entry_start] + catalog_entry + catalog_text[entry_end:],
+              encoding="utf-8",
+          )
+
+          docs = Path("docs/rule-catalog.md")
+          docs_text = docs.read_text(encoding="utf-8")
+          docs_lines = docs_text.splitlines()
+          row_indexes = [
+              index
+              for index, line in enumerate(docs_lines)
+              if "`bridge/ATTESTATION_404_NOT_FATAL`" in line
+              and line.lstrip().startswith("|")
+          ]
+          if len(row_indexes) != 1:
+              raise SystemExit(f"docs summary row: expected 1, got {len(row_indexes)}")
+          docs_lines[row_indexes[0]] = (
+              "| Bridge  | `bridge/ATTESTATION_404_NOT_FATAL`      | Info     | "
+              "Deprecated, default-excluded low-confidence guidance for suspicious terminal handling near conditional attestation `404` responses. |"
+          )
+          docs_text = "\n".join(docs_lines) + "\n"
+          section_start = docs_text.index("### ATTESTATION_404_NOT_FATAL\n")
+          section_end = docs_text.index(
+              "### NO_PREVRANDAO_RELAY_SELECTION\n", section_start
+          )
+          docs_section = clean('''
+            ### ATTESTATION_404_NOT_FATAL
+
+            - Preset: Bridge
+            - Severity: Info by default when explicitly selected; an explicit configured level remains authoritative.
+            - Runtime status: Deprecated and default-excluded. The public ID remains available for compatibility opt-in during one deprecation period.
+            - What it detects: A low-confidence proximity heuristic for CCTP-related source that appears to place HTTP `404` near terminal error language without nearby pending or retry guidance.
+            - Why it matters: An attestation `404` can mean that Circle Iris has not observed or processed the source burn yet, but it can also indicate an incorrect transaction hash or source domain. The status alone proves neither safe retry nor terminal failure.
+            - Example suspicious pattern:
+
+              ```ts
+              async function pollAttestation(response: Response) {
+                if (response.status === 404) {
+                  throw new Error("attestation failed");
+                }
+              }
+              ```
+
+            - Suggested fix: Before treating an attestation `404` as pending, verify the source burn succeeded and the transaction hash and source domain are correct. Poll with a positive delay and a bounded timeout or cancellation path; handle `429` and unexpected non-OK responses separately; and distinguish empty messages, pending, and complete states.
+            - Static-analysis limitation: This deprecated detector uses text proximity. It does not prove the Circle endpoint, request parameters, source burn, response ownership, polling loop, delay, bound, body state, or terminal action. Nearby retry words can suppress unrelated fatal handling, and unrelated nearby error text can produce a finding. C08-R3 found no bounded critical analyzer with meaningful first-party coverage, so this rule is optional advice rather than a default compatibility gate.
+
+          ''')
+          docs.write_text(
+              docs_text[:section_start] + docs_section + docs_text[section_end:],
+              encoding="utf-8",
+          )
+
+          bridge_tests = Path("packages/arcready/test/bridge-rules.test.ts")
+          bridge_test = clean('''
+              it("ATTESTATION_404_NOT_FATAL emits conditional deprecated advice", async () => {
+                const findings = await runBridgeRule(
+                  attestation404NotFatalRule,
+                  "async function pollAttestation(response) { // CCTP attestation\\n if (response.status === 404) throw new Error('attestation failed');\\n}"
+                );
+
+                expect(attestation404NotFatalRule).toMatchObject({
+                  defaultSeverity: "info",
+                  description: expect.stringContaining("deprecated low-confidence")
+                });
+                expect(findings[0]).toMatchObject({
+                  ruleId: "bridge/ATTESTATION_404_NOT_FATAL",
+                  severity: "info",
+                  docs: "arc-cctp-attestation",
+                  message: expect.stringContaining("Deprecated CCTP guidance"),
+                  suggestedFix: expect.stringContaining("verify the source burn succeeded")
+                });
+
+                const suggestedFix = findings[0]?.suggestedFix ?? "";
+                expect(suggestedFix).toContain("transaction hash");
+                expect(suggestedFix).toContain("source domain");
+                expect(suggestedFix).toContain("positive delay");
+                expect(suggestedFix).toContain("bounded timeout or cancellation");
+                expect(suggestedFix).toContain("429");
+                expect(suggestedFix).toContain("unexpected non-OK");
+                expect(suggestedFix).toContain("empty messages");
+                expect(suggestedFix).toContain("pending");
+                expect(suggestedFix).toContain("complete");
+                expect(suggestedFix).not.toContain(
+                  "404 as a retryable pending state"
+                );
+              });
+
+          ''')
+          replace_title_block(
+              bridge_tests,
+              "ATTESTATION_404_NOT_FATAL flags fatal 404 attestation handling",
+              "ATTESTATION_404_NOT_FATAL allows pending 404 handling",
+              bridge_test,
+              "bridge attestation policy test",
+          )
+
+          taxonomy_tests = Path("packages/arcready/test/rule-taxonomy.test.ts")
+          replace_once(
+              taxonomy_tests,
+              '      "experimental-compatibility": 13,',
+              '      "experimental-compatibility": 12,',
+              "taxonomy experimental total",
+          )
+          replace_once(
+              taxonomy_tests,
+              "      advice: 4,",
+              "      advice: 5,",
+              "taxonomy advice total",
+          )
+          taxonomy_test = clean('''
+              it("locks the reviewed deprecated-advice attestation classification", () => {
+                const attestation = findMetadata("bridge/ATTESTATION_404_NOT_FATAL");
+
+                expect(attestation).toMatchObject({
+                  taxonomy: "advice",
+                  impact: "recommendation",
+                  defaultConfidence: "low",
+                  maturity: "deprecated",
+                  recommendedDefaultEnabled: false,
+                  recommendedCiFailureEligible: false,
+                  deprecated: true
+                });
+                expect(attestation.rulePacks).toEqual(
+                  expect.arrayContaining(["bridge-cctp", "indexer-infrastructure"])
+                );
+              });
+
+          ''')
+          replace_title_block(
+              taxonomy_tests,
+              "locks the owner-approved attestation classification",
+              "validates taxonomy combinations",
+              taxonomy_test,
+              "attestation taxonomy contract",
+          )
+
+          taxonomy_text = taxonomy_tests.read_text(encoding="utf-8")
+          insert_marker = '  it("uses only official, dated documentation references", () => {\n'
+          validation_test = clean('''
+              it("requires advice deprecation and maturity to agree", () => {
+                const activeAdvice = findMetadata("wallet/ONE_CONFIRMATION_FINAL");
+                const deprecatedAdvice = findMetadata(
+                  "bridge/ATTESTATION_404_NOT_FATAL"
+                );
+
+                expect(
+                  validateRuleMetadata({
+                    ...activeAdvice,
+                    maturity: "deprecated"
+                  } as unknown as RuleMetadataInput)
+                ).toContain(
+                  "wallet/ONE_CONFIRMATION_FINAL: advice deprecation and maturity must agree"
+                );
+
+                expect(
+                  validateRuleMetadata({
+                    ...deprecatedAdvice,
+                    maturity: "prototype"
+                  } as unknown as RuleMetadataInput)
+                ).toContain(
+                  "bridge/ATTESTATION_404_NOT_FATAL: advice deprecation and maturity must agree"
+                );
+              });
+
+          ''')
+          if taxonomy_text.count(insert_marker) != 1:
+              raise SystemExit(
+                  f"taxonomy validation insert: expected 1, got {taxonomy_text.count(insert_marker)}"
+              )
+          taxonomy_tests.write_text(
+              taxonomy_text.replace(insert_marker, validation_test + insert_marker, 1),
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Format and run focused policy tests
+        run: |
+          corepack pnpm exec prettier --write \
+            packages/arcready/rules/bridge/attestation-404-not-fatal.ts \
+            packages/arcready/core/rules/taxonomy.ts \
+            packages/arcready/core/rules/catalog.ts \
+            docs/rule-catalog.md \
+            packages/arcready/test/bridge-rules.test.ts \
+            packages/arcready/test/rule-taxonomy.test.ts
+          corepack pnpm exec prettier --check \
+            packages/arcready/rules/bridge/attestation-404-not-fatal.ts \
+            packages/arcready/core/rules/taxonomy.ts \
+            packages/arcready/core/rules/catalog.ts \
+            docs/rule-catalog.md \
+            packages/arcready/test/bridge-rules.test.ts \
+            packages/arcready/test/rule-taxonomy.test.ts
+          corepack pnpm --filter arcready exec vitest run \
+            test/bridge-rules.test.ts \
+            test/rule-taxonomy.test.ts \
+            test/c08a-explicit-advice-selection.test.ts
+          git diff --check
+
+      - name: Run full repository gate
+        shell: bash
+        run: |
+          set +e
+          corepack pnpm verify:full > /tmp/c08a-e2-verify.log 2>&1
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            echo "==> C08A-E2 failure summary"
+            grep -n -E "FAIL|AssertionError|expected|Error:|×|failed|Mismatch|Result:" /tmp/c08a-e2-verify.log | tail -n 180 || true
+            echo "==> C08A-E2 final log tail"
+            tail -n 260 /tmp/c08a-e2-verify.log
+            exit "$status"
+          fi
+          cat /tmp/c08a-e2-verify.log
+
+      - name: Upload verification log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: c08a-e2-verify-log
+          if-no-files-found: ignore
+          retention-days: 1
+          path: /tmp/c08a-e2-verify.log
+
+      - name: Commit E2 candidate and self-clean
+        run: |
+          git rm \
+            .github/workflows/c08a-e2-finalize.yml \
+            .github/workflows/c08a-e2-finalize-retry.yml \
+            .github/workflows/c08a-e2-finalize-retry2.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            packages/arcready/rules/bridge/attestation-404-not-fatal.ts \
+            packages/arcready/core/rules/taxonomy.ts \
+            packages/arcready/core/rules/catalog.ts \
+            docs/rule-catalog.md \
+            packages/arcready/test/bridge-rules.test.ts \
+            packages/arcready/test/rule-taxonomy.test.ts
+          git commit -m "test: lock C08A-E2 advisory policy"
+          git push origin HEAD:${{ github.head_ref }}
