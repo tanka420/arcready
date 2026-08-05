@@ -34,7 +34,18 @@ jobs:
         run: corepack pnpm install --frozen-lockfile
 
       - name: Materialize corpus and validators
-        run: python3 .github/scripts/c09-r2-materialize.py
+        run: |
+          python3 .github/scripts/c09-r2-materialize.py
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("docs/research/fixtures/c09-r2-validate-ast.mjs")
+          text = path.read_text(encoding="utf-8")
+          marker = 'import process from "node:process";\n'
+          replacement = marker + 'import { URL } from "node:url";\n'
+          if text.count(marker) != 1:
+              raise SystemExit(f"URL import marker count: {text.count(marker)}")
+          path.write_text(text.replace(marker, replacement, 1), encoding="utf-8")
+          PY
 
       - name: Validate corpus structure
         run: |
