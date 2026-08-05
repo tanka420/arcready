@@ -71,25 +71,26 @@ jobs:
               r'  it\("fails closed when combined and separate status branches coexist", \(\) => \{\n.*?\n  \}\);\n\n(?=  it\("keeps every unsafe control-flow candidate blocked from public emission")',
               re.S,
           )
-          replacement = '''  it("fails closed when combined and separate status branches coexist", () => {
-            const combinedBranch = `    if (
-              response.status === 404 ||
-              response.status === 429
-            ) {
-              await new Promise((resolve) => setTimeout(resolve, 5_000));
-              continue;
-            }`;
-            const source = replaceExactlyOnce(
-              SAFE_ANCHOR,
-              SAFE_404_BRANCH,
-              `${combinedBranch}\\n\\n${SAFE_404_BRANCH}`
-            );
-            expect(classifyC08R3Source("fixture.ts", source).controlFlowClass).toBe(
-              "unsupported"
-            );
-          });
-
-'''
+          replacement_lines = [
+              '  it("fails closed when combined and separate status branches coexist", () => {',
+              '    const combinedBranch = `    if (',
+              '      response.status === 404 ||',
+              '      response.status === 429',
+              '    ) {',
+              '      await new Promise((resolve) => setTimeout(resolve, 5_000));',
+              '      continue;',
+              '    }`;',
+              '    const source = replaceExactlyOnce(',
+              '      SAFE_ANCHOR,',
+              '      SAFE_404_BRANCH,',
+              '      `${combinedBranch}\\n\\n${SAFE_404_BRANCH}`',
+              '    );',
+              '    expect(classifyC08R3Source("fixture.ts", source).controlFlowClass).toBe(',
+              '      "unsupported"',
+              '    );',
+              '  });',
+          ]
+          replacement = "\n".join(replacement_lines) + "\n\n"
           text, replaced = pattern.subn(replacement, text, count=1)
           if replaced != 1:
               raise SystemExit(f"combined test replacement: expected 1, got {replaced}")
