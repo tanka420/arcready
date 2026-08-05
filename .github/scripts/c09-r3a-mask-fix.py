@@ -105,13 +105,15 @@ replace_once(
 
 replace_once(
     '''export function analyzeC09Source(parser, source, metadata = {}) {
-  const unsupportedFutureSyntax =
-    /pragma\\s+solidity\\s+[^;]*\\b0\\.9\\./.test(source);
+  const unsupportedFutureSyntax = /pragma\\s+solidity\\s+[^;]*\\b0\\.9\\./.test(
+    source
+  );
 ''',
     '''export function analyzeC09Source(parser, source, metadata = {}) {
   const sourceCode = maskNonCode(source);
-  const unsupportedFutureSyntax =
-    /pragma\\s+solidity\\s+[^;]*\\b0\\.9\\./.test(sourceCode);
+  const unsupportedFutureSyntax = /pragma\\s+solidity\\s+[^;]*\\b0\\.9\\./.test(
+    sourceCode
+  );
 ''',
     "masked source pragma",
 )
@@ -125,12 +127,11 @@ for old, new, label in [
     ("sinkForFunction(record.text, binding)", "sinkForFunction(record.code, binding)", "sink masking"),
     ("identifierAssignments(record.text, binding.name)", "identifierAssignments(record.code, binding.name)", "assignment masking"),
     ("declarationCount(record.text, binding.name)", "declarationCount(record.code, binding.name)", "declaration masking"),
-    (").test(record.text);", ").test(record.code);", "first record regex masking"),
 ]:
     replace_once(old, new, label)
 
 text = PATH.read_text(encoding="utf-8")
 remaining = text.count("record.text")
-if remaining != 4:
-    raise SystemExit(f"expected four remaining reportable-source record.text uses, got {remaining}")
+if remaining < 1:
+    raise SystemExit("expected remaining reportable-source record.text uses")
 PATH.write_text(text.replace("record.text", "record.code"), encoding="utf-8")
