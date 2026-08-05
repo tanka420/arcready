@@ -1,0 +1,57 @@
+name: C09 R1 Review Fix
+
+on:
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout head branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.1
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: corepack pnpm install --frozen-lockfile
+
+      - name: Measure parser package and apply review fixes
+        run: |
+          npm pack @solidity-parser/parser@0.20.2 --dry-run --json > /tmp/c09-parser-pack.json
+          python3 .github/scripts/c09-r1-review-fix.py
+
+      - name: Validate corrected research artifact
+        run: |
+          corepack pnpm exec prettier --write docs/research/C09-R1.md
+          corepack pnpm exec prettier --check docs/research/C09-R1.md
+          git diff --check
+          corepack pnpm verify:full
+
+      - name: Commit correction and self-clean
+        run: |
+          git rm \
+            .github/scripts/c09-r1-review-fix.py \
+            .github/workflows/c09-r1-review-fix.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/research/C09-R1.md
+          git commit -m "docs: resolve C09-R1 review findings"
+          git push origin HEAD:${{ github.head_ref }}
