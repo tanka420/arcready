@@ -4,14 +4,16 @@ on:
   pull_request:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   format:
     runs-on: ubuntu-24.04
     steps:
-      - name: Checkout
+      - name: Checkout head branch
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -38,22 +40,21 @@ jobs:
             packages/arcready/test/c08-r3-attestation-prototype.mjs \
             packages/arcready/test/c08-r3-attestation-prototype.test.mjs
 
-      - name: Verify formatted artifacts
+      - name: Verify and commit formatted artifacts
         run: |
           corepack pnpm exec prettier --check \
             docs/research/C08-R3.md \
             docs/research/fixtures/c08-r3-corpus.mjs \
             packages/arcready/test/c08-r3-attestation-prototype.mjs \
             packages/arcready/test/c08-r3-attestation-prototype.test.mjs
-
-      - name: Upload formatted artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: c08-r3-formatted
-          if-no-files-found: error
-          retention-days: 1
-          path: |
-            docs/research/C08-R3.md
-            docs/research/fixtures/c08-r3-corpus.mjs
-            packages/arcready/test/c08-r3-attestation-prototype.mjs
+          git diff --check
+          git rm .github/workflows/c08-r3-format-export.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            docs/research/C08-R3.md \
+            docs/research/fixtures/c08-r3-corpus.mjs \
+            packages/arcready/test/c08-r3-attestation-prototype.mjs \
             packages/arcready/test/c08-r3-attestation-prototype.test.mjs
+          git commit -m "style: format C08-R3 research artifacts"
+          git push origin HEAD:${{ github.head_ref }}
