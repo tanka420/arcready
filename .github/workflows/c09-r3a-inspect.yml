@@ -1,4 +1,4 @@
-name: C09 R3A Inspect Parser AST
+name: C09 R3A Prototype
 
 on:
   pull_request:
@@ -7,7 +7,7 @@ permissions:
   contents: read
 
 jobs:
-  inspect:
+  prototype:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout head branch
@@ -35,95 +35,19 @@ jobs:
       - name: Install exact research parser temporarily
         run: corepack pnpm add -Dw @solidity-parser/parser@0.20.2
 
-      - name: Inspect representative AST shapes
+      - name: Run C09 R3A source corpus
         run: |
-          node --input-type=module <<'NODE'
-          import parserModule from "@solidity-parser/parser";
-          import { sourceCases } from "./docs/research/fixtures/c09-r2-corpus.mjs";
+          node --check docs/research/fixtures/c09-r3a-prototype.mjs
+          node --check docs/research/fixtures/c09-r3a-run.mjs
+          node docs/research/fixtures/c09-r3a-run.mjs
 
-          const parser = parserModule.default ?? parserModule;
-          const wanted = new Set([
-            "SourceUnit",
-            "ContractDefinition",
-            "FunctionDefinition",
-            "Block",
-            "VariableDeclarationStatement",
-            "VariableDeclaration",
-            "ReturnStatement",
-            "ExpressionStatement",
-            "EmitStatement",
-            "IfStatement",
-            "ForStatement",
-            "InlineAssemblyStatement",
-            "AssemblyBlock",
-            "AssemblyAssignment",
-            "AssemblyCall",
-            "MemberAccess",
-            "Identifier",
-            "IndexAccess",
-            "BinaryOperation",
-            "FunctionCall",
-            "NumberLiteral"
-          ]);
+      - name: Restore dependency manifests
+        run: git checkout -- package.json pnpm-lock.yaml
 
-          function summarizeNode(node, parentType) {
-            const summary = { type: node.type, parentType };
-            for (const key of [
-              "name",
-              "memberName",
-              "operator",
-              "kind",
-              "visibility",
-              "stateMutability",
-              "isConstructor",
-              "range"
-            ]) {
-              if (node[key] !== undefined) summary[key] = node[key];
-            }
-            if (Array.isArray(node.variables)) {
-              summary.variables = node.variables.map((item) =>
-                item && typeof item === "object"
-                  ? { type: item.type, name: item.name, range: item.range }
-                  : item
-              );
-            }
-            return summary;
-          }
-
-          function collect(value, parentType = null, output = []) {
-            if (!value || typeof value !== "object") return output;
-            if (Array.isArray(value)) {
-              for (const item of value) collect(item, parentType, output);
-              return output;
-            }
-            const currentType = typeof value.type === "string" ? value.type : parentType;
-            if (typeof value.type === "string" && wanted.has(value.type)) {
-              output.push(summarizeNode(value, parentType));
-            }
-            for (const [key, child] of Object.entries(value)) {
-              if (["loc", "range"].includes(key)) continue;
-              collect(child, currentType, output);
-            }
-            return output;
-          }
-
-          for (const id of [
-            "C09-S01",
-            "C09-S03",
-            "C09-S04",
-            "C09-S05",
-            "C09-S06",
-            "C09-U03",
-            "C09-A05"
-          ]) {
-            const fixture = sourceCases.find((item) => item.id === id);
-            const source = Object.values(fixture.files)[0];
-            const ast = parser.parse(source, {
-              loc: true,
-              range: true,
-              tolerant: false
-            });
-            console.log(`=== ${id} ===`);
-            console.log(JSON.stringify(collect(ast), null, 2));
-          }
-          NODE
+      - name: Format and run full repository gate
+        run: |
+          corepack pnpm exec prettier --check \
+            docs/research/fixtures/c09-r3a-prototype.mjs \
+            docs/research/fixtures/c09-r3a-run.mjs
+          git diff --check
+          corepack pnpm verify:full
