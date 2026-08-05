@@ -34,6 +34,69 @@ function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function maskNonCode(text) {
+  const output = [...text];
+  let state = "code";
+
+  for (let index = 0; index < text.length; index += 1) {
+    const current = text[index];
+    const next = text[index + 1];
+
+    if (state === "line-comment") {
+      if (current === "\n" || current === "\r") state = "code";
+      else output[index] = " ";
+      continue;
+    }
+
+    if (state === "block-comment") {
+      if (current === "*" && next === "/") {
+        output[index] = " ";
+        output[index + 1] = " ";
+        index += 1;
+        state = "code";
+      } else if (current !== "\n" && current !== "\r") {
+        output[index] = " ";
+      }
+      continue;
+    }
+
+    if (state === "single-string" || state === "double-string") {
+      const quote = state === "single-string" ? "'" : '"';
+      if (current === "\\") {
+        output[index] = " ";
+        if (index + 1 < text.length) {
+          output[index + 1] = " ";
+          index += 1;
+        }
+      } else {
+        if (current === quote) state = "code";
+        if (current !== "\n" && current !== "\r") output[index] = " ";
+      }
+      continue;
+    }
+
+    if (current === "/" && next === "/") {
+      output[index] = " ";
+      output[index + 1] = " ";
+      index += 1;
+      state = "line-comment";
+    } else if (current === "/" && next === "*") {
+      output[index] = " ";
+      output[index + 1] = " ";
+      index += 1;
+      state = "block-comment";
+    } else if (current === "'") {
+      output[index] = " ";
+      state = "single-string";
+    } else if (current === '"') {
+      output[index] = " ";
+      state = "double-string";
+    }
+  }
+
+  return output.join("");
+}
+
 function identifierAssignments(text, name) {
   const escaped = escapeRegExp(name);
   const pattern = new RegExp(
@@ -159,10 +222,12 @@ function functionRecords(ast, source) {
   const records = [];
   walk(ast, [], (node, ancestors) => {
     if (node.type !== "FunctionDefinition" || !node.body) return;
+    const text = sliceNode(source, node);
     records.push({
       node,
       contract: nearest(ancestors, "ContractDefinition"),
-      text: sliceNode(source, node)
+      text,
+      code: maskNonCode(text)
     });
   });
   return records;
@@ -230,8 +295,9 @@ function unsupportedResult(parseStatus = "parseable") {
 }
 
 export function analyzeC09Source(parser, source, metadata = {}) {
+  const sourceCode = maskNonCode(source);
   const unsupportedFutureSyntax = /pragma\s+solidity\s+[^;]*\b0\.9\./.test(
-    source
+    sourceCode
   );
 
   let ast;
@@ -296,7 +362,7 @@ export function analyzeC09Source(parser, source, metadata = {}) {
     occurrences.map((item) => item.contract?.name).filter(Boolean)
   );
   const sinkFunctions = functions.filter((record) =>
-    hasPotentialSelection(record.text)
+    hasPotentialSelection(record.code)
   );
   const sinkContracts = new Set(
     sinkFunctions.map((record) => record.contract?.name).filter(Boolean)
@@ -316,7 +382,7 @@ export function analyzeC09Source(parser, source, metadata = {}) {
     !contractIntersection
   ) {
     const crossCall = sinkFunctions.some((record) =>
-      /\b[A-Za-z_$][\w$]*\.seed\s*\(/.test(record.text)
+      /\b[A-Za-z_$][\w$]*\.seed\s*\(/.test(record.code)
     );
     contractOwnership = crossCall ? "cross-contract" : "multiple-contracts";
     functionOwnership = crossCall ? "cross-function" : "ambiguous";
@@ -342,7 +408,7 @@ export function analyzeC09Source(parser, source, metadata = {}) {
       .filter(Boolean);
     const sinkCallsSource = sinkFunctions.some((record) =>
       sourceFunctionNames.some((name) =>
-        new RegExp(`\\b${escapeRegExp(name)}\\s*\\(`).test(record.text)
+        new RegExp(`\\b${escapeRegExp(name)}\\s*\\(`).test(record.code)
       )
     );
     const crossDependency =
@@ -374,8 +440,8 @@ export function analyzeC09Source(parser, source, metadata = {}) {
 
   let selected = null;
   for (const record of candidateFunctions) {
-    const binding = sourceBinding(record.text);
-    const sink = sinkForFunction(record.text, binding);
+    const binding = sourceBinding(record.code);
+    const sink = sinkForFunction(record.code, binding);
     const sourceKind = occurrences.find(
       (item) => item.function === record.node
     )?.kind;
@@ -383,18 +449,18 @@ export function analyzeC09Source(parser, source, metadata = {}) {
     let bindingClass = "direct";
     if (binding?.kind === "branch") bindingClass = "branch-join";
     else if (binding) {
-      const assignments = identifierAssignments(record.text, binding.name);
-      const declarations = declarationCount(record.text, binding.name);
+      const assignments = identifierAssignments(record.code, binding.name);
+      const declarations = declarationCount(record.code, binding.name);
       const multiHop = new RegExp(
         `\\b(?:u?int(?:8|16|32|64|128|256)?|bytes32)\\s+[A-Za-z_$][\\w$]*\\s*=\\s*${escapeRegExp(binding.name)}\\s*;`
-      ).test(record.text);
+      ).test(record.code);
       if (declarations > 1) bindingClass = "unsupported";
       else if (multiHop) bindingClass = "multi-hop";
       else if (
         assignments > 1 ||
-        (/\bunchecked\s*\{[\s\S]*?\b/.test(record.text) &&
+        (/\bunchecked\s*\{[\s\S]*?\b/.test(record.code) &&
           new RegExp(`\\b${escapeRegExp(binding.name)}\\s*\\+=`).test(
-            record.text
+            record.code
           ))
       ) {
         bindingClass = "reassigned";
@@ -433,10 +499,10 @@ export function analyzeC09Source(parser, source, metadata = {}) {
     const directReportableSource =
       supported &&
       (/block\s*\.\s*(?:prevrandao|difficulty)[^;]*%\s*[A-Za-z_$][\w$]*\.length/.test(
-        record.text
+        record.code
       ) ||
         /\b(?:u?int(?:8|16|32|64|128|256)?)\s+[A-Za-z_$][\w$]*\s*=\s*[^;]*block\s*\.\s*(?:prevrandao|difficulty)[^;]*%\s*[A-Za-z_$][\w$]*\.length\s*;[\s\S]*?\b[A-Za-z_$][\w$]*\s*\[/.test(
-          record.text
+          record.code
         ));
     const recordResult = {
       sourceKind,
