@@ -1,0 +1,92 @@
+name: C08A E1 Finalize
+
+on:
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout head branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.1
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: corepack pnpm install --frozen-lockfile
+
+      - name: Update intentional default inventory assertions
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("packages/arcready/test/cross-preset.test.ts")
+          text = path.read_text(encoding="utf-8")
+
+          old_rule = '      "bridge/ATTESTATION_404_NOT_FATAL",\n'
+          if text.count(old_rule) != 1:
+              raise SystemExit(
+                  f"attestation default assertion: expected one match, got {text.count(old_rule)}"
+              )
+          text = text.replace(old_rule, "", 1)
+
+          old_count = "    expect(ruleIds).toHaveLength(17);"
+          if text.count(old_count) != 1:
+              raise SystemExit(
+                  f"default count assertion: expected one match, got {text.count(old_count)}"
+              )
+          text = text.replace(old_count, "    expect(ruleIds).toHaveLength(16);", 1)
+
+          path.write_text(text, encoding="utf-8")
+          PY
+
+      - name: Format and run focused tests
+        run: |
+          corepack pnpm exec prettier --write \
+            packages/arcready/presets/index.ts \
+            packages/arcready/src/report.ts \
+            packages/arcready/test/c08a-explicit-advice-selection.test.ts \
+            packages/arcready/test/cross-preset.test.ts
+          corepack pnpm exec prettier --check \
+            packages/arcready/presets/index.ts \
+            packages/arcready/src/report.ts \
+            packages/arcready/test/c08a-explicit-advice-selection.test.ts \
+            packages/arcready/test/cross-preset.test.ts
+          corepack pnpm --filter arcready exec vitest run \
+            test/presets.test.ts \
+            test/cross-preset.test.ts \
+            test/c08a-explicit-advice-selection.test.ts
+          git diff --check
+
+      - name: Run full repository gate
+        run: corepack pnpm verify:full
+
+      - name: Commit E1 candidate and self-clean
+        run: |
+          git rm .github/workflows/c08a-e1-finalize.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            packages/arcready/presets/index.ts \
+            packages/arcready/src/report.ts \
+            packages/arcready/test/c08a-explicit-advice-selection.test.ts \
+            packages/arcready/test/cross-preset.test.ts
+          git commit -m "test: lock C08A-E1 default exclusion"
+          git push origin HEAD:${{ github.head_ref }}
