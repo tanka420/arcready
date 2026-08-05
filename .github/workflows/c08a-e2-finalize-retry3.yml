@@ -1,0 +1,147 @@
+name: C08A E2 Finalize Retry 3
+
+on:
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout head branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.1
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: corepack pnpm install --frozen-lockfile
+
+      - name: Apply policy patch with structural advice validator
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import textwrap
+
+          taxonomy = Path("packages/arcready/core/rules/taxonomy.ts")
+          text = taxonomy.read_text(encoding="utf-8")
+          start = text.index('    case "advice":\n')
+          end = text.index('    case "needs-research":\n', start)
+          replacement = textwrap.dedent('''
+              case "advice":
+                if (metadata.impact !== "recommendation") {
+                  errors.push(`${metadata.id}: advice must use recommendation impact`);
+                }
+                if (metadata.recommendedDefaultEnabled) {
+                  errors.push(`${metadata.id}: advice rules must be recommended disabled`);
+                }
+                if (metadata.deprecated !== (metadata.maturity === "deprecated")) {
+                  errors.push(
+                    `${metadata.id}: advice deprecation and maturity must agree`
+                  );
+                }
+                break;
+          ''').lstrip("\n")
+          replacement = textwrap.indent(replacement, "    ")
+          taxonomy.write_text(text[:start] + replacement + text[end:], encoding="utf-8")
+
+          workflow = Path(".github/workflows/c08a-e2-finalize-retry2.yml").read_text(
+              encoding="utf-8"
+          )
+          marker = "          python3 - <<'PY'\n"
+          script_start = workflow.index(marker) + len(marker)
+          script_end = workflow.index("\n          PY\n", script_start)
+          script = textwrap.dedent(workflow[script_start:script_end])
+
+          label_position = script.index('"advice validation",')
+          call_start = script.rfind("replace_once(", 0, label_position)
+          call_end = script.index("\n\ncatalog = Path", label_position)
+          if call_start < 0 or call_end <= call_start:
+              raise SystemExit(
+                  f"advice validation removal bounds invalid: {call_start}, {call_end}"
+              )
+          script = script[:call_start] + script[call_end + 2 :]
+          Path("/tmp/c08a-e2-policy.py").write_text(script, encoding="utf-8")
+          PY
+
+          python3 /tmp/c08a-e2-policy.py
+
+      - name: Format and run focused policy tests
+        run: |
+          corepack pnpm exec prettier --write \
+            packages/arcready/rules/bridge/attestation-404-not-fatal.ts \
+            packages/arcready/core/rules/taxonomy.ts \
+            packages/arcready/core/rules/catalog.ts \
+            docs/rule-catalog.md \
+            packages/arcready/test/bridge-rules.test.ts \
+            packages/arcready/test/rule-taxonomy.test.ts
+          corepack pnpm exec prettier --check \
+            packages/arcready/rules/bridge/attestation-404-not-fatal.ts \
+            packages/arcready/core/rules/taxonomy.ts \
+            packages/arcready/core/rules/catalog.ts \
+            docs/rule-catalog.md \
+            packages/arcready/test/bridge-rules.test.ts \
+            packages/arcready/test/rule-taxonomy.test.ts
+          corepack pnpm --filter arcready exec vitest run \
+            test/bridge-rules.test.ts \
+            test/rule-taxonomy.test.ts \
+            test/c08a-explicit-advice-selection.test.ts
+          git diff --check
+
+      - name: Run full repository gate
+        shell: bash
+        run: |
+          set +e
+          corepack pnpm verify:full > /tmp/c08a-e2-verify.log 2>&1
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            echo "==> C08A-E2 failure summary"
+            grep -n -E "FAIL|AssertionError|expected|Error:|×|failed|Mismatch|Result:" /tmp/c08a-e2-verify.log | tail -n 180 || true
+            echo "==> C08A-E2 final log tail"
+            tail -n 260 /tmp/c08a-e2-verify.log
+            exit "$status"
+          fi
+          cat /tmp/c08a-e2-verify.log
+
+      - name: Upload verification log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: c08a-e2-verify-log
+          if-no-files-found: ignore
+          retention-days: 1
+          path: /tmp/c08a-e2-verify.log
+
+      - name: Commit E2 candidate and self-clean
+        run: |
+          git rm \
+            .github/workflows/c08a-e2-finalize.yml \
+            .github/workflows/c08a-e2-finalize-retry.yml \
+            .github/workflows/c08a-e2-finalize-retry2.yml \
+            .github/workflows/c08a-e2-finalize-retry3.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            packages/arcready/rules/bridge/attestation-404-not-fatal.ts \
+            packages/arcready/core/rules/taxonomy.ts \
+            packages/arcready/core/rules/catalog.ts \
+            docs/rule-catalog.md \
+            packages/arcready/test/bridge-rules.test.ts \
+            packages/arcready/test/rule-taxonomy.test.ts
+          git commit -m "test: lock C08A-E2 advisory policy"
+          git push origin HEAD:${{ github.head_ref }}
