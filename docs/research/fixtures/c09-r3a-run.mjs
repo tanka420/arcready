@@ -42,7 +42,8 @@ for (const fixture of sourceCases) {
     }
   }
   results.push({ id: fixture.id, actual });
-  if (Object.keys(mismatch).length > 0) failures.push({ id: fixture.id, mismatch });
+  if (Object.keys(mismatch).length > 0)
+    failures.push({ id: fixture.id, mismatch });
 }
 
 if (failures.length > 0) {
@@ -92,7 +93,10 @@ contract Extra {
 }
 `
 });
-assert.equal(unrelatedSelection.publicEmissionEligibility, "blocked-unsupported");
+assert.equal(
+  unrelatedSelection.publicEmissionEligibility,
+  "blocked-unsupported"
+);
 
 const commentOnly = classifySoliditySource({
   parser,

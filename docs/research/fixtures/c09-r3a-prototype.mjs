@@ -28,7 +28,8 @@ function walk(node, visitor, parent = null) {
 function descendants(node, predicate) {
   const found = [];
   walk(node, (candidate, parent) => {
-    if (candidate !== node && predicate(candidate, parent)) found.push(candidate);
+    if (candidate !== node && predicate(candidate, parent))
+      found.push(candidate);
   });
   return found;
 }
@@ -119,7 +120,8 @@ function contextForNode(contexts, node) {
 function directSourceNodes(ast) {
   const nodes = [];
   walk(ast, (node) => {
-    if (isDirectPrevrandao(node)) nodes.push({ node, kind: "direct-prevrandao" });
+    if (isDirectPrevrandao(node))
+      nodes.push({ node, kind: "direct-prevrandao" });
     if (isDifficulty(node)) nodes.push({ node, kind: "difficulty-post-paris" });
   });
   return nodes.sort((a, b) => nodeStart(a.node) - nodeStart(b.node));
@@ -267,13 +269,16 @@ function selectionFacts(functionNode) {
 }
 
 function isZeroLiteral(node) {
-  return node?.type === "NumberLiteral" && String(node.number ?? node.value) === "0";
+  return (
+    node?.type === "NumberLiteral" && String(node.number ?? node.value) === "0"
+  );
 }
 
 function functionCallName(node) {
   if (node?.type !== "FunctionCall") return null;
   if (node.expression?.type === "Identifier") return node.expression.name;
-  if (node.expression?.type === "MemberAccess") return node.expression.memberName;
+  if (node.expression?.type === "MemberAccess")
+    return node.expression.memberName;
   return null;
 }
 
@@ -301,10 +306,10 @@ function classifyDirectSink(functionNode, sourceKind) {
       return { sinkClass: "authorization", bindingClass: "direct" };
     }
 
-    const calls = descendants(
-      expression,
-      (node) => node.type === "FunctionCall"
-    );
+    const calls = [
+      ...(expression.type === "FunctionCall" ? [expression] : []),
+      ...descendants(expression, (node) => node.type === "FunctionCall")
+    ];
     const keccak = calls.find((node) => functionCallName(node) === "keccak256");
     if (keccak) {
       const nonSourceIdentifiers = identifierNames(keccak).filter(
@@ -475,6 +480,25 @@ function sameFunctionCandidates(contexts, sourceNodes) {
   return candidates;
 }
 
+function hasCrossFunctionHelperDependency(contexts, sourceNodes) {
+  const sourceFunctionNames = new Set(
+    sameFunctionCandidates(contexts, sourceNodes).map(
+      (item) => item.functionNode.name
+    )
+  );
+  return contexts.some(({ functionNode }) =>
+    selectionFacts(functionNode).some((selection) =>
+      containsNode(
+        selection.dependencyNode,
+        (node) =>
+          node.type === "FunctionCall" &&
+          node.expression?.type === "Identifier" &&
+          sourceFunctionNames.has(node.expression.name)
+      )
+    )
+  );
+}
+
 function structuralOwnership(contracts, contexts, sourceNodes) {
   if (contracts.length === 0) {
     return { contractOwnership: "none", functionOwnership: "none" };
@@ -633,6 +657,10 @@ function classifyParsedSource({
   }
 
   const ownership = sourceAndSinkOwnership(contracts, contexts, sourceNodes);
+  const crossFunctionHelper = hasCrossFunctionHelperDependency(
+    contexts,
+    sourceNodes
+  );
 
   if (sourceClass === "no-source") {
     return {
@@ -697,7 +725,10 @@ function classifyParsedSource({
   };
 
   if (ownership.functionOwnership === "cross-function") {
-    result = { bindingClass: "unsupported", sinkClass: "unsupported" };
+    result = {
+      bindingClass: crossFunctionHelper ? "unsupported" : result.bindingClass,
+      sinkClass: "unsupported"
+    };
   }
   if (ownership.contractOwnership === "cross-contract") {
     result = { bindingClass: "unsupported", sinkClass: "unsupported" };
