@@ -35,7 +35,7 @@ function escapeRegExp(value) {
 }
 
 function maskNonCode(text) {
-  const output = [...text];
+  const output = text.split("");
   let state = "code";
 
   for (let index = 0; index < text.length; index += 1) {
@@ -173,6 +173,14 @@ function sinkForFunction(text, binding) {
 
   if (indexWithModulo || indexFromDirectModulo || directCollectionModulo) {
     return { sinkClass: "selection", reason: "collection-selection" };
+  }
+
+  if (
+    new RegExp(
+      `\\breturn\\s+(?:${dependent}\\s*==\\s*0|0\\s*==\\s*${dependent})\\s*;`
+    ).test(text)
+  ) {
+    return { sinkClass: "safe-observation", reason: "zero-check" };
   }
 
   if (
