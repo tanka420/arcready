@@ -24,9 +24,9 @@ authorization_start = text.rfind("  if (", 0, authorization_return_index)
 if authorization_start < 0:
     raise SystemExit("authorization block start not found")
 
-zero_check = r'''  if (
+zero_check = '''  if (
     new RegExp(
-      `\breturn\s+(?:${dependent}\s*==\s*0|0\s*==\s*${dependent})\s*;`
+      `\\\\breturn\\\\s+(?:${dependent}\\\\s*==\\\\s*0|0\\\\s*==\\\\s*${dependent})\\\\s*;`
     ).test(text)
   ) {
     return { sinkClass: "safe-observation", reason: "zero-check" };
@@ -34,4 +34,9 @@ zero_check = r'''  if (
 
 '''
 text = text[:authorization_start] + zero_check + text[authorization_start:]
+
+expected_regex = r'`\\breturn\\s+(?:${dependent}\\s*==\\s*0|0\\s*==\\s*${dependent})\\s*;`'
+if expected_regex not in text:
+    raise SystemExit("generated JavaScript zero-check regex escaping is invalid")
+
 PATH.write_text(text, encoding="utf-8")
