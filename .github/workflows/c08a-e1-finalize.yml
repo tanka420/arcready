@@ -37,24 +37,40 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
 
-          path = Path("packages/arcready/test/cross-preset.test.ts")
-          text = path.read_text(encoding="utf-8")
+          def replace_once(path, old, new, label):
+              text = path.read_text(encoding="utf-8")
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{label}: expected one match, got {count}")
+              path.write_text(text.replace(old, new, 1), encoding="utf-8")
 
-          old_rule = '      "bridge/ATTESTATION_404_NOT_FATAL",\n'
-          if text.count(old_rule) != 1:
-              raise SystemExit(
-                  f"attestation default assertion: expected one match, got {text.count(old_rule)}"
-              )
-          text = text.replace(old_rule, "", 1)
+          cross_preset = Path("packages/arcready/test/cross-preset.test.ts")
+          replace_once(
+              cross_preset,
+              '      "bridge/ATTESTATION_404_NOT_FATAL",\n',
+              "",
+              "attestation default assertion",
+          )
+          replace_once(
+              cross_preset,
+              "    expect(ruleIds).toHaveLength(17);",
+              "    expect(ruleIds).toHaveLength(16);",
+              "default count assertion",
+          )
 
-          old_count = "    expect(ruleIds).toHaveLength(17);"
-          if text.count(old_count) != 1:
-              raise SystemExit(
-                  f"default count assertion: expected one match, got {text.count(old_count)}"
-              )
-          text = text.replace(old_count, "    expect(ruleIds).toHaveLength(16);", 1)
+          replace_once(
+              Path("packages/arcready/test/no-blob-tx-on-arc.test.ts"),
+              '      expect(getRulesForPresets(["wallet", "bridge", "app-kit"])).toHaveLength(\n        17\n      );',
+              '      expect(getRulesForPresets(["wallet", "bridge", "app-kit"])).toHaveLength(\n        16\n      );',
+              "combined preset count",
+          )
 
-          path.write_text(text, encoding="utf-8")
+          replace_once(
+              Path("packages/arcready/test/scan-v2-runtime.test.ts"),
+              "    expect(broken.report.findings).toHaveLength(16);",
+              "    expect(broken.report.findings).toHaveLength(15);",
+              "DX01 finding count",
+          )
           PY
 
       - name: Format and run focused tests
@@ -63,15 +79,21 @@ jobs:
             packages/arcready/presets/index.ts \
             packages/arcready/src/report.ts \
             packages/arcready/test/c08a-explicit-advice-selection.test.ts \
-            packages/arcready/test/cross-preset.test.ts
+            packages/arcready/test/cross-preset.test.ts \
+            packages/arcready/test/no-blob-tx-on-arc.test.ts \
+            packages/arcready/test/scan-v2-runtime.test.ts
           corepack pnpm exec prettier --check \
             packages/arcready/presets/index.ts \
             packages/arcready/src/report.ts \
             packages/arcready/test/c08a-explicit-advice-selection.test.ts \
-            packages/arcready/test/cross-preset.test.ts
+            packages/arcready/test/cross-preset.test.ts \
+            packages/arcready/test/no-blob-tx-on-arc.test.ts \
+            packages/arcready/test/scan-v2-runtime.test.ts
           corepack pnpm --filter arcready exec vitest run \
             test/presets.test.ts \
             test/cross-preset.test.ts \
+            test/no-blob-tx-on-arc.test.ts \
+            test/scan-v2-runtime.test.ts \
             test/c08a-explicit-advice-selection.test.ts
           git diff --check
 
@@ -108,6 +130,8 @@ jobs:
             packages/arcready/presets/index.ts \
             packages/arcready/src/report.ts \
             packages/arcready/test/c08a-explicit-advice-selection.test.ts \
-            packages/arcready/test/cross-preset.test.ts
+            packages/arcready/test/cross-preset.test.ts \
+            packages/arcready/test/no-blob-tx-on-arc.test.ts \
+            packages/arcready/test/scan-v2-runtime.test.ts
           git commit -m "test: lock C08A-E1 default exclusion"
           git push origin HEAD:${{ github.head_ref }}
