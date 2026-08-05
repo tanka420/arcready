@@ -178,10 +178,21 @@ It must not be used as an implementation base.
 
 ### `bridge/ATTESTATION_404_NOT_FATAL`
 
-- Decision: Research.
-- Priority: P1.
-- Impact: Required change.
-- Requires retry-loop and typed HTTP control-flow analysis.
+- Decision: Advice-only.
+- Priority: P1 migration; P3 after deprecation.
+- Impact: Recommendation.
+- C08-R1 through R3 and C08-D are complete.
+- A bounded control-flow prototype passed 51 corpus cases and 63 targeted tests,
+  but 0 of 11 unsafe candidates were eligible for critical emission and
+  meaningful first-party shapes exceeded the bounded grammar.
+- C08A must remove the rule from default bridge execution, retain the public ID
+  temporarily, and add a narrow explicit opt-in path for known default-excluded
+  rules.
+- The detector remains deprecated low-confidence advice; it must not claim every
+  `404` is retryable.
+- Target inventory after migration: 19 known / 16 default / 7 wallet / 4
+  canonical.
+- Revisit Retire after one compatibility period and usage review.
 
 ### `bridge/NO_PREVRANDAO_RELAY_SELECTION`
 
@@ -259,12 +270,15 @@ C07C-A Complete: conservative viem explicit-pattern MVP
 C07C-B Complete: thin integration of already-valid records
 DX01   Complete: broken/fixed demo, onboarding, and report clarity
 C06B2  Complete: exact direct viem parseEther write MVP; native remains blocked
-C08    Next: research CCTP attestation control flow
+C08-D  Complete: Advice-only disposition selected
+C08A   Next: default-exclude and deprecate the attestation heuristic
 C09    Then: replace duplicate PREVRANDAO keyword rules
 C10    Then: add versioned App Kit compatibility analysis
 ```
 
-Advice-only work should not interrupt this sequence without real user evidence.
+C08A is current governance cleanup required by the reviewed C08 decision. Other
+Advice-only expansion should not interrupt this sequence without real user
+evidence.
 
 ## Expansion triggers
 

@@ -1,6 +1,6 @@
 # ArcReady Roadmap
 
-**Status:** Active roadmap after completed C06B2 exact write MVP
+**Status:** Active roadmap after C08 Advice-only decision
 **Last reviewed:** 2026-08-05
 
 ArcReady is an Arc-specific, repository-level static compatibility analyzer for
@@ -201,10 +201,21 @@ Current official Arc documentation uses
 The proposed `.io` RPC migration was cancelled because no migration is
 required.
 
-### C08 — Research: CCTP attestation control flow
+### C08 — Advice-only decision selected: CCTP attestation control flow
 
-Distinguish pending `404` polling from terminal failure and invalid parameters.
-Do not canonicalize the current keyword detector without control-flow evidence.
+C08-R1 through R3 are complete. A private bounded prototype classified all 51
+corpus cases and passed 63 targeted tests, but 0 of 11 unsafe candidates had
+enough burn-hash provenance for critical emission and maintained first-party
+pressure shapes remained unsupported.
+
+C08-D therefore selected `Advice-only`, not Build. C08A is the next milestone:
+remove the regex heuristic from default bridge execution, retain the public ID
+temporarily as default-excluded deprecated guidance, and add a narrow explicit
+opt-in path for known excluded rules.
+
+No production migration has occurred yet. Inventory remains 19 known / 17
+default / 7 wallet / 4 canonical until C08A merges; the target after migration
+is 19 / 16 / 7 / 4.
 
 ### C09 — Replace: shared Solidity `PREVRANDAO` value dependency
 
@@ -275,8 +286,8 @@ The following remain outside the near-term roadmap:
 
 ## Current recommended next step
 
-1. Begin C08 research on CCTP attestation control flow.
-2. Continue C09 and C10 in the existing sequence.
+1. Review and implement C08A as a bounded Advice-only migration.
+2. Continue C09 and C10 in the existing sequence after C08A closeout.
 3. Keep native write analysis blocked pending first-party premise clarification.
 4. Continue gathering real unsupported-pattern and false-positive/negative
    evidence.
