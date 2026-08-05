@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import process from "node:process";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, URL } from "node:url";
 import { astComparatorCases, cases } from "./c09-r2-corpus.mjs";
 
 const COMPILER_VERSION = "0.8.30";
