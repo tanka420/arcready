@@ -34,7 +34,9 @@ jobs:
         run: corepack pnpm install --frozen-lockfile
 
       - name: Apply final bounded-flow hardening
-        run: python3 .github/scripts/c09-r3a-final-hardening.py
+        run: |
+          python3 .github/scripts/c09-r3a-final-hardening.py
+          python3 .github/scripts/c09-r3a-transformed-use-fix.py
 
       - name: Install exact research parser temporarily
         run: corepack pnpm add -Dw @solidity-parser/parser@0.20.2
@@ -60,6 +62,7 @@ jobs:
         run: |
           git rm \
             .github/scripts/c09-r3a-final-hardening.py \
+            .github/scripts/c09-r3a-transformed-use-fix.py \
             .github/workflows/c09-r3a-final-hardening.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
