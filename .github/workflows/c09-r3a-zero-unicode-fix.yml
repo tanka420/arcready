@@ -46,6 +46,7 @@ jobs:
         run: python3 .github/scripts/c09-r3a-zero-unicode-fix.py
 
       - name: Validate all R3-A contracts and repository
+        shell: bash
         run: |
           corepack pnpm exec prettier --write \
             docs/research/prototypes/c09-r3a-analyzer.mjs \
@@ -61,18 +62,33 @@ jobs:
           node --check docs/research/prototypes/c09-r3a-runner.mjs
           node --check docs/research/prototypes/c09-r3a-adversarial.mjs
           node --check docs/research/prototypes/c09-r3a-adversarial-extended.mjs
+
+          set +e
           C09_PARSER_ROOT=/tmp/c09-parser \
             node docs/research/prototypes/c09-r3a-runner.mjs \
             > /tmp/c09-r3a-results.json
+          corpus_status=$?
           C09_PARSER_ROOT=/tmp/c09-parser \
             node docs/research/prototypes/c09-r3a-adversarial.mjs \
             > /tmp/c09-r3a-adversarial.json
+          adversarial_status=$?
           C09_PARSER_ROOT=/tmp/c09-parser \
             node docs/research/prototypes/c09-r3a-adversarial-extended.mjs \
             > /tmp/c09-r3a-adversarial-extended.json
+          extended_status=$?
+          set -e
+
           cat /tmp/c09-r3a-results.json
           cat /tmp/c09-r3a-adversarial.json
           cat /tmp/c09-r3a-adversarial-extended.json
+
+          if [ "$corpus_status" -ne 0 ] || \
+             [ "$adversarial_status" -ne 0 ] || \
+             [ "$extended_status" -ne 0 ]; then
+            echo "classification status: corpus=$corpus_status adversarial=$adversarial_status extended=$extended_status"
+            exit 1
+          fi
+
           git diff --check
           corepack pnpm verify:full
 
