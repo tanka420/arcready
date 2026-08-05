@@ -91,12 +91,6 @@ function isDifficulty(node) {
   return isBlockMember(node, "difficulty");
 }
 
-function identifierNames(node) {
-  return descendants(node, (candidate) => candidate.type === "Identifier").map(
-    (candidate) => candidate.name
-  );
-}
-
 function containsIdentifier(node, name) {
   return containsNode(node, (candidate) => isIdentifier(candidate, name));
 }
@@ -379,6 +373,49 @@ function functionCallName(node) {
   return null;
 }
 
+function isAbiEncodeCall(node) {
+  return (
+    node?.type === "FunctionCall" &&
+    node.expression?.type === "MemberAccess" &&
+    node.expression.memberName === "encode" &&
+    isIdentifier(node.expression.expression, "abi")
+  );
+}
+
+function classifyKeccakSink(expression, sourceKind) {
+  const calls = [
+    ...(expression?.type === "FunctionCall" ? [expression] : []),
+    ...descendants(expression, (node) => node.type === "FunctionCall")
+  ];
+  const keccak = calls.find((node) => functionCallName(node) === "keccak256");
+  if (!keccak) return null;
+
+  const argumentsList = keccak.arguments ?? [];
+  if (argumentsList.length !== 1 || !isAbiEncodeCall(argumentsList[0])) {
+    return { sinkClass: "unsupported", bindingClass: "direct" };
+  }
+
+  const encodedArguments = argumentsList[0].arguments ?? [];
+  const exactSourceArguments = encodedArguments.filter((argument) =>
+    isExactDirectSourceExpression(argument, sourceKind)
+  );
+  const transformedSource = encodedArguments.some(
+    (argument) =>
+      containsSourceNode(argument, sourceKind) &&
+      !isExactDirectSourceExpression(argument, sourceKind)
+  );
+  if (transformedSource || exactSourceArguments.length !== 1) {
+    return { sinkClass: "unsupported", bindingClass: "direct" };
+  }
+
+  const nonSourceArguments = encodedArguments.filter(
+    (argument) => !containsSourceNode(argument, sourceKind)
+  );
+  return nonSourceArguments.length > 0
+    ? { sinkClass: "ordering", bindingClass: "direct" }
+    : { sinkClass: "none", bindingClass: "direct" };
+}
+
 function classifyDirectSink(functionNode, sourceKind) {
   const selections = selectionFacts(functionNode);
   for (const selection of selections) {
@@ -416,20 +453,8 @@ function classifyDirectSink(functionNode, sourceKind) {
       return { sinkClass: "authorization", bindingClass: "direct" };
     }
 
-    const calls = [
-      ...(expression.type === "FunctionCall" ? [expression] : []),
-      ...descendants(expression, (node) => node.type === "FunctionCall")
-    ];
-    const keccak = calls.find((node) => functionCallName(node) === "keccak256");
-    if (keccak) {
-      const nonSourceIdentifiers = identifierNames(keccak).filter(
-        (name) => !["block", "keccak256", "abi"].includes(name)
-      );
-      if (nonSourceIdentifiers.length > 0) {
-        return { sinkClass: "ordering", bindingClass: "direct" };
-      }
-      return { sinkClass: "none", bindingClass: "direct" };
-    }
+    const keccakResult = classifyKeccakSink(expression, sourceKind);
+    if (keccakResult) return keccakResult;
 
     if (
       expression.type === "MemberAccess" ||
@@ -458,9 +483,9 @@ function classifyDirectSink(functionNode, sourceKind) {
     if (
       condition?.type === "BinaryOperation" &&
       condition.operator === "==" &&
-      ((containsSourceNode(condition.left, sourceKind) &&
+      ((isExactDirectSourceExpression(condition.left, sourceKind) &&
         isZeroLiteral(condition.right)) ||
-        (containsSourceNode(condition.right, sourceKind) &&
+        (isExactDirectSourceExpression(condition.right, sourceKind) &&
           isZeroLiteral(condition.left)))
     ) {
       return { sinkClass: "safe-observation", bindingClass: "direct" };
@@ -509,10 +534,13 @@ function bindingFacts(functionNode, sourceKind) {
     }
 
     for (const selection of selectionFacts(functionNode)) {
-      if (containsIdentifier(selection.dependencyNode, first.name)) {
+      if (isIdentifier(selection.dependencyNode, first.name)) {
         return selection.exactLength
           ? { bindingClass: "single-assignment", sinkClass: "selection" }
           : { bindingClass: "single-assignment", sinkClass: "unsupported" };
+      }
+      if (containsIdentifier(selection.dependencyNode, first.name)) {
+        return { bindingClass: "single-assignment", sinkClass: "unsupported" };
       }
     }
 
@@ -569,11 +597,18 @@ function assemblyBindingFacts(functionNode) {
     };
   }
   for (const selection of selectionFacts(functionNode)) {
-    if (containsIdentifier(selection.dependencyNode, exact.targetName)) {
+    if (isIdentifier(selection.dependencyNode, exact.targetName)) {
       return {
         sourceClass: "assembly-prevrandao",
         bindingClass: "single-assignment",
         sinkClass: selection.exactLength ? "selection" : "unsupported"
+      };
+    }
+    if (containsIdentifier(selection.dependencyNode, exact.targetName)) {
+      return {
+        sourceClass: "assembly-prevrandao",
+        bindingClass: "single-assignment",
+        sinkClass: "unsupported"
       };
     }
   }

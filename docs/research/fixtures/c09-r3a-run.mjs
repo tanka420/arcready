@@ -296,6 +296,80 @@ contract Extra {
 assert.equal(missingRange.sourceClass, "unsupported-source");
 assert.equal(missingRange.publicEmissionEligibility, "blocked-unsupported");
 
+const transformedLocalUse = classifySoliditySource({
+  parser,
+  source: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+contract Extra {
+  address[] internal members;
+  function pick() external view returns (address) {
+    uint256 seed = block.prevrandao;
+    return members[(seed + 1) % members.length];
+  }
+}
+`
+});
+assert.equal(transformedLocalUse.sinkClass, "unsupported");
+assert.equal(
+  transformedLocalUse.publicEmissionEligibility,
+  "blocked-unsupported"
+);
+
+const transformedAssemblyUse = classifySoliditySource({
+  parser,
+  source: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+contract Extra {
+  address[] internal members;
+  function pick() external view returns (address) {
+    uint256 seed;
+    assembly { seed := prevrandao() }
+    return members[(seed + 1) % members.length];
+  }
+}
+`
+});
+assert.equal(transformedAssemblyUse.sinkClass, "unsupported");
+assert.equal(
+  transformedAssemblyUse.publicEmissionEligibility,
+  "blocked-unsupported"
+);
+
+const transformedRequireZero = classifySoliditySource({
+  parser,
+  source: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+contract Extra {
+  function check() external view {
+    require(block.prevrandao + 1 == 0);
+  }
+}
+`
+});
+assert.equal(transformedRequireZero.sinkClass, "unsupported");
+assert.equal(
+  transformedRequireZero.publicEmissionEligibility,
+  "blocked-unsupported"
+);
+
+const wrappedKeccakOrdering = classifySoliditySource({
+  parser,
+  source: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+contract Extra {
+  function normalize(uint256 value) internal pure returns (uint256) { return value; }
+  function orderingKey(uint256 item) external view returns (uint256) {
+    return uint256(keccak256(abi.encode(item, normalize(block.prevrandao))));
+  }
+}
+`
+});
+assert.equal(wrappedKeccakOrdering.sinkClass, "unsupported");
+assert.equal(
+  wrappedKeccakOrdering.publicEmissionEligibility,
+  "blocked-unsupported"
+);
+
 if (failures.length === 0) {
-  process.stdout.write("C09-R3-A adversarial checks: 13 passed\n");
+  process.stdout.write("C09-R3-A adversarial checks: 17 passed\n");
 }
