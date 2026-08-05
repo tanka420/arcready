@@ -22,7 +22,11 @@ export async function runScan(
     exclude: config.exclude
   });
   const detectedPresets = detectProject({ projectRoot, files });
-  const rules = getRulesForScan(config.presets, detectedPresets);
+  const rules = getRulesForScan(
+    config.presets,
+    detectedPresets,
+    config.rules
+  );
   const findings = await runRules(
     rules,
     createRuleContext({
