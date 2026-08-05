@@ -166,15 +166,13 @@ function resolveFunctionConst(functionNode, name) {
 }
 
 function hasShadowedFetch(functionNode) {
-  return (
-    collectNodes(
-      functionNode,
-      (node) =>
-        (ts.isVariableDeclaration(node) || ts.isParameter(node)) &&
-        ts.isIdentifier(node.name) &&
-        node.name.text === "fetch"
-    ).length > 0
-  );
+  return collectNodes(
+    functionNode,
+    (node) =>
+      (ts.isVariableDeclaration(node) || ts.isParameter(node)) &&
+      ts.isIdentifier(node.name) &&
+      node.name.text === "fetch"
+  ).length > 0;
 }
 
 function classifyLoop(functionNode) {
@@ -236,7 +234,7 @@ function findFetchBinding(loop) {
   ) {
     return undefined;
   }
-  return { argument: call.arguments[0] };
+  return { call, argument: call.arguments[0], declaration };
 }
 
 function urlExpression(functionNode, fetchArgument) {
@@ -256,14 +254,10 @@ function hashBindingSupported(functionNode, hashName) {
     );
   }
   const declaration = resolveFunctionConst(functionNode, hashName);
-  const initializer =
-    declaration?.initializer === undefined
-      ? undefined
-      : unwrap(declaration.initializer);
   return (
-    initializer !== undefined &&
-    ts.isIdentifier(initializer) &&
-    initializer.text === "transactionHash"
+    declaration?.initializer !== undefined &&
+    ts.isIdentifier(unwrap(declaration.initializer)) &&
+    unwrap(declaration.initializer).text === "transactionHash"
   );
 }
 
@@ -321,16 +315,12 @@ function isCombined404And429(expression) {
 
 function isResponseNotOk(expression) {
   const current = unwrap(expression);
-  const operand =
-    ts.isPrefixUnaryExpression(current) &&
-    current.operator === ts.SyntaxKind.ExclamationToken
-      ? unwrap(current.operand)
-      : undefined;
   return (
-    operand !== undefined &&
-    ts.isPropertyAccessExpression(operand) &&
-    isIdentifierNamed(operand.expression, "response") &&
-    operand.name.text === "ok"
+    ts.isPrefixUnaryExpression(current) &&
+    current.operator === ts.SyntaxKind.ExclamationToken &&
+    ts.isPropertyAccessExpression(unwrap(current.operand)) &&
+    isIdentifierNamed(unwrap(current.operand).expression, "response") &&
+    unwrap(current.operand).name.text === "ok"
   );
 }
 
@@ -398,16 +388,8 @@ function branchAction(ifStatement) {
 }
 
 function classifyBranch(action, safeAction) {
-  if (action === safeAction) return SAFE;
-  if (
-    action === "throw" ||
-    action === "return" ||
-    action === "break" ||
-    action === "retry-tight"
-  ) {
-    return UNSAFE;
-  }
-  return UNSUPPORTED;
+  if (action === "unsupported") return UNSUPPORTED;
+  return action === safeAction ? SAFE : UNSAFE;
 }
 
 function isBodyDeclaration(statement) {
@@ -430,17 +412,15 @@ function isBodyDeclaration(statement) {
 }
 
 function hasEarlyResponseJson(loop, firstStatusStart) {
-  return (
-    collectNodes(
-      loop.statement,
-      (node) =>
-        ts.isCallExpression(node) &&
-        ts.isPropertyAccessExpression(node.expression) &&
-        isIdentifierNamed(node.expression.expression, "response") &&
-        node.expression.name.text === "json" &&
-        node.getStart() < firstStatusStart
-    ).length > 0
-  );
+  return collectNodes(
+    loop.statement,
+    (node) =>
+      ts.isCallExpression(node) &&
+      ts.isPropertyAccessExpression(node.expression) &&
+      isIdentifierNamed(node.expression.expression, "response") &&
+      node.expression.name.text === "json" &&
+      node.getStart() < firstStatusStart
+  ).length > 0;
 }
 
 function hasFinalTimeout(functionNode, loop) {
