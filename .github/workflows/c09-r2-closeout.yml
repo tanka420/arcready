@@ -1,0 +1,100 @@
+name: C09 R2 Closeout
+
+on:
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  closeout:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout head branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.1
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: corepack pnpm install --frozen-lockfile
+
+      - name: Apply final reviewed documentation corrections
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("docs/research/C09-R2.md")
+          text = path.read_text(encoding="utf-8")
+
+          replacements = [
+              ("Status: Review candidate", "Status: Complete"),
+              (
+                  "- exact official Arc RPC and contract-name association;",
+                  "- exact official Arc RPC pressure paired with conflicting or nonstandard deployment evidence;",
+              ),
+              (
+                  "- choose the R3-B framework;",
+                  "- implement a deployment adapter or authorize later Hardhat support;",
+              ),
+              (
+                  "C09-R3-B may begin only after independent review confirms the Foundry broadcast\nfamily as the single first adapter experiment. Hardhat support requires a later\nseparate adapter review.",
+                  "C09-R3-B may begin only after independent review confirms the Foundry broadcast\nfamily as the single first adapter experiment and pins one exact Foundry tool\nversion for the prototype. Hardhat support requires a later separate adapter\nreview.",
+              ),
+              (
+                  "- independent review reports zero blocker, major, and minor findings;",
+                  "- independent review reports `APPROVE` with zero blocker, major, and minor findings;",
+              ),
+          ]
+
+          for old, new in replacements:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"expected one match for {old!r}, got {count}")
+              text = text.replace(old, new, 1)
+
+          path.write_text(text, encoding="utf-8")
+          PY
+
+      - name: Validate final R2 artifacts
+        run: |
+          corepack pnpm exec prettier --write \
+            docs/research/C09-R2.md \
+            docs/research/fixtures/c09-r2-corpus.mjs \
+            docs/research/fixtures/c09-r2-generate-ast.mjs \
+            docs/research/fixtures/c09-r2-validate-ast.mjs \
+            docs/research/fixtures/c09-r2-ast-manifest.json
+          corepack pnpm exec prettier --check \
+            docs/research/C09-R2.md \
+            docs/research/fixtures/c09-r2-corpus.mjs \
+            docs/research/fixtures/c09-r2-generate-ast.mjs \
+            docs/research/fixtures/c09-r2-validate-ast.mjs \
+            docs/research/fixtures/c09-r2-ast-manifest.json
+          node docs/research/fixtures/c09-r2-corpus.mjs
+          node docs/research/fixtures/c09-r2-validate-ast.mjs
+          node docs/research/fixtures/c09-r2-generate-ast.mjs --check
+          git diff --check
+          corepack pnpm verify:full
+
+      - name: Commit closeout and self-clean
+        run: |
+          git rm .github/workflows/c09-r2-closeout.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/research/C09-R2.md
+          git commit -m "docs: complete C09-R2 corpus review"
+          git push origin HEAD:${{ github.head_ref }}
