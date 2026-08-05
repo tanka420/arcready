@@ -8,6 +8,7 @@ import { astComparatorCases, cases } from "./c09-r2-corpus.mjs";
 
 const COMPILER_VERSION = "0.8.30";
 const MANIFEST_URL = new URL("./c09-r2-ast-manifest.json", import.meta.url);
+const executable = process.platform === "win32" ? "npx.cmd" : "npx";
 
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
@@ -24,69 +25,76 @@ function stableJson(value) {
   return JSON.stringify(value);
 }
 
-const sources = Object.fromEntries(
-  astComparatorCases.map((expected) => {
-    const fixture = cases.find((candidate) => candidate.id === expected.id);
-    const content = fixture?.files[expected.sourcePath];
-    if (typeof content !== "string") {
-      throw new Error(`${expected.id}: comparator source is missing`);
-    }
-    if (sha256(content) !== expected.sourceSha256) {
-      throw new Error(`${expected.id}: comparator source hash is stale`);
-    }
-    return [expected.sourcePath, { content }];
-  })
-);
+function readComparatorSource(expected) {
+  const fixture = cases.find((candidate) => candidate.id === expected.id);
+  const content = fixture?.files[expected.sourcePath];
+  if (typeof content !== "string") {
+    throw new Error(`${expected.id}: comparator source is missing`);
+  }
+  if (sha256(content) !== expected.sourceSha256) {
+    throw new Error(`${expected.id}: comparator source hash is stale`);
+  }
+  return content;
+}
 
-const input = {
-  language: "Solidity",
-  sources,
-  settings: {
-    outputSelection: {
-      "*": {
-        "": ["ast"]
+function compileAst(expected, content) {
+  const input = {
+    language: "Solidity",
+    sources: {
+      [expected.sourcePath]: { content }
+    },
+    settings: {
+      outputSelection: {
+        "*": {
+          "": ["ast"]
+        }
       }
     }
-  }
-};
+  };
 
-const executable = process.platform === "win32" ? "npx.cmd" : "npx";
-const result = spawnSync(
-  executable,
-  ["--yes", `solc@${COMPILER_VERSION}`, "--standard-json"],
-  {
-    input: JSON.stringify(input),
-    encoding: "utf8",
-    maxBuffer: 64 * 1024 * 1024
-  }
-);
-
-if (result.error) throw result.error;
-if (result.status !== 0) {
-  throw new Error(`solc ${COMPILER_VERSION} failed: ${result.stderr}`);
-}
-
-const jsonStart = result.stdout.indexOf("{");
-if (jsonStart < 0) {
-  throw new Error("solc output did not contain Standard JSON");
-}
-const output = JSON.parse(result.stdout.slice(jsonStart));
-const compilerErrors = (output.errors ?? []).filter(
-  (entry) => entry.severity === "error"
-);
-if (compilerErrors.length > 0) {
-  throw new Error(
-    `solc reported errors:\n${compilerErrors
-      .map((entry) => entry.formattedMessage ?? entry.message)
-      .join("\n")}`
+  const result = spawnSync(
+    executable,
+    ["--yes", `solc@${COMPILER_VERSION}`, "--standard-json"],
+    {
+      input: JSON.stringify(input),
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024
+    }
   );
-}
 
-const entries = astComparatorCases.map((expected) => {
+  if (result.error) throw result.error;
+  if (result.status !== 0) {
+    throw new Error(
+      `${expected.id}: solc ${COMPILER_VERSION} failed: ${result.stderr}`
+    );
+  }
+
+  const jsonStart = result.stdout.indexOf("{");
+  if (jsonStart < 0) {
+    throw new Error(`${expected.id}: solc output did not contain Standard JSON`);
+  }
+  const output = JSON.parse(result.stdout.slice(jsonStart));
+  const compilerErrors = (output.errors ?? []).filter(
+    (entry) => entry.severity === "error"
+  );
+  if (compilerErrors.length > 0) {
+    throw new Error(
+      `${expected.id}: solc reported errors:\n${compilerErrors
+        .map((entry) => entry.formattedMessage ?? entry.message)
+        .join("\n")}`
+    );
+  }
+
   const ast = output.sources?.[expected.sourcePath]?.ast;
   if (!ast || typeof ast !== "object") {
     throw new Error(`${expected.id}: compiler AST is missing`);
   }
+  return ast;
+}
+
+const entries = astComparatorCases.map((expected) => {
+  const content = readComparatorSource(expected);
+  const ast = compileAst(expected, content);
   return {
     id: expected.id,
     compilerVersion: COMPILER_VERSION,
@@ -115,7 +123,7 @@ if (checkMode) {
   const retained = JSON.parse(readFileSync(MANIFEST_URL, "utf8"));
   if (stableJson(retained) !== stableJson(manifest)) {
     throw new Error(
-      "Retained AST manifest does not match regenerated solc 0.8.30 output"
+      "Retained AST manifest does not match per-source solc 0.8.30 output"
     );
   }
 } else {
