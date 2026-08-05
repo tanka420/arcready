@@ -76,7 +76,19 @@ jobs:
           git diff --check
 
       - name: Run full repository gate
-        run: corepack pnpm verify:full
+        shell: bash
+        run: |
+          set +e
+          corepack pnpm verify:full > /tmp/c08a-e1-verify.log 2>&1
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            echo "==> C08A-E1 failure summary"
+            grep -n -E "FAIL|AssertionError|expected|Error:|×|failed|Mismatch|Result:" /tmp/c08a-e1-verify.log | tail -n 180 || true
+            echo "==> C08A-E1 final log tail"
+            tail -n 260 /tmp/c08a-e1-verify.log
+            exit "$status"
+          fi
+          cat /tmp/c08a-e1-verify.log
 
       - name: Commit E1 candidate and self-clean
         run: |
