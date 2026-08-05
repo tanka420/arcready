@@ -1,0 +1,214 @@
+name: C08A E2 Finalize Retry 4
+
+on:
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout head branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.1
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: corepack pnpm install --frozen-lockfile
+
+      - name: Apply policy patch with line-bounded catalog replacement
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import textwrap
+
+          def clean(value):
+              return textwrap.dedent(value).lstrip("\n")
+
+          taxonomy = Path("packages/arcready/core/rules/taxonomy.ts")
+          text = taxonomy.read_text(encoding="utf-8")
+          start = text.index('    case "advice":')
+          end = text.index('    case "needs-research":', start)
+          replacement = textwrap.indent(
+              clean('''
+              case "advice":
+                if (metadata.impact !== "recommendation") {
+                  errors.push(`${metadata.id}: advice must use recommendation impact`);
+                }
+                if (metadata.recommendedDefaultEnabled) {
+                  errors.push(`${metadata.id}: advice rules must be recommended disabled`);
+                }
+                if (metadata.deprecated !== (metadata.maturity === "deprecated")) {
+                  errors.push(
+                    `${metadata.id}: advice deprecation and maturity must agree`
+                  );
+                }
+                break;
+              '''),
+              "    ",
+          )
+          taxonomy.write_text(text[:start] + replacement + text[end:], encoding="utf-8")
+
+          catalog = Path("packages/arcready/core/rules/catalog.ts")
+          catalog_text = catalog.read_text(encoding="utf-8")
+          current_position = catalog_text.index(
+              'id: "bridge/ATTESTATION_404_NOT_FATAL"'
+          )
+          next_position = catalog_text.index(
+              'id: "bridge/BRIDGE_CONFIRMATIONS_ONE"', current_position
+          )
+
+          current_id_line = catalog_text.rfind("\n", 0, current_position) + 1
+          next_id_line = catalog_text.rfind("\n", 0, next_position) + 1
+          entry_start = catalog_text.rfind("\n", 0, current_id_line - 1) + 1
+          entry_end = catalog_text.rfind("\n", 0, next_id_line - 1) + 1
+          if entry_start < 0 or entry_end <= entry_start:
+              raise SystemExit(
+                  f"runtime catalog line bounds invalid: {entry_start}, {entry_end}"
+              )
+
+          catalog_entry = textwrap.indent(
+              clean('''
+              {
+                id: "bridge/ATTESTATION_404_NOT_FATAL",
+                category: "bridge",
+                rulePacks: ["bridge-cctp", "indexer-infrastructure"],
+                taxonomy: "advice",
+                impact: "recommendation",
+                defaultConfidence: "low",
+                maturity: "deprecated",
+                recommendedDefaultEnabled: false,
+                recommendedCiFailureEligible: false,
+                appliesTo: ["attestation-poller"],
+                documentation: [
+                  {
+                    url: "https://developers.circle.com/cctp/howtos/resolve-stuck-attestation",
+                    title: "Resolve attestation issues",
+                    publisher: "Circle",
+                    claim:
+                      "An attestation API 404 can be an expected pending response that should continue polling, but it can also indicate incorrect request parameters.",
+                    support: "direct",
+                    verifiedAt: VERIFIED_AT,
+                    stability: "versioned"
+                  }
+                ],
+                rationale:
+                  "The polling guidance remains useful, but HTTP 404 is conditional and the proximity regex cannot prove request provenance or control-flow ownership. C08 therefore removed the rule from default execution and retained it only as explicit deprecated advice.",
+                detectorLimitations: [
+                  "The regex cannot distinguish a pending attestation from incorrect domains or transaction identifiers.",
+                  "Nearby retry words do not prove correct polling, positive delay, a bounded exit, or terminal-error ownership.",
+                  "The detector can conflate unrelated nearby branches and can miss terminal actions that do not use its matched keywords."
+                ],
+                deprecated: true
+              },
+              '''),
+              "  ",
+          )
+          catalog.write_text(
+              catalog_text[:entry_start] + catalog_entry + catalog_text[entry_end:],
+              encoding="utf-8",
+          )
+
+          workflow = Path(".github/workflows/c08a-e2-finalize-retry2.yml").read_text(
+              encoding="utf-8"
+          )
+          marker = "          python3 - <<'PY'\n"
+          script_start = workflow.index(marker) + len(marker)
+          script_end = workflow.index("\n          PY\n", script_start)
+          script = textwrap.dedent(workflow[script_start:script_end])
+
+          advice_label = script.index('"advice validation",')
+          advice_start = script.rfind("replace_once(", 0, advice_label)
+          catalog_start = script.index("catalog = Path", advice_label)
+          docs_start = script.index("docs = Path", catalog_start)
+          if advice_start < 0 or docs_start <= catalog_start:
+              raise SystemExit(
+                  f"script removal bounds invalid: advice={advice_start} catalog={catalog_start} docs={docs_start}"
+              )
+          script = script[:advice_start] + script[docs_start:]
+          Path("/tmp/c08a-e2-policy.py").write_text(script, encoding="utf-8")
+          PY
+
+          python3 /tmp/c08a-e2-policy.py
+
+      - name: Format and run focused policy tests
+        run: |
+          corepack pnpm exec prettier --write \
+            packages/arcready/rules/bridge/attestation-404-not-fatal.ts \
+            packages/arcready/core/rules/taxonomy.ts \
+            packages/arcready/core/rules/catalog.ts \
+            docs/rule-catalog.md \
+            packages/arcready/test/bridge-rules.test.ts \
+            packages/arcready/test/rule-taxonomy.test.ts
+          corepack pnpm exec prettier --check \
+            packages/arcready/rules/bridge/attestation-404-not-fatal.ts \
+            packages/arcready/core/rules/taxonomy.ts \
+            packages/arcready/core/rules/catalog.ts \
+            docs/rule-catalog.md \
+            packages/arcready/test/bridge-rules.test.ts \
+            packages/arcready/test/rule-taxonomy.test.ts
+          corepack pnpm --filter arcready exec vitest run \
+            test/bridge-rules.test.ts \
+            test/rule-taxonomy.test.ts \
+            test/c08a-explicit-advice-selection.test.ts
+          git diff --check
+
+      - name: Run full repository gate
+        shell: bash
+        run: |
+          set +e
+          corepack pnpm verify:full > /tmp/c08a-e2-verify.log 2>&1
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            echo "==> C08A-E2 failure summary"
+            grep -n -E "FAIL|AssertionError|expected|Error:|×|failed|Mismatch|Result:" /tmp/c08a-e2-verify.log | tail -n 180 || true
+            echo "==> C08A-E2 final log tail"
+            tail -n 260 /tmp/c08a-e2-verify.log
+            exit "$status"
+          fi
+          cat /tmp/c08a-e2-verify.log
+
+      - name: Upload verification log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: c08a-e2-verify-log
+          if-no-files-found: ignore
+          retention-days: 1
+          path: /tmp/c08a-e2-verify.log
+
+      - name: Commit E2 candidate and self-clean
+        run: |
+          git rm \
+            .github/workflows/c08a-e2-finalize.yml \
+            .github/workflows/c08a-e2-finalize-retry.yml \
+            .github/workflows/c08a-e2-finalize-retry2.yml \
+            .github/workflows/c08a-e2-finalize-retry3.yml \
+            .github/workflows/c08a-e2-finalize-retry4.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            packages/arcready/rules/bridge/attestation-404-not-fatal.ts \
+            packages/arcready/core/rules/taxonomy.ts \
+            packages/arcready/core/rules/catalog.ts \
+            docs/rule-catalog.md \
+            packages/arcready/test/bridge-rules.test.ts \
+            packages/arcready/test/rule-taxonomy.test.ts
+          git commit -m "test: lock C08A-E2 advisory policy"
+          git push origin HEAD:${{ github.head_ref }}
