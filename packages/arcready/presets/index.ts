@@ -1,4 +1,7 @@
-import type { ArcReadyPreset } from "../core/config/index.js";
+import type {
+  ArcReadyPreset,
+  ArcReadyRuleLevel
+} from "../core/config/index.js";
 import type { ProjectDetection } from "../core/project/index.js";
 import type { Rule } from "../core/rules/index.js";
 import {
@@ -7,7 +10,10 @@ import {
   ubDelegateRequiredRule,
   ubFeeExplanationPresentRule
 } from "../rules/app-kit/index.js";
-import { bridgeRules } from "../rules/bridge/index.js";
+import {
+  attestation404NotFatalRule,
+  bridgeRules
+} from "../rules/bridge/index.js";
 import { walletRules } from "../rules/wallet/index.js";
 
 export type PresetRuleMap = Record<ArcReadyPreset, Rule[]>;
@@ -29,6 +35,16 @@ const appKitDefaultPresetRules: Rule[] = [
   ubDelegateRequiredRule,
   ubFeeExplanationPresentRule
 ];
+
+// `bridgeRules` remains the all-known public inventory. Default bridge scans use
+// this private subset so default exclusion does not remove the public rule ID.
+const bridgeDefaultPresetRules: Rule[] = bridgeRules.filter(
+  (rule) => rule.id !== attestation404NotFatalRule.id
+);
+
+// Built-in default-excluded rules may be selected only through the top-level
+// default helper. Custom PresetRegistry instances never receive this registry.
+const defaultExcludedRules: Rule[] = [attestation404NotFatalRule];
 
 export function createPresetRegistry(
   initialRules: Partial<Record<ArcReadyPreset, Rule[]>> = {}
@@ -60,7 +76,7 @@ export function createPresetRegistry(
 export const defaultPresetRegistry = createPresetRegistry({
   wallet: walletRules,
   "app-kit": appKitDefaultPresetRules,
-  bridge: bridgeRules
+  bridge: bridgeDefaultPresetRules
 });
 
 export function getRulesForPresets(presets: ArcReadyPreset[]): Rule[] {
@@ -69,9 +85,24 @@ export function getRulesForPresets(presets: ArcReadyPreset[]): Rule[] {
 
 export function getRulesForScan(
   configuredPresets: ArcReadyPreset[],
-  detection: ProjectDetection
+  detection: ProjectDetection,
+  configuredRules: Readonly<Record<string, ArcReadyRuleLevel>> = {}
 ): Rule[] {
-  return defaultPresetRegistry.getRulesForScan(configuredPresets, detection);
+  const presetRules = defaultPresetRegistry.getRulesForScan(
+    configuredPresets,
+    detection
+  );
+  const optedInRules = defaultExcludedRules.filter((rule) =>
+    isEnabledRuleLevel(configuredRules[rule.id])
+  );
+
+  return dedupeRules([...presetRules, ...optedInRules]);
+}
+
+function isEnabledRuleLevel(
+  level: ArcReadyRuleLevel | undefined
+): level is Exclude<ArcReadyRuleLevel, "off"> {
+  return level === "info" || level === "warning" || level === "critical";
 }
 
 function dedupeRules(rules: Rule[]): Rule[] {
