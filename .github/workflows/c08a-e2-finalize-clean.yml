@@ -36,31 +36,53 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          import re
           import textwrap
-
-          def replace_once(path: str, pattern: str, replacement: str, label: str, flags: int = 0) -> None:
-              target = Path(path)
-              text = target.read_text(encoding="utf-8")
-              updated, count = re.subn(pattern, replacement, text, count=1, flags=flags)
-              if count != 1:
-                  raise SystemExit(f"{label}: expected one replacement, got {count}")
-              target.write_text(updated, encoding="utf-8")
 
           def block(value: str) -> str:
               return textwrap.dedent(value).strip("\n") + "\n"
 
-          replace_once(
+          def replace_between(path: str, start: str, end: str, replacement: str, label: str) -> None:
+              target = Path(path)
+              text = target.read_text(encoding="utf-8")
+              if text.count(start) != 1 or text.count(end) != 1:
+                  raise SystemExit(
+                      f"{label}: start={text.count(start)} end={text.count(end)}"
+                  )
+              start_index = text.index(start)
+              end_index = text.index(end, start_index + len(start))
+              target.write_text(
+                  text[:start_index] + replacement + text[end_index:],
+                  encoding="utf-8",
+              )
+
+          def replace_once(path: str, old: str, new: str, label: str) -> None:
+              target = Path(path)
+              text = target.read_text(encoding="utf-8")
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{label}: expected 1 match, got {count}")
+              target.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          def replace_test(path: str, title: str, next_title: str, replacement: str, label: str) -> None:
+              target = Path(path)
+              text = target.read_text(encoding="utf-8")
+              title_token = f'  it("{title}"'
+              next_token = f'  it("{next_title}"'
+              if text.count(title_token) != 1 or text.count(next_token) != 1:
+                  raise SystemExit(
+                      f"{label}: title={text.count(title_token)} next={text.count(next_token)}"
+                  )
+              start_index = text.index(title_token)
+              end_index = text.index(next_token, start_index)
+              target.write_text(
+                  text[:start_index] + replacement + text[end_index:],
+                  encoding="utf-8",
+              )
+
+          replace_between(
               "packages/arcready/core/rules/taxonomy.ts",
-              re.escape(block('''
-              interface AdviceMetadata extends RuleMetadataBase {
-                taxonomy: "advice";
-                impact: "recommendation";
-                recommendedDefaultEnabled: false;
-                recommendedCiFailureEligible: false;
-                deprecated: false;
-              }
-              ''')),
+              "interface AdviceMetadata extends RuleMetadataBase {",
+              "interface NeedsResearchMetadata extends RuleMetadataBase {",
               block('''
               interface ActiveAdviceMetadata extends RuleMetadataBase {
                 taxonomy: "advice";
@@ -81,23 +103,17 @@ jobs:
               }
 
               type AdviceMetadata = ActiveAdviceMetadata | DeprecatedAdviceMetadata;
+
               '''),
               "taxonomy advice union",
           )
 
-          replace_once(
+          replace_between(
               "packages/arcready/core/rules/taxonomy.ts",
-              re.escape(block('''
-                  case "advice":
-                    if (metadata.impact !== "recommendation") {
-                      errors.push(`${metadata.id}: advice must use recommendation impact`);
-                    }
-                    if (metadata.recommendedDefaultEnabled) {
-                      errors.push(`${metadata.id}: advice rules must be recommended disabled`);
-                    }
-                    break;
-              ''')),
-              block('''
+              '    case "advice":',
+              '    case "needs-research":',
+              textwrap.indent(
+                  block('''
                   case "advice":
                     if (metadata.impact !== "recommendation") {
                       errors.push(`${metadata.id}: advice must use recommendation impact`);
@@ -111,62 +127,77 @@ jobs:
                       );
                     }
                     break;
-              '''),
+                  '''),
+                  "    ",
+              ),
               "taxonomy advice validator",
           )
 
-          replace_once(
+          replace_between(
               "packages/arcready/core/rules/catalog.ts",
-              r'''  \{\n    id: "bridge/ATTESTATION_404_NOT_FATAL",[\s\S]*?\n  \},\n(?=  \{\n    id: "bridge/BRIDGE_CONFIRMATIONS_ONE",)''',
-              block('''
-                {
-                  id: "bridge/ATTESTATION_404_NOT_FATAL",
-                  category: "bridge",
-                  rulePacks: ["bridge-cctp", "indexer-infrastructure"],
-                  taxonomy: "advice",
-                  impact: "recommendation",
-                  defaultConfidence: "low",
-                  maturity: "deprecated",
-                  recommendedDefaultEnabled: false,
-                  recommendedCiFailureEligible: false,
-                  appliesTo: ["attestation-poller"],
-                  documentation: [
-                    {
-                      url: "https://developers.circle.com/cctp/howtos/resolve-stuck-attestation",
-                      title: "Resolve attestation issues",
-                      publisher: "Circle",
-                      claim:
-                        "An attestation API 404 can be an expected pending response that should continue polling, but it can also indicate incorrect request parameters.",
-                      support: "direct",
-                      verifiedAt: VERIFIED_AT,
-                      stability: "versioned"
-                    }
-                  ],
-                  rationale:
-                    "The polling guidance remains useful, but HTTP 404 is conditional and the proximity regex cannot prove request provenance or control-flow ownership. C08 therefore removed the rule from default execution and retained it only as explicit deprecated advice.",
-                  detectorLimitations: [
-                    "The regex cannot distinguish a pending attestation from incorrect domains or transaction identifiers.",
-                    "Nearby retry words do not prove correct polling, positive delay, a bounded exit, or terminal-error ownership.",
-                    "The detector can conflate unrelated nearby branches and can miss terminal actions that do not use its matched keywords."
-                  ],
-                  deprecated: true
-                },
-              '''),
-              "runtime catalog attestation entry",
-              re.MULTILINE,
+              '  {\n    id: "bridge/ATTESTATION_404_NOT_FATAL",',
+              '  {\n    id: "bridge/BRIDGE_CONFIRMATIONS_ONE",',
+              textwrap.indent(
+                  block('''
+                  {
+                    id: "bridge/ATTESTATION_404_NOT_FATAL",
+                    category: "bridge",
+                    rulePacks: ["bridge-cctp", "indexer-infrastructure"],
+                    taxonomy: "advice",
+                    impact: "recommendation",
+                    defaultConfidence: "low",
+                    maturity: "deprecated",
+                    recommendedDefaultEnabled: false,
+                    recommendedCiFailureEligible: false,
+                    appliesTo: ["attestation-poller"],
+                    documentation: [
+                      {
+                        url: "https://developers.circle.com/cctp/howtos/resolve-stuck-attestation",
+                        title: "Resolve attestation issues",
+                        publisher: "Circle",
+                        claim:
+                          "An attestation API 404 can be an expected pending response that should continue polling, but it can also indicate incorrect request parameters.",
+                        support: "direct",
+                        verifiedAt: VERIFIED_AT,
+                        stability: "versioned"
+                      }
+                    ],
+                    rationale:
+                      "The polling guidance remains useful, but HTTP 404 is conditional and the proximity regex cannot prove request provenance or control-flow ownership. C08 therefore removed the rule from default execution and retained it only as explicit deprecated advice.",
+                    detectorLimitations: [
+                      "The regex cannot distinguish a pending attestation from incorrect domains or transaction identifiers.",
+                      "Nearby retry words do not prove correct polling, positive delay, a bounded exit, or terminal-error ownership.",
+                      "The detector can conflate unrelated nearby branches and can miss terminal actions that do not use its matched keywords."
+                    ],
+                    deprecated: true
+                  },
+                  '''),
+                  "  ",
+              ),
+              "runtime catalog entry",
           )
 
-          replace_once(
-              "docs/rule-catalog.md",
-              r'''^\| Bridge\s+\| `bridge/ATTESTATION_404_NOT_FATAL`\s+\| Critical \|.*$''',
-              "| Bridge  | `bridge/ATTESTATION_404_NOT_FATAL`      | Info     | Deprecated, default-excluded low-confidence guidance for suspicious terminal handling near conditional attestation `404` responses. |",
-              "docs summary row",
-              re.MULTILINE,
+          docs_path = "docs/rule-catalog.md"
+          docs = Path(docs_path)
+          docs_lines = docs.read_text(encoding="utf-8").splitlines()
+          row_indexes = [
+              index
+              for index, line in enumerate(docs_lines)
+              if "`bridge/ATTESTATION_404_NOT_FATAL`" in line
+              and line.startswith("| Bridge")
+          ]
+          if len(row_indexes) != 1:
+              raise SystemExit(f"docs summary row: matches={len(row_indexes)}")
+          docs_lines[row_indexes[0]] = (
+              "| Bridge  | `bridge/ATTESTATION_404_NOT_FATAL`      | Info     | "
+              "Deprecated, default-excluded low-confidence guidance for suspicious terminal handling near conditional attestation `404` responses. |"
           )
+          docs.write_text("\n".join(docs_lines) + "\n", encoding="utf-8")
 
-          replace_once(
-              "docs/rule-catalog.md",
-              r'''### ATTESTATION_404_NOT_FATAL\n[\s\S]*?(?=### NO_PREVRANDAO_RELAY_SELECTION\n)''',
+          replace_between(
+              docs_path,
+              "### ATTESTATION_404_NOT_FATAL\n",
+              "### NO_PREVRANDAO_RELAY_SELECTION\n",
               block('''
               ### ATTESTATION_404_NOT_FATAL
 
@@ -190,123 +221,131 @@ jobs:
 
               '''),
               "docs attestation section",
-              re.MULTILINE,
           )
 
-          replace_once(
+          replace_test(
               "packages/arcready/test/bridge-rules.test.ts",
-              r'''  it\("ATTESTATION_404_NOT_FATAL flags fatal 404 attestation handling", async \(\) => \{[\s\S]*?\n  \}\);\n\n(?=  it\("ATTESTATION_404_NOT_FATAL allows pending 404 handling")''',
-              block('''
-                it("ATTESTATION_404_NOT_FATAL emits conditional deprecated advice", async () => {
-                  const findings = await runBridgeRule(
-                    attestation404NotFatalRule,
-                    "async function pollAttestation(response) { // CCTP attestation\\n if (response.status === 404) throw new Error('attestation failed');\\n}"
-                  );
+              "ATTESTATION_404_NOT_FATAL flags fatal 404 attestation handling",
+              "ATTESTATION_404_NOT_FATAL allows pending 404 handling",
+              textwrap.indent(
+                  block('''
+                  it("ATTESTATION_404_NOT_FATAL emits conditional deprecated advice", async () => {
+                    const findings = await runBridgeRule(
+                      attestation404NotFatalRule,
+                      "async function pollAttestation(response) { // CCTP attestation\\n if (response.status === 404) throw new Error('attestation failed');\\n}"
+                    );
 
-                  expect(attestation404NotFatalRule).toMatchObject({
-                    defaultSeverity: "info",
-                    description: expect.stringContaining("deprecated low-confidence")
+                    expect(attestation404NotFatalRule).toMatchObject({
+                      defaultSeverity: "info",
+                      description: expect.stringContaining("deprecated low-confidence")
+                    });
+                    expect(findings[0]).toMatchObject({
+                      ruleId: "bridge/ATTESTATION_404_NOT_FATAL",
+                      severity: "info",
+                      docs: "arc-cctp-attestation",
+                      message: expect.stringContaining("Deprecated CCTP guidance"),
+                      suggestedFix: expect.stringContaining("verify the source burn succeeded")
+                    });
+
+                    const suggestedFix = findings[0]?.suggestedFix ?? "";
+                    expect(suggestedFix).toContain("transaction hash");
+                    expect(suggestedFix).toContain("source domain");
+                    expect(suggestedFix).toContain("positive delay");
+                    expect(suggestedFix).toContain("bounded timeout or cancellation");
+                    expect(suggestedFix).toContain("429");
+                    expect(suggestedFix).toContain("unexpected non-OK");
+                    expect(suggestedFix).toContain("empty messages");
+                    expect(suggestedFix).toContain("pending");
+                    expect(suggestedFix).toContain("complete");
+                    expect(suggestedFix).not.toContain(
+                      "404 as a retryable pending state"
+                    );
                   });
-                  expect(findings[0]).toMatchObject({
-                    ruleId: "bridge/ATTESTATION_404_NOT_FATAL",
-                    severity: "info",
-                    docs: "arc-cctp-attestation",
-                    message: expect.stringContaining("Deprecated CCTP guidance"),
-                    suggestedFix: expect.stringContaining("verify the source burn succeeded")
-                  });
 
-                  const suggestedFix = findings[0]?.suggestedFix ?? "";
-                  expect(suggestedFix).toContain("transaction hash");
-                  expect(suggestedFix).toContain("source domain");
-                  expect(suggestedFix).toContain("positive delay");
-                  expect(suggestedFix).toContain("bounded timeout or cancellation");
-                  expect(suggestedFix).toContain("429");
-                  expect(suggestedFix).toContain("unexpected non-OK");
-                  expect(suggestedFix).toContain("empty messages");
-                  expect(suggestedFix).toContain("pending");
-                  expect(suggestedFix).toContain("complete");
-                  expect(suggestedFix).not.toContain(
-                    "404 as a retryable pending state"
-                  );
-                });
-
-              '''),
+                  '''),
+                  "  ",
+              ),
               "bridge policy test",
-              re.MULTILINE,
           )
 
           taxonomy_test = "packages/arcready/test/rule-taxonomy.test.ts"
           replace_once(
               taxonomy_test,
-              re.escape('      "experimental-compatibility": 13,'),
+              '      "experimental-compatibility": 13,',
               '      "experimental-compatibility": 12,',
               "experimental total",
           )
           replace_once(
               taxonomy_test,
-              re.escape("      advice: 4,"),
+              "      advice: 4,",
               "      advice: 5,",
               "advice total",
           )
 
-          replace_once(
+          replace_test(
               taxonomy_test,
-              r'''  it\("locks the owner-approved attestation classification", \(\) => \{[\s\S]*?\n  \}\);\n\n(?=  it\("does not expose taxonomy metadata through the public package API")''',
-              block('''
-                it("locks the reviewed deprecated-advice attestation classification", () => {
-                  const attestation = findMetadata("bridge/ATTESTATION_404_NOT_FATAL");
+              "locks the owner-approved attestation classification",
+              "does not expose taxonomy metadata through the public package API",
+              textwrap.indent(
+                  block('''
+                  it("locks the reviewed deprecated-advice attestation classification", () => {
+                    const attestation = findMetadata("bridge/ATTESTATION_404_NOT_FATAL");
 
-                  expect(attestation).toMatchObject({
-                    taxonomy: "advice",
-                    impact: "recommendation",
-                    defaultConfidence: "low",
-                    maturity: "deprecated",
-                    recommendedDefaultEnabled: false,
-                    recommendedCiFailureEligible: false,
-                    deprecated: true
+                    expect(attestation).toMatchObject({
+                      taxonomy: "advice",
+                      impact: "recommendation",
+                      defaultConfidence: "low",
+                      maturity: "deprecated",
+                      recommendedDefaultEnabled: false,
+                      recommendedCiFailureEligible: false,
+                      deprecated: true
+                    });
+                    expect(attestation.rulePacks).toEqual(
+                      expect.arrayContaining(["bridge-cctp", "indexer-infrastructure"])
+                    );
                   });
-                  expect(attestation.rulePacks).toEqual(
-                    expect.arrayContaining(["bridge-cctp", "indexer-infrastructure"])
-                  );
-                });
 
-              '''),
-              "attestation taxonomy contract",
-              re.MULTILINE,
+                  '''),
+                  "  ",
+              ),
+              "attestation taxonomy test",
           )
 
-          replace_once(
-              taxonomy_test,
-              r'''(?=  it\("uses only official, dated documentation references")''',
+          invariant = textwrap.indent(
               block('''
-                it("requires advice deprecation and maturity to agree", () => {
-                  const activeAdvice = findMetadata("wallet/ONE_CONFIRMATION_FINAL");
-                  const deprecatedAdvice = findMetadata(
-                    "bridge/ATTESTATION_404_NOT_FATAL"
-                  );
+              it("requires advice deprecation and maturity to agree", () => {
+                const activeAdvice = findMetadata("wallet/ONE_CONFIRMATION_FINAL");
+                const deprecatedAdvice = findMetadata(
+                  "bridge/ATTESTATION_404_NOT_FATAL"
+                );
 
-                  expect(
-                    validateRuleMetadata({
-                      ...activeAdvice,
-                      maturity: "deprecated"
-                    } as unknown as RuleMetadataInput)
-                  ).toContain(
-                    "wallet/ONE_CONFIRMATION_FINAL: advice deprecation and maturity must agree"
-                  );
+                expect(
+                  validateRuleMetadata({
+                    ...activeAdvice,
+                    maturity: "deprecated"
+                  } as unknown as RuleMetadataInput)
+                ).toContain(
+                  "wallet/ONE_CONFIRMATION_FINAL: advice deprecation and maturity must agree"
+                );
 
-                  expect(
-                    validateRuleMetadata({
-                      ...deprecatedAdvice,
-                      maturity: "prototype"
-                    } as unknown as RuleMetadataInput)
-                  ).toContain(
-                    "bridge/ATTESTATION_404_NOT_FATAL: advice deprecation and maturity must agree"
-                  );
-                });
+                expect(
+                  validateRuleMetadata({
+                    ...deprecatedAdvice,
+                    maturity: "prototype"
+                  } as unknown as RuleMetadataInput)
+                ).toContain(
+                  "bridge/ATTESTATION_404_NOT_FATAL: advice deprecation and maturity must agree"
+                );
+              });
 
               '''),
-              "advice deprecation invariant test",
-              re.MULTILINE,
+              "  ",
+          )
+          replace_once(
+              taxonomy_test,
+              '  it("uses only official, dated documentation references", () => {',
+              invariant + '  it("uses only official, dated documentation references", () => {',
+              "advice invariant test",
           )
           PY
 
