@@ -1,9 +1,9 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
-import { writeFileSync } from "node:fs";
 import { astComparatorCases, cases } from "./c09-r2-corpus.mjs";
 
 const COMPILER_VERSION = "0.8.30";
@@ -105,16 +105,30 @@ const manifest = {
   entries
 };
 
-const outputPath = process.argv[2]
-  ? resolve(process.argv[2])
-  : fileURLToPath(MANIFEST_URL);
-writeFileSync(outputPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+const checkMode = process.argv[2] === "--check";
+const outputPath =
+  !checkMode && process.argv[2]
+    ? resolve(process.argv[2])
+    : fileURLToPath(MANIFEST_URL);
+
+if (checkMode) {
+  const retained = JSON.parse(readFileSync(MANIFEST_URL, "utf8"));
+  if (stableJson(retained) !== stableJson(manifest)) {
+    throw new Error(
+      "Retained AST manifest does not match regenerated solc 0.8.30 output"
+    );
+  }
+} else {
+  writeFileSync(outputPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+}
+
 process.stdout.write(
   `${JSON.stringify(
     {
       compiler: manifest.compiler,
       compilerVersion: manifest.compilerVersion,
       entries: manifest.entries.length,
+      mode: checkMode ? "check" : "write",
       outputPath
     },
     null,
