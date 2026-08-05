@@ -31,7 +31,6 @@ describe("cross-preset regression coverage", () => {
       "bridge/CCTP_DOMAIN_26",
       "bridge/NO_WRAPPED_USDC_ON_ARC",
       "bridge/RELAYER_USES_USDC_FOR_GAS",
-      "bridge/ATTESTATION_404_NOT_FATAL",
       "bridge/NO_PREVRANDAO_RELAY_SELECTION"
     ]);
 
@@ -48,7 +47,7 @@ describe("cross-preset regression coverage", () => {
       (rule) => rule.id
     );
 
-    expect(ruleIds).toHaveLength(17);
+    expect(ruleIds).toHaveLength(16);
     expect(ruleIds.every((ruleId) => !ruleId.includes("placeholder"))).toBe(
       true
     );

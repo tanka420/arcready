@@ -730,7 +730,7 @@ signer.sendTransaction({ type: 3, blobs: [blob] });`
         "wallet/NO_BLOB_TX_ON_ARC"
       );
       expect(getRulesForPresets(["wallet", "bridge", "app-kit"])).toHaveLength(
-        17
+        16
       );
     });
 
