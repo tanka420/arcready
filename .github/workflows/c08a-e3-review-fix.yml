@@ -1,0 +1,78 @@
+name: C08A E3 Review Fix
+
+on:
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout head branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.1
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: corepack pnpm install --frozen-lockfile
+
+      - name: Remove duplicate headings
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          replacements = {
+              "docs/roadmap.md": (
+                  "### C09 — Replace: shared Solidity `PREVRANDAO` value dependency\n\n### C09 — Replace: shared Solidity `PREVRANDAO` value dependency\n",
+                  "### C09 — Replace: shared Solidity `PREVRANDAO` value dependency\n",
+              ),
+              "docs/rule-development-backlog.md": (
+                  "### `bridge/NO_PREVRANDAO_RELAY_SELECTION`\n\n### `bridge/NO_PREVRANDAO_RELAY_SELECTION`\n",
+                  "### `bridge/NO_PREVRANDAO_RELAY_SELECTION`\n",
+              ),
+          }
+
+          for filename, (old, new) in replacements.items():
+              path = Path(filename)
+              text = path.read_text(encoding="utf-8")
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{filename}: expected 1 duplicate, got {count}")
+              path.write_text(text.replace(old, new, 1), encoding="utf-8")
+          PY
+
+      - name: Validate review correction
+        run: |
+          corepack pnpm exec prettier --write \
+            docs/roadmap.md \
+            docs/rule-development-backlog.md
+          corepack pnpm exec prettier --check \
+            docs/roadmap.md \
+            docs/rule-development-backlog.md
+          git diff --check
+          corepack pnpm verify:full
+
+      - name: Commit correction and self-clean
+        run: |
+          git rm .github/workflows/c08a-e3-review-fix.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "docs: remove duplicate C08A closeout headings"
+          git push origin HEAD:${{ github.head_ref }}
