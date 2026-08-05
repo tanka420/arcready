@@ -1,0 +1,91 @@
+name: C09 R3A Closeout
+
+on:
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  closeout:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout head branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.1
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install repository dependencies
+        run: corepack pnpm install --frozen-lockfile
+
+      - name: Install exact test-only parser
+        run: |
+          mkdir -p /tmp/c09-parser
+          npm install \
+            --prefix /tmp/c09-parser \
+            --ignore-scripts \
+            --no-package-lock \
+            @solidity-parser/parser@0.20.2
+          test "$(node -p "require('/tmp/c09-parser/node_modules/@solidity-parser/parser/package.json').version")" = "0.20.2"
+
+      - name: Validate final R3-A artifacts
+        run: |
+          corepack pnpm exec prettier --write \
+            docs/research/C09-R3A.md \
+            docs/research/prototypes/c09-r3a-analyzer.mjs \
+            docs/research/prototypes/c09-r3a-runner.mjs \
+            docs/research/prototypes/c09-r3a-adversarial.mjs \
+            docs/research/prototypes/c09-r3a-adversarial-extended.mjs
+          corepack pnpm exec prettier --check \
+            docs/research/C09-R3A.md \
+            docs/research/prototypes/c09-r3a-analyzer.mjs \
+            docs/research/prototypes/c09-r3a-runner.mjs \
+            docs/research/prototypes/c09-r3a-adversarial.mjs \
+            docs/research/prototypes/c09-r3a-adversarial-extended.mjs
+          node --check docs/research/prototypes/c09-r3a-analyzer.mjs
+          node --check docs/research/prototypes/c09-r3a-runner.mjs
+          node --check docs/research/prototypes/c09-r3a-adversarial.mjs
+          node --check docs/research/prototypes/c09-r3a-adversarial-extended.mjs
+          C09_PARSER_ROOT=/tmp/c09-parser \
+            node docs/research/prototypes/c09-r3a-runner.mjs \
+            > /tmp/c09-r3a-results.json
+          C09_PARSER_ROOT=/tmp/c09-parser \
+            node docs/research/prototypes/c09-r3a-adversarial.mjs \
+            > /tmp/c09-r3a-adversarial.json
+          C09_PARSER_ROOT=/tmp/c09-parser \
+            node docs/research/prototypes/c09-r3a-adversarial-extended.mjs \
+            > /tmp/c09-r3a-adversarial-extended.json
+          cat /tmp/c09-r3a-results.json
+          cat /tmp/c09-r3a-adversarial.json
+          cat /tmp/c09-r3a-adversarial-extended.json
+          git diff --check
+          corepack pnpm verify:full
+
+      - name: Commit final formatting and self-clean
+        run: |
+          git rm .github/workflows/c09-r3a-closeout.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            docs/research/C09-R3A.md \
+            docs/research/prototypes/c09-r3a-analyzer.mjs \
+            docs/research/prototypes/c09-r3a-runner.mjs \
+            docs/research/prototypes/c09-r3a-adversarial.mjs \
+            docs/research/prototypes/c09-r3a-adversarial-extended.mjs
+          git commit -m "docs: complete C09-R3A feasibility research"
+          git push origin HEAD:${{ github.head_ref }}
