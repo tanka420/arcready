@@ -20,6 +20,15 @@ export default [
     }
   },
   {
+    files: ["docs/research/fixtures/**/*.mjs"],
+    languageOptions: {
+      globals: {
+        console: "readonly",
+        process: "readonly"
+      }
+    }
+  },
+  {
     ...tseslint.configs.disableTypeChecked,
     files: ["examples/demo-projects/**/*.ts"]
   }
