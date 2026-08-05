@@ -1,6 +1,6 @@
 # ArcReady Roadmap
 
-**Status:** Active roadmap after C08 Advice-only decision
+**Status:** Active roadmap after C08A Advice-only migration
 **Last reviewed:** 2026-08-05
 
 ArcReady is an Arc-specific, repository-level static compatibility analyzer for
@@ -72,7 +72,7 @@ The private canonical runtime remains exactly four rules in stable order:
 3. `bridge/RELAYER_USES_USDC_FOR_GAS`
 4. `wallet/ARC_CHAIN_METADATA`
 
-Inventory remains 19 known / 17 default / 7 wallet / 4 canonical.
+Inventory is 19 known / 16 default / 7 wallet / 4 canonical.
 
 `json-v2` remains observational. It does not change legacy scoring, reporters,
 presets, `failOn`, or process exit behavior.
@@ -201,21 +201,25 @@ Current official Arc documentation uses
 The proposed `.io` RPC migration was cancelled because no migration is
 required.
 
-### C08 — Advice-only decision selected: CCTP attestation control flow
+### C08 — Complete: CCTP attestation Advice-only migration
 
-C08-R1 through R3 are complete. A private bounded prototype classified all 51
-corpus cases and passed 63 targeted tests, but 0 of 11 unsafe candidates had
-enough burn-hash provenance for critical emission and maintained first-party
-pressure shapes remained unsupported.
+C08-R1 through R3 and C08-D established that the existing proximity heuristic
+could not support a critical compatibility finding. C08A completed the reviewed
+Advice-only disposition.
 
-C08-D therefore selected `Advice-only`, not Build. C08A is the next milestone:
-remove the regex heuristic from default bridge execution, retain the public ID
-temporarily as default-excluded deprecated guidance, and add a narrow explicit
-opt-in path for known excluded rules.
+PR #53 separated the public all-known bridge inventory from the private default
+bridge subset and added a narrow explicit opt-in path. PR #54 changed the rule's
+default severity to `info`, made remediation conditional on burn/hash/domain
+validation, and aligned runtime and documentation catalog policy as deprecated
+advice.
 
-No production migration has occurred yet. Inventory remains 19 known / 17
-default / 7 wallet / 4 canonical until C08A merges; the target after migration
-is 19 / 16 / 7 / 4.
+The detector remains unchanged and low-confidence. It is not scheduled by
+default, cannot affect normal default scoring or exits, and remains available
+only through explicit non-off configuration during one compatibility period.
+
+Inventory is now 19 known / 16 default / 7 wallet / 4 canonical. The R3
+prototype remains research-only. Revisit Retire after one compatibility period
+or earlier if usage evidence shows no material value.
 
 ### C09 — Replace: shared Solidity `PREVRANDAO` value dependency
 
@@ -286,12 +290,13 @@ The following remain outside the near-term roadmap:
 
 ## Current recommended next step
 
-1. Review and implement C08A as a bounded Advice-only migration.
-2. Continue C09 and C10 in the existing sequence after C08A closeout.
+1. Begin C09 as the next separately planned milestone: replace duplicate
+   PREVRANDAO keyword rules with one evidence-backed shared rule.
+2. Continue C10 after C09 unless new user evidence changes priority.
 3. Keep native write analysis blocked pending first-party premise clarification.
 4. Continue gathering real unsupported-pattern and false-positive/negative
    evidence.
-5. Reopen deferred C06B2 or C07C families only from concrete usage evidence or a
-   separately approved milestone.
+5. Reopen deferred C06B2, C07C, or C08 families only from concrete usage
+   evidence or a separately approved milestone.
 
 The private canonical runtime remained exactly four rules throughout C07C.
