@@ -57,6 +57,12 @@ const PUBLIC_ELIGIBILITY = new Set([
   "blocked-unsupported",
   "not-applicable"
 ]);
+const ARTIFACT_CONTRACT = new Set([
+  "foundry-forge-script-run-latest-reviewed-2026-08-05",
+  "hardhat-deploy-v1",
+  "nonstandard-hardhat-like",
+  "unsupported"
+]);
 
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
@@ -73,8 +79,31 @@ function makeSourceCase(id, expected, source, note, extra = {}) {
   };
 }
 
+function inferArtifactContract(files) {
+  const paths = Object.keys(files);
+  if (
+    paths.some((path) => /(^|\/)broadcast\/.*\/run-latest\.json$/.test(path))
+  ) {
+    return "foundry-forge-script-run-latest-reviewed-2026-08-05";
+  }
+  if (paths.some((path) => path.startsWith("deployments/"))) {
+    return "hardhat-deploy-v1";
+  }
+  return "unsupported";
+}
+
 function makeProjectCase(id, expected, files, note, extra = {}) {
-  return { id, kind: "project", expected, files, note, ...extra };
+  const artifactContract =
+    extra.artifactContract ?? inferArtifactContract(files);
+  return {
+    id,
+    kind: "project",
+    expected,
+    files,
+    note,
+    artifactContract,
+    ...extra
+  };
 }
 
 const SPDX = "// SPDX-License-Identifier: MIT";
@@ -177,7 +206,7 @@ const sourceCases = [
     "C09-S08",
     sourceExpected(),
     contract(
-      "  address[] public relayers;\r\n\r\n  function selectRelay() external view returns (address) {\r\n    return relayers[block.prevrandao % relayers.length];\r\n  }"
+      "  address[] public relayers;\n\n  function selectRelay() external view returns (address) {\n    return relayers[block.prevrandao % relayers.length];\n  }"
     ).replaceAll("\n", "\r\n"),
     "CRLF direct selection."
   ),
@@ -561,12 +590,11 @@ function foundryProject(extraFiles = {}, source = SOURCE_CONTRACT) {
   };
 }
 
-function hardhatDeployment(chainId = 5042002, contractName = "RelaySelector") {
+function hardhatDeployment() {
   return JSON.stringify(
     {
       address: "0x3333333333333333333333333333333333333333",
-      contractName,
-      receipt: { chainId }
+      abi: []
     },
     null,
     2
@@ -716,69 +744,61 @@ const projectCases = [
     }),
     {
       "contracts/RelaySelector.sol": SOURCE_CONTRACT,
+      "deployments/arcTestnet/.chainId": "5042002\n",
       "deployments/arcTestnet/RelaySelector.json": hardhatDeployment()
     },
-    "Exact Hardhat-style Arc deployment association for R2 comparison."
+    "Pinned hardhat-deploy v1 association using .chainId and the exact deployment filename."
   ),
   makeProjectCase(
     "C09-P13",
     projectExpected({ arcDeploymentOwnership: "non-arc" }),
     {
       "contracts/RelaySelector.sol": SOURCE_CONTRACT,
-      "deployments/mainnet/RelaySelector.json": hardhatDeployment(1)
+      "deployments/mainnet/.chainId": "1\n",
+      "deployments/mainnet/RelaySelector.json": hardhatDeployment()
     },
-    "Hardhat-style Ethereum-only deployment."
+    "Pinned hardhat-deploy v1 Ethereum-only deployment."
   ),
   makeProjectCase(
     "C09-P14",
     projectExpected({ arcDeploymentOwnership: "unknown" }),
     {
       "contracts/RelaySelector.sol": SOURCE_CONTRACT,
-      "deployments/arc/RelaySelector.json": JSON.stringify(
-        { address: "0x5555555555555555555555555555555555555555" },
-        null,
-        2
-      )
+      "deployments/arc/RelaySelector.json": hardhatDeployment()
     },
-    "Network directory name without chain ID or official RPC is insufficient."
+    "Hardhat network directory name without a v1 .chainId file is insufficient."
   ),
   makeProjectCase(
     "C09-P15",
-    projectExpected({
-      arcDeploymentOwnership: "arc-hardhat",
-      publicEmissionEligibility: "r3b-association-candidate"
-    }),
+    projectExpected({ arcDeploymentOwnership: "unknown" }),
     {
       "contracts/RelaySelector.sol": SOURCE_CONTRACT,
       "deployments/custom/RelaySelector.json": JSON.stringify(
         {
           address: "0x6666666666666666666666666666666666666666",
+          abi: [],
           contractName: "RelaySelector",
+          receipt: { chainId: 5042002 },
           rpcUrl: "https://rpc.testnet.arc.network"
         },
         null,
         2
       )
     },
-    "Exact official Arc RPC may establish network evidence when contract identity is exact."
+    "Nonstandard inline contractName, receipt.chainId, and rpcUrl fields are not hardhat-deploy v1 evidence.",
+    { artifactContract: "nonstandard-hardhat-like" }
   ),
   makeProjectCase(
     "C09-P16",
     projectExpected({ arcDeploymentOwnership: "conflict" }),
     {
       "contracts/RelaySelector.sol": SOURCE_CONTRACT,
-      "deployments/arcTestnet/RelaySelector.json": JSON.stringify(
-        {
-          address: "0x7777777777777777777777777777777777777777",
-          contractName: "RelaySelector",
-          receipt: { chainId: 1 },
-          rpcUrl: "https://rpc.testnet.arc.network"
-        },
-        null,
-        2
-      )
+      "hardhat.config.ts":
+        "export default { networks: { arcTestnet: { url: 'https://rpc.testnet.arc.network', chainId: 5042002 } } };",
+      "deployments/arcTestnet/.chainId": "1\n",
+      "deployments/arcTestnet/RelaySelector.json": hardhatDeployment()
     },
-    "Conflicting chain ID and official Arc RPC must fail closed."
+    "Pinned hardhat-deploy v1 chain identity conflicts with an Arc network configuration."
   )
 ];
 
@@ -867,6 +887,55 @@ function validateCorpus() {
         `${item.id}: project case must contain at least two files`
       );
     }
+    if (item.kind === "project") {
+      if (!ARTIFACT_CONTRACT.has(item.artifactContract)) {
+        throw new Error(
+          `${item.id}: invalid artifact contract: ${item.artifactContract}`
+        );
+      }
+      if (item.artifactContract === "hardhat-deploy-v1") {
+        const chainFiles = paths.filter((path) => path.endsWith("/.chainId"));
+        if (chainFiles.length > 1) {
+          throw new Error(
+            `${item.id}: multiple hardhat-deploy v1 .chainId files`
+          );
+        }
+        const deploymentFiles = paths.filter((path) =>
+          /^deployments\/[^/]+\/[^/]+\.json$/.test(path)
+        );
+        for (const path of deploymentFiles) {
+          const deployment = JSON.parse(item.files[path]);
+          if (
+            typeof deployment.address !== "string" ||
+            !Array.isArray(deployment.abi)
+          ) {
+            throw new Error(
+              `${item.id}: invalid hardhat-deploy v1 file ${path}`
+            );
+          }
+          if (
+            "contractName" in deployment ||
+            "rpcUrl" in deployment ||
+            deployment.receipt?.chainId !== undefined
+          ) {
+            throw new Error(
+              `${item.id}: nonstandard inline network or contract evidence in ${path}`
+            );
+          }
+        }
+      }
+    }
+  }
+
+  const crlfCase = sourceCases.find((item) => item.id === "C09-S08");
+  const crlfSource = crlfCase?.files["contracts/C09-S08.sol"];
+  if (
+    typeof crlfSource !== "string" ||
+    !crlfSource.includes("\r\n") ||
+    crlfSource.includes("\r\r\n") ||
+    /(^|[^\r])\n/.test(crlfSource)
+  ) {
+    throw new Error("C09-S08: expected CRLF only with no CR-CR-LF or lone LF");
   }
 
   for (const comparator of astComparatorCases) {

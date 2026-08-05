@@ -71,7 +71,9 @@ function compileAst(expected, content) {
 
   const jsonStart = result.stdout.indexOf("{");
   if (jsonStart < 0) {
-    throw new Error(`${expected.id}: solc output did not contain Standard JSON`);
+    throw new Error(
+      `${expected.id}: solc output did not contain Standard JSON`
+    );
   }
   const output = JSON.parse(result.stdout.slice(jsonStart));
   const compilerErrors = (output.errors ?? []).filter(
