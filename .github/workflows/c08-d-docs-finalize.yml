@@ -1,0 +1,148 @@
+name: C08 D Docs Finalize
+
+on:
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout head branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.1
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: corepack pnpm install --frozen-lockfile
+
+      - name: Apply decision updates
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new, label):
+              text = path.read_text(encoding="utf-8")
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{label}: expected one match, got {count}")
+              path.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          c08 = Path("docs/exec-plans/active/C08.md")
+          replace_once(
+              c08,
+              "Status: Research",
+              "Status: Decision selected; migration pending",
+              "C08 status",
+          )
+          replace_once(
+              c08,
+              "Planning branch: `docs/c08-attestation-control-flow-plan`\n\nLast reviewed: 2026-08-05",
+              "Planning branch: `docs/c08-attestation-control-flow-plan`\n\nDecision record: `docs/research/C08-D.md`\n\nImplementation plan: `docs/exec-plans/active/C08A.md`\n\nResearch evidence:\n\n- `docs/research/C08-R1.md`\n- `docs/research/C08-R2.md`\n- `docs/research/C08-R3.md`\n\nLast reviewed: 2026-08-05",
+              "C08 metadata",
+          )
+          replace_once(
+              c08,
+              "Keeping the current critical heuristic unchanged is not a successful C08\noutcome.",
+              "Keeping the current critical heuristic unchanged is not a successful C08\noutcome.\n\nC08-D completed this decision review on 2026-08-05 and selected exactly\n`Advice-only`. Build is rejected because the bounded prototype cannot prove\nburn-hash eligibility or cover meaningful first-party shapes. Retire is deferred\nfor one compatibility period. C08A owns the separate production migration.",
+              "C08 selected disposition",
+          )
+          replace_once(
+              c08,
+              "### C08-D — independent decision review\n\nThe review must choose exactly one disposition:\n\n- `Build`: a bounded contract is explicit, testable, and fail-closed;\n- `Advice-only`: remove the rule from the default critical path and retain it\n  only as default-excluded, deprecated guidance;\n- `Retire`: remove the unsupported rule entirely.\n\n`Replace` is the migration action used to implement the selected disposition;\nit is not a fourth disposition.\n\nNo implementation begins from a Research disposition alone.",
+              "### C08-D — Complete: Advice-only selected\n\nC08-D selected exactly `Advice-only` after reviewing R1, R2, and R3.\n\nThe selected migration is:\n\n- remove the rule from the default critical path;\n- retain the public ID temporarily as default-excluded, deprecated guidance;\n- provide a narrow explicit configuration opt-in for the known excluded rule;\n- update rule and catalog policy without importing the R3 prototype;\n- review Retire after one compatibility period.\n\nC08A is the only authorized implementation milestone. C09 and C10 remain\nseparate.",
+              "C08-D phase",
+          )
+          replace_once(
+              c08,
+              "Until those criteria are met, `bridge/ATTESTATION_404_NOT_FATAL` must not be\npromoted, canonicalized, or expanded.",
+              "Until those criteria are met, `bridge/ATTESTATION_404_NOT_FATAL` must not be\npromoted, canonicalized, or expanded.\n\n## 12. Selected disposition and remaining exit\n\nC08 research and independent decision review are complete. The selected\ndisposition is `Advice-only`.\n\nThe remaining C08 exit is implementation and closeout under C08A:\n\n- default bridge execution excludes the rule;\n- explicit non-off configuration selects only this known default-excluded rule;\n- public ID compatibility is retained for one deprecation period;\n- rule and catalog policy become deprecated advice;\n- inventory, fixtures, reports, scoring, and CLI changes are verified;\n- a later Retire review trigger is recorded.\n\nC08 remains active until that migration is merged and independently reviewed.",
+              "C08 remaining exit",
+          )
+
+          roadmap = Path("docs/roadmap.md")
+          replace_once(
+              roadmap,
+              "**Status:** Active roadmap after completed C06B2 exact write MVP",
+              "**Status:** Active roadmap after C08 Advice-only decision",
+              "roadmap status",
+          )
+          replace_once(
+              roadmap,
+              "### C08 — Research: CCTP attestation control flow\n\nDistinguish pending `404` polling from terminal failure and invalid parameters.\nDo not canonicalize the current keyword detector without control-flow evidence.",
+              "### C08 — Advice-only decision selected: CCTP attestation control flow\n\nC08-R1 through R3 are complete. A private bounded prototype classified all 51\ncorpus cases and passed 63 targeted tests, but 0 of 11 unsafe candidates had\nenough burn-hash provenance for critical emission and maintained first-party\npressure shapes remained unsupported.\n\nC08-D therefore selected `Advice-only`, not Build. C08A is the next milestone:\nremove the regex heuristic from default bridge execution, retain the public ID\ntemporarily as default-excluded deprecated guidance, and add a narrow explicit\nopt-in path for known excluded rules.\n\nNo production migration has occurred yet. Inventory remains 19 known / 17\ndefault / 7 wallet / 4 canonical until C08A merges; the target after migration\nis 19 / 16 / 7 / 4.",
+              "roadmap C08",
+          )
+          replace_once(
+              roadmap,
+              "1. Begin C08 research on CCTP attestation control flow.\n2. Continue C09 and C10 in the existing sequence.\n3. Keep native write analysis blocked pending first-party premise clarification.\n4. Continue gathering real unsupported-pattern and false-positive/negative\n   evidence.\n5. Reopen deferred C06B2 or C07C families only from concrete usage evidence or a\n   separately approved milestone.",
+              "1. Review and implement C08A as a bounded Advice-only migration.\n2. Continue C09 and C10 in the existing sequence after C08A closeout.\n3. Keep native write analysis blocked pending first-party premise clarification.\n4. Continue gathering real unsupported-pattern and false-positive/negative\n   evidence.\n5. Reopen deferred C06B2 or C07C families only from concrete usage evidence or a\n   separately approved milestone.",
+              "roadmap next step",
+          )
+
+          backlog = Path("docs/rule-development-backlog.md")
+          replace_once(
+              backlog,
+              "### `bridge/ATTESTATION_404_NOT_FATAL`\n\n- Decision: Research.\n- Priority: P1.\n- Impact: Required change.\n- Requires retry-loop and typed HTTP control-flow analysis.",
+              "### `bridge/ATTESTATION_404_NOT_FATAL`\n\n- Decision: Advice-only.\n- Priority: P1 migration; P3 after deprecation.\n- Impact: Recommendation.\n- C08-R1 through R3 and C08-D are complete.\n- A bounded control-flow prototype passed 51 corpus cases and 63 targeted tests,\n  but 0 of 11 unsafe candidates were eligible for critical emission and\n  meaningful first-party shapes exceeded the bounded grammar.\n- C08A must remove the rule from default bridge execution, retain the public ID\n  temporarily, and add a narrow explicit opt-in path for known default-excluded\n  rules.\n- The detector remains deprecated low-confidence advice; it must not claim every\n  `404` is retryable.\n- Target inventory after migration: 19 known / 16 default / 7 wallet / 4\n  canonical.\n- Revisit Retire after one compatibility period and usage review.",
+              "backlog rule decision",
+          )
+          replace_once(
+              backlog,
+              "C08    Next: research CCTP attestation control flow\nC09    Then: replace duplicate PREVRANDAO keyword rules",
+              "C08-D  Complete: Advice-only disposition selected\nC08A   Next: default-exclude and deprecate the attestation heuristic\nC09    Then: replace duplicate PREVRANDAO keyword rules",
+              "backlog sequence",
+          )
+          replace_once(
+              backlog,
+              "Advice-only work should not interrupt this sequence without real user evidence.",
+              "C08A is current governance cleanup required by the reviewed C08 decision. Other\nAdvice-only expansion should not interrupt this sequence without real user\nevidence.",
+              "backlog advice sequence",
+          )
+          PY
+
+      - name: Format and validate decision docs
+        run: |
+          corepack pnpm exec prettier --write \
+            docs/research/C08-D.md \
+            docs/exec-plans/active/C08.md \
+            docs/exec-plans/active/C08A.md \
+            docs/roadmap.md \
+            docs/rule-development-backlog.md
+          corepack pnpm exec prettier --check \
+            docs/research/C08-D.md \
+            docs/exec-plans/active/C08.md \
+            docs/exec-plans/active/C08A.md \
+            docs/roadmap.md \
+            docs/rule-development-backlog.md
+          git diff --check
+
+      - name: Commit decision docs and self-clean
+        run: |
+          git rm .github/workflows/c08-d-docs-finalize.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            docs/research/C08-D.md \
+            docs/exec-plans/active/C08.md \
+            docs/exec-plans/active/C08A.md \
+            docs/roadmap.md \
+            docs/rule-development-backlog.md
+          git commit -m "docs: align C08 Advice-only decision"
+          git push origin HEAD:${{ github.head_ref }}
