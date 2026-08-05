@@ -102,7 +102,13 @@ const OTHER_SAFE = `if (!response.ok) {
 const FOR_LOOP = `for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {`;
 const FINAL_TIMEOUT = `throw new Error("Attestation polling timed out");`;
 
-function makeCase(id, controlFlowClass, publicFindingEligibility, source, note) {
+function makeCase(
+  id,
+  controlFlowClass,
+  publicFindingEligibility,
+  source,
+  note
+) {
   return { id, controlFlowClass, publicFindingEligibility, source, note };
 }
 
@@ -221,8 +227,16 @@ const PRESSURE_ONESHOT = `export async function getAttestation(
 `;
 
 for (const [id, source, note] of [
-  ["R2-P01", PRESSURE_SAMPLE, "Circle maintained sample-like imported configuration."],
-  ["R2-P02", PRESSURE_BURN_FLOW, "One-hop burn helper and attestation helper pressure."],
+  [
+    "R2-P01",
+    PRESSURE_SAMPLE,
+    "Circle maintained sample-like imported configuration."
+  ],
+  [
+    "R2-P02",
+    PRESSURE_BURN_FLOW,
+    "One-hop burn helper and attestation helper pressure."
+  ],
   ["R2-P03", PRESSURE_AXIOS, "Axios error-semantics family."],
   ["R2-P04", PRESSURE_V1, "CCTP V1 message-hash attestation family."],
   ["R2-P05", PRESSURE_ONESHOT, "One-shot V2 request without polling ownership."]
@@ -233,7 +247,11 @@ for (const [id, source, note] of [
 const safeCases = [
   [
     "R2-S01",
-    replaceOnce(BASE_SAFE, "iris-api-sandbox.circle.com", "iris-api.circle.com"),
+    replaceOnce(
+      BASE_SAFE,
+      "iris-api-sandbox.circle.com",
+      "iris-api.circle.com"
+    ),
     "Production Iris host."
   ],
   [
@@ -477,7 +495,7 @@ const unsupportedMutations = [
   [
     "R2-X08",
     "const SOURCE = { chainId: 5042002, domain: 26 } as const;",
-    "import { SOURCE } from \"./source\";",
+    'import { SOURCE } from "./source";',
     "Imported source/domain pair."
   ],
   [
@@ -489,7 +507,7 @@ const unsupportedMutations = [
   [
     "R2-X10",
     "async function pollArcAttestation(transactionHash: string) {",
-    "import { transactionHash } from \"./burn\";\n\nasync function pollArcAttestation() {",
+    'import { transactionHash } from "./burn";\n\nasync function pollArcAttestation() {',
     "Imported transaction hash."
   ],
   [
@@ -513,16 +531,66 @@ const unsupportedMutations = [
     "Helper polling boundary."
   ],
   [FOR_LOOP, `for (const item of [1]) {\n    ${FOR_LOOP}`, "Nested loop."],
-  ["R2-X17", "const response = await fetch(url);", "const first = await fetch(url);\n    const response = await fetch(url);\n    void first;", "Multiple responses."],
-  ["R2-X18", "const response = await fetch(url);", "const original = await fetch(url);\n    const alias1 = original;\n    const response = alias1;", "Response alias chain."],
-  ["R2-X19", "if (response.status === 404)", "const earlyBody = await response.json();\n    void earlyBody;\n\n    if (response.status === 404)", "JSON parsed before status."],
-  ["R2-X20", BRANCH_404_SAFE, `if (response.status === 404) {\n      await sleep(5_000);\n      continue;\n    }`, "Imported delay helper."],
-  ["R2-X21", BRANCH_404_SAFE, `if (response.status === 404) {\n      await new Promise((resolve) => setTimeout(resolve, getDelay()));\n      continue;\n    }`, "Computed delay."],
-  ["R2-X22", BRANCH_404_SAFE, `if (response.status === 404) {\n      onFailure();\n      return;\n    }`, "Callback terminal action."],
-  ["R2-X23", "const response = await fetch(url);", "let response = await fetch(url);\n    response = await fetch(url);", "Mutable response."],
-  ["R2-X24", BASE_SAFE, `const docs = ${JSON.stringify(BASE_SAFE)};`, "Documentation string only."],
-  ["R2-X25", "void pollArcAttestation;", "void pollArcAttestation", "Malformed source."],
-  ["R2-X26", "void pollArcAttestation;", "const view = <div />;\nvoid pollArcAttestation;", "TSX pressure source."]
+  [
+    "R2-X17",
+    "const response = await fetch(url);",
+    "const first = await fetch(url);\n    const response = await fetch(url);\n    void first;",
+    "Multiple responses."
+  ],
+  [
+    "R2-X18",
+    "const response = await fetch(url);",
+    "const original = await fetch(url);\n    const alias1 = original;\n    const response = alias1;",
+    "Response alias chain."
+  ],
+  [
+    "R2-X19",
+    "if (response.status === 404)",
+    "const earlyBody = await response.json();\n    void earlyBody;\n\n    if (response.status === 404)",
+    "JSON parsed before status."
+  ],
+  [
+    "R2-X20",
+    BRANCH_404_SAFE,
+    `if (response.status === 404) {\n      await sleep(5_000);\n      continue;\n    }`,
+    "Imported delay helper."
+  ],
+  [
+    "R2-X21",
+    BRANCH_404_SAFE,
+    `if (response.status === 404) {\n      await new Promise((resolve) => setTimeout(resolve, getDelay()));\n      continue;\n    }`,
+    "Computed delay."
+  ],
+  [
+    "R2-X22",
+    BRANCH_404_SAFE,
+    `if (response.status === 404) {\n      onFailure();\n      return;\n    }`,
+    "Callback terminal action."
+  ],
+  [
+    "R2-X23",
+    "const response = await fetch(url);",
+    "let response = await fetch(url);\n    response = await fetch(url);",
+    "Mutable response."
+  ],
+  [
+    "R2-X24",
+    BASE_SAFE,
+    `const docs = ${JSON.stringify(BASE_SAFE)};`,
+    "Documentation string only."
+  ],
+  [
+    "R2-X25",
+    "void pollArcAttestation;",
+    "void pollArcAttestation",
+    "Malformed source."
+  ],
+  [
+    "R2-X26",
+    "void pollArcAttestation;",
+    "const view = <div />;\nvoid pollArcAttestation;",
+    "TSX pressure source."
+  ]
 ];
 
 for (let index = 0; index < unsupportedMutations.length; index += 1) {
@@ -577,10 +645,14 @@ function validateCorpus(entries) {
       entries.filter((entry) => entry.controlFlowClass === kind).length
     ])
   );
-  if (entries.length !== 51) throw new Error(`Expected 51 cases, got ${entries.length}`);
-  if (counts["safe-candidate"] !== 9) throw new Error("Expected 9 safe candidates");
-  if (counts["unsafe-candidate"] !== 11) throw new Error("Expected 11 unsafe candidates");
-  if (counts.unsupported !== 31) throw new Error("Expected 31 unsupported cases");
+  if (entries.length !== 51)
+    throw new Error(`Expected 51 cases, got ${entries.length}`);
+  if (counts["safe-candidate"] !== 9)
+    throw new Error("Expected 9 safe candidates");
+  if (counts["unsafe-candidate"] !== 11)
+    throw new Error("Expected 11 unsafe candidates");
+  if (counts.unsupported !== 31)
+    throw new Error("Expected 31 unsupported cases");
   return counts;
 }
 
