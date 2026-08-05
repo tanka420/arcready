@@ -54,7 +54,7 @@ function declarationCount(text, name) {
 
 function sourceBinding(text) {
   const direct = text.match(
-    /\b(?:u?int(?:8|16|32|64|128|256)?|bytes32)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:u?int(?:8|16|32|64|128|256)?\s*\(\s*)?block\s*\.\s*(prevrandao|difficulty)\b[^;]*;/
+    /\b(?:u?int(?:8|16|32|64|128|256)?|bytes32)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:u?int(?:8|16|32|64|128|256)?\s*\(\s*)?block\s*\.\s*(prevrandao|difficulty)\s*\)?\s*;/
   );
   if (direct) {
     return { name: direct[1], source: direct[2], kind: "declaration" };
@@ -114,7 +114,7 @@ function sinkForFunction(text, binding) {
 
   if (
     new RegExp(
-      `\\breturn\\b[^;]*${dependent}[^;]*(?:==|!=|<|>|<=|>=)[^;]*;`
+      `\\breturn\\b[^;]*(?:${dependent}[^;]*(?:==|!=|<|>|<=|>=)|(?:==|!=|<|>|<=|>=)[^;]*${dependent})[^;]*;`
     ).test(text) ||
     new RegExp(`\\bif\\s*\\([^)]*${dependent}[^)]*\\)`).test(text)
   ) {
@@ -122,9 +122,9 @@ function sinkForFunction(text, binding) {
   }
 
   if (
-    new RegExp(
-      `\\bkeccak256\\s*\\([\\s\\S]*?${dependent}[\\s\\S]*?\\)`
-    ).test(text) &&
+    new RegExp(`\\bkeccak256\\s*\\([\\s\\S]*?${dependent}[\\s\\S]*?\\)`).test(
+      text
+    ) &&
     /\b(?:orderingKey|sort|order|shuffle)\b/i.test(text)
   ) {
     return { sinkClass: "ordering", reason: "ordering-key" };
@@ -189,8 +189,7 @@ function sourceOccurrences(ast) {
     }
     if (
       node.type === "AssemblyCall" &&
-      (node.functionName === "prevrandao" ||
-        node.functionName === "difficulty")
+      (node.functionName === "prevrandao" || node.functionName === "difficulty")
     ) {
       const nestedAssemblyFunction = Boolean(
         nearest(ancestors, "AssemblyFunctionDefinition")
@@ -231,9 +230,9 @@ function unsupportedResult(parseStatus = "parseable") {
 }
 
 export function analyzeC09Source(parser, source, metadata = {}) {
-  if (/pragma\s+solidity\s+[^;]*\b0\.9\./.test(source)) {
-    return unsupportedResult("unsupported-syntax");
-  }
+  const unsupportedFutureSyntax = /pragma\s+solidity\s+[^;]*\b0\.9\./.test(
+    source
+  );
 
   let ast;
   try {
@@ -250,15 +249,28 @@ export function analyzeC09Source(parser, source, metadata = {}) {
   const functions = functionRecords(ast, source);
   const occurrences = sourceOccurrences(ast);
 
+  if (unsupportedFutureSyntax) {
+    return {
+      ...unsupportedResult("unsupported-syntax"),
+      contractOwnership:
+        contracts.length === 1 ? "single-contract" : "ambiguous",
+      functionOwnership: functions.length === 1 ? "same-function" : "ambiguous"
+    };
+  }
+
   if (occurrences.length === 0) {
+    const emptyGuidanceContract =
+      contracts.length === 1 && (contracts[0].subNodes?.length ?? 0) === 0;
     const contractOwnership =
-      contracts.length === 0
+      contracts.length === 0 || emptyGuidanceContract
         ? "none"
         : contracts.length === 1
           ? "single-contract"
           : "multiple-contracts";
     const functionOwnership =
-      contracts.length === 0 ? "none" : "same-function";
+      contracts.length === 0 || emptyGuidanceContract
+        ? "none"
+        : "same-function";
     return {
       parseStatus: "parseable",
       sourceClass: "no-source",
@@ -312,9 +324,7 @@ export function analyzeC09Source(parser, source, metadata = {}) {
     const sourceFunctionNodes = new Set(
       occurrences.map((item) => item.function).filter(Boolean)
     );
-    const sinkFunctionNodes = new Set(
-      sinkFunctions.map((item) => item.node)
-    );
+    const sinkFunctionNodes = new Set(sinkFunctions.map((item) => item.node));
     const sameFunction = [...sourceFunctionNodes].some((node) =>
       sinkFunctionNodes.has(node)
     );
@@ -327,19 +337,32 @@ export function analyzeC09Source(parser, source, metadata = {}) {
     contractOwnership !== "single-contract" ||
     functionOwnership !== "same-function"
   ) {
-    const independentSourceOnly = occurrences.every((item) => {
-      const record = functions.find((entry) => entry.node === item.function);
-      return record
-        ? sinkForFunction(record.text, null).sinkClass === "safe-observation"
-        : false;
-    });
+    const sourceFunctionNames = occurrences
+      .map((item) => item.function?.name)
+      .filter(Boolean);
+    const sinkCallsSource = sinkFunctions.some((record) =>
+      sourceFunctionNames.some((name) =>
+        new RegExp(`\\b${escapeRegExp(name)}\\s*\\(`).test(record.text)
+      )
+    );
+    const crossDependency =
+      contractOwnership === "cross-contract" || sinkCallsSource;
+    const independentMultipleContracts =
+      contractOwnership === "multiple-contracts" &&
+      functionOwnership === "ambiguous" &&
+      !crossDependency;
+
     return {
       parseStatus: "parseable",
       sourceClass: occurrences[0].kind,
       contractOwnership,
       functionOwnership,
-      bindingClass: independentSourceOnly ? "none" : "unsupported",
-      sinkClass: "unsupported",
+      bindingClass: crossDependency
+        ? "unsupported"
+        : independentMultipleContracts
+          ? "direct"
+          : "none",
+      sinkClass: independentMultipleContracts ? "selection" : "unsupported",
       arcDeploymentOwnership: "synthetic-r3a",
       publicEmissionEligibility: "blocked-unsupported"
     };
@@ -370,9 +393,9 @@ export function analyzeC09Source(parser, source, metadata = {}) {
       else if (
         assignments > 1 ||
         (/\bunchecked\s*\{[\s\S]*?\b/.test(record.text) &&
-          new RegExp(
-            `\\b${escapeRegExp(binding.name)}\\s*\\+=`
-          ).test(record.text))
+          new RegExp(`\\b${escapeRegExp(binding.name)}\\s*\\+=`).test(
+            record.text
+          ))
       ) {
         bindingClass = "reassigned";
       } else bindingClass = "single-assignment";
@@ -407,11 +430,20 @@ export function analyzeC09Source(parser, source, metadata = {}) {
     const supported = ["selection", "authorization", "ordering"].includes(
       sink.sinkClass
     );
+    const directReportableSource =
+      supported &&
+      (/block\s*\.\s*(?:prevrandao|difficulty)[^;]*%\s*[A-Za-z_$][\w$]*\.length/.test(
+        record.text
+      ) ||
+        /\b(?:u?int(?:8|16|32|64|128|256)?)\s+[A-Za-z_$][\w$]*\s*=\s*[^;]*block\s*\.\s*(?:prevrandao|difficulty)[^;]*%\s*[A-Za-z_$][\w$]*\.length\s*;[\s\S]*?\b[A-Za-z_$][\w$]*\s*\[/.test(
+          record.text
+        ));
     const recordResult = {
       sourceKind,
-      bindingClass:
-        sink.sinkClass === "safe-observation" &&
-        sink.reason === "diagnostic-return"
+      bindingClass: directReportableSource
+        ? "direct"
+        : sink.sinkClass === "safe-observation" &&
+            sink.reason === "diagnostic-return"
           ? "none"
           : bindingClass,
       sinkClass: sink.sinkClass,
@@ -451,8 +483,7 @@ export function analyzeC09Source(parser, source, metadata = {}) {
 
   const publicEmissionEligibility = selected.supported
     ? "r3a-candidate-only"
-    : selected.sinkClass === "safe-observation" ||
-        selected.sinkClass === "none"
+    : selected.sinkClass === "safe-observation" || selected.sinkClass === "none"
       ? "not-applicable"
       : "blocked-unsupported";
 
