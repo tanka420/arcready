@@ -90,6 +90,15 @@ jobs:
           fi
           cat /tmp/c08a-e1-verify.log
 
+      - name: Upload verification log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: c08a-e1-verify-log
+          if-no-files-found: error
+          retention-days: 1
+          path: /tmp/c08a-e1-verify.log
+
       - name: Commit E1 candidate and self-clean
         run: |
           git rm .github/workflows/c08a-e1-finalize.yml
