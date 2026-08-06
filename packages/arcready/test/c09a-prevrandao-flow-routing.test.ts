@@ -18,7 +18,7 @@ contract Selector {
   }
 }`;
 
-describe("C09A-E2 direct bridge-selection vertical slice", () => {
+describe("C09A-E2 collection-selection routing", () => {
   it("records one exact same-function modulo/index sink for the bridge shell", async () => {
     const result = await analyzePrevrandaoFlowFile(
       "src/Selector.sol",
@@ -45,26 +45,127 @@ describe("C09A-E2 direct bridge-selection vertical slice", () => {
 
   it.each([
     [
-      "wallet owner is outside this slice",
+      "direct wallet selection",
       DIRECT_BRIDGE_SELECTION.replaceAll("relayers", "winners").replace(
         "selectRelay",
         "selectWinner"
-      )
+      ),
+      "wallet-compatibility",
+      "block-prevrandao",
+      "direct",
+      undefined
     ],
     [
-      "bridge identifier substring lookalike",
+      "bridge substring lookalike remains with the wallet compatibility shell",
       DIRECT_BRIDGE_SELECTION.replaceAll("relayers", "correlayers").replace(
         "selectRelay",
         "pick"
-      )
+      ),
+      "wallet-compatibility",
+      "block-prevrandao",
+      "direct",
+      undefined
     ],
     [
-      "approved source cast is outside this slice",
+      "approved direct cast",
       DIRECT_BRIDGE_SELECTION.replace(
         "block.prevrandao %",
         "uint256(block.prevrandao) %"
-      )
+      ),
+      "bridge-relay",
+      "block-prevrandao-cast",
+      "direct",
+      undefined
     ],
+    [
+      "one source binding",
+      DIRECT_BRIDGE_SELECTION.replace(
+        "return relayers[block.prevrandao % relayers.length];",
+        "uint256 seed = block.prevrandao; return relayers[seed % relayers.length];"
+      ),
+      "bridge-relay",
+      "block-prevrandao",
+      "single-assignment",
+      "seed"
+    ],
+    [
+      "assembly-owned source binding",
+      DIRECT_BRIDGE_SELECTION.replace(
+        "return relayers[block.prevrandao % relayers.length];",
+        "uint256 seed; assembly { seed := prevrandao() } return relayers[seed % relayers.length];"
+      ),
+      "bridge-relay",
+      "inline-assembly-prevrandao",
+      "single-assignment",
+      "seed"
+    ],
+    [
+      "cast modulo index binding",
+      DIRECT_BRIDGE_SELECTION.replaceAll("relayers", "winners")
+        .replace("selectRelay", "selectWinner")
+        .replace(
+          "return winners[block.prevrandao % winners.length];",
+          "uint256 index = uint256(block.prevrandao) % winners.length; return winners[index];"
+        ),
+      "wallet-compatibility",
+      "block-prevrandao-cast",
+      "direct",
+      undefined
+    ]
+  ] as const)(
+    "routes %s with exact source and owner evidence",
+    async (
+      _label,
+      source,
+      shellOwner,
+      sourceKind,
+      bindingKind,
+      bindingName
+    ) => {
+      const result = await analyzePrevrandaoFlowFile(
+        "src/Selector.sol",
+        source
+      );
+
+      expect(result.status).toBe("analyzed");
+      expect(result.records).toHaveLength(1);
+      const record = result.records[0];
+      expect(record).toMatchObject({
+        shellOwner,
+        sourceKind,
+        bindingKind,
+        ...(bindingName === undefined ? {} : { bindingName })
+      });
+      expect(source.slice(record?.sinkOffset)).toMatch(/^[A-Za-z0-9_]+\[/);
+      expect(source.slice(record?.sourceOffset)).toMatch(
+        /^(?:block\.prevrandao|prevrandao\(\))/
+      );
+    }
+  );
+
+  it.each([
+    ["validator", "validators", "selectValidator"],
+    ["sequencer", "sequencers", "selectSequencer"],
+    ["committee", "committees", "selectCommittee"]
+  ])(
+    "routes exact %s identifiers to the bridge shell",
+    async (_label, collection, functionName) => {
+      const source = DIRECT_BRIDGE_SELECTION.replaceAll(
+        "relayers",
+        collection
+      ).replace("selectRelay", functionName);
+
+      const result = await analyzePrevrandaoFlowFile(
+        "src/Selector.sol",
+        source
+      );
+
+      expect(result.records).toHaveLength(1);
+      expect(result.records[0]?.shellOwner).toBe("bridge-relay");
+    }
+  );
+
+  it.each([
     [
       "transformed source",
       DIRECT_BRIDGE_SELECTION.replace(
@@ -78,10 +179,133 @@ describe("C09A-E2 direct bridge-selection vertical slice", () => {
         "return relayers[block.prevrandao % relayers.length];",
         "uint256 length = relayers.length; return relayers[block.prevrandao % length];"
       )
+    ],
+    [
+      "ambiguous bridge and wallet ownership",
+      DIRECT_BRIDGE_SELECTION.replaceAll("relayers", "relayerWinners").replace(
+        "selectRelay",
+        "pick"
+      )
+    ],
+    [
+      "loop-owned selection",
+      DIRECT_BRIDGE_SELECTION.replace(
+        "return relayers[block.prevrandao % relayers.length];",
+        "for (uint256 i = 0; i < 1; i++) { return relayers[block.prevrandao % relayers.length]; } revert();"
+      )
+    ],
+    [
+      "mutated index binding",
+      DIRECT_BRIDGE_SELECTION.replace(
+        "return relayers[block.prevrandao % relayers.length];",
+        "uint256 index = block.prevrandao % relayers.length; index += 1; return relayers[index];"
+      )
+    ],
+    [
+      "source binding declared after the sink",
+      DIRECT_BRIDGE_SELECTION.replace(
+        "return relayers[block.prevrandao % relayers.length];",
+        "return relayers[seed % relayers.length]; uint256 seed = block.prevrandao;"
+      )
     ]
   ])("does not route %s", async (_label, source) => {
     await expect(
       analyzePrevrandaoFlowFile("src/Selector.sol", source)
+    ).resolves.toEqual({ status: "analyzed", records: [] });
+  });
+
+  it("chooses the earliest reportable collection-selection candidate", async () => {
+    const source = DIRECT_BRIDGE_SELECTION.replace(
+      "return relayers[block.prevrandao % relayers.length];",
+      "address first = relayers[block.prevrandao % relayers.length]; return relayers[block.prevrandao % relayers.length];"
+    );
+
+    const result = await analyzePrevrandaoFlowFile("src/Selector.sol", source);
+
+    expect(result.records).toHaveLength(1);
+    expect(result.records[0]?.sinkOffset).toBe(source.indexOf("relayers["));
+    expect(result.records[0]?.sourceOffset).toBe(
+      source.indexOf("block.prevrandao")
+    );
+  });
+
+  it("fails closed for a fully ranged unknown sink-bearing wrapper", async () => {
+    const sourceNode = {
+      type: "MemberAccess",
+      memberName: "prevrandao",
+      expression: { type: "Identifier", name: "block", range: [20, 24] },
+      range: [20, 35]
+    };
+    const selectionNode = {
+      type: "IndexAccess",
+      range: [60, 100],
+      base: { type: "Identifier", name: "relayers", range: [60, 67] },
+      index: {
+        type: "BinaryOperation",
+        operator: "%",
+        range: [69, 98],
+        left: { type: "Identifier", name: "seed", range: [69, 72] },
+        right: {
+          type: "MemberAccess",
+          memberName: "length",
+          range: [76, 91],
+          expression: {
+            type: "Identifier",
+            name: "relayers",
+            range: [76, 83]
+          }
+        }
+      }
+    };
+    const parser = {
+      parse: () => ({
+        type: "SourceUnit",
+        range: [0, 200],
+        children: [
+          {
+            type: "ContractDefinition",
+            kind: "contract",
+            name: "Selector",
+            range: [0, 200],
+            subNodes: [
+              {
+                type: "FunctionDefinition",
+                name: "selectRelay",
+                range: [5, 190],
+                body: {
+                  type: "Block",
+                  range: [10, 180],
+                  statements: [
+                    {
+                      type: "VariableDeclarationStatement",
+                      range: [15, 40],
+                      variables: [
+                        {
+                          type: "VariableDeclaration",
+                          name: "seed",
+                          range: [15, 18]
+                        }
+                      ],
+                      initialValue: sourceNode
+                    },
+                    {
+                      type: "MysteryExpression",
+                      range: [55, 105],
+                      expression: selectionNode
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      })
+    };
+
+    await expect(
+      analyzePrevrandaoFlowFile("src/Selector.sol", "ignored", async () =>
+        Promise.resolve(parser)
+      )
     ).resolves.toEqual({ status: "analyzed", records: [] });
   });
 

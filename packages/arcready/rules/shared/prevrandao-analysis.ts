@@ -40,7 +40,7 @@ export interface PrevrandaoSourceAnalysis {
 export interface PrevrandaoFlowRecord extends PrevrandaoSourceRecord {
   readonly sinkKind: "collection-selection";
   readonly sinkOffset: number;
-  readonly shellOwner: "bridge-relay";
+  readonly shellOwner: "bridge-relay" | "wallet-compatibility";
 }
 
 export interface PrevrandaoFlowAnalysis {
@@ -70,10 +70,26 @@ const ASSIGNMENT_OPERATORS = new Set([
 ]);
 const MUTATION_OPERATORS = new Set(["++", "--", "delete"]);
 const BRIDGE_OWNER_IDENTIFIERS = new Set([
+  "committee",
+  "committees",
   "relay",
   "relays",
   "relayer",
-  "relayers"
+  "relayers",
+  "sequencer",
+  "sequencers",
+  "validator",
+  "validators"
+]);
+const WALLET_OWNER_IDENTIFIERS = new Set([
+  "allocation",
+  "allocations",
+  "eligibility",
+  "eligible",
+  "recipient",
+  "recipients",
+  "winner",
+  "winners"
 ]);
 const KNOWN_DIRECT_SOURCE_CONTEXTS = new Set([
   "BinaryOperation",
@@ -145,7 +161,7 @@ export async function analyzePrevrandaoFlowFile(
   }
   return {
     status: "analyzed",
-    records: collectDirectBridgeSelectionRecords(
+    records: collectCollectionSelectionRecords(
       parsed.ast,
       parsed.analysis.sources
     )
@@ -349,7 +365,7 @@ function collectSourceRecords(
   return { sources, unsupported };
 }
 
-function collectDirectBridgeSelectionRecords(
+function collectCollectionSelectionRecords(
   ast: AstNode,
   sources: readonly PrevrandaoSourceRecord[]
 ): PrevrandaoFlowRecord[] {
@@ -383,32 +399,41 @@ function collectDirectBridgeSelectionRecords(
         (source) =>
           source.contractName === contractName &&
           source.functionName === functionName &&
-          source.bindingKind === "direct" &&
-          source.sourceKind === "block-prevrandao" &&
           nodeStart(functionNode) <= source.sourceOffset &&
           source.sourceOffset <= nodeEnd(functionNode)
       );
       if (ownedSources.length === 0) continue;
 
+      const candidates: PrevrandaoFlowRecord[] = [];
+      const parents = parentIndex(functionNode);
       for (const node of descendants(functionNode.body)) {
-        const selection = exactDirectCollectionSelection(node);
         if (
-          selection === null ||
-          !hasBridgeOwnerIdentifier(functionName, selection.collectionName)
+          isWithinUnsupportedSelectionControlFlow(node, parents, functionNode)
         ) {
           continue;
         }
-        const source = ownedSources.find(
-          (candidate) => candidate.sourceOffset === selection.sourceOffset
-        );
+        const selection = exactCollectionSelection(node, functionNode, parents);
+        if (selection === null) continue;
+        const source = exactSelectionSource(selection.dependency, ownedSources);
         if (source === undefined) continue;
-        records.push({
+        const shellOwner = classifySelectionShellOwner(
+          functionName,
+          selection.collectionName
+        );
+        if (shellOwner === null) continue;
+        candidates.push({
           ...source,
           sinkKind: "collection-selection",
           sinkOffset: nodeStart(node),
-          shellOwner: "bridge-relay"
+          shellOwner
         });
       }
+      candidates.sort(
+        (left, right) =>
+          left.sinkOffset - right.sinkOffset ||
+          left.sourceOffset - right.sourceOffset
+      );
+      if (candidates[0] !== undefined) records.push(candidates[0]);
     }
   }
 
@@ -419,22 +444,54 @@ function collectDirectBridgeSelectionRecords(
   );
 }
 
-function exactDirectCollectionSelection(
-  node: AstNode
-): { collectionName: string; sourceOffset: number } | null {
+function exactCollectionSelection(
+  node: AstNode,
+  functionNode: AstNode,
+  parents: ReadonlyMap<AstNode, AstNode>
+): { collectionName: string; dependency: AstNode } | null {
   if (node.type !== "IndexAccess" || !hasRange(node)) return null;
   const base = isNode(node.base) ? node.base : undefined;
   const index = isNode(node.index) ? node.index : undefined;
   const collectionName = base === undefined ? null : stringValue(base.name);
+  if (base?.type !== "Identifier" || collectionName === null) {
+    return null;
+  }
+
+  if (index?.type === "BinaryOperation") {
+    return exactModuloDependency(index, collectionName);
+  }
+  if (index?.type !== "Identifier") return null;
+
+  const indexName = stringValue(index.name);
+  if (indexName === null) return null;
+  const declarations = descendants(functionNode).filter(
+    (candidate) =>
+      candidate.type === "VariableDeclarationStatement" &&
+      parents.get(candidate) === functionNode.body &&
+      (exactNodeArray(candidate.variables) ?? []).some(
+        (variable) => stringValue(variable.name) === indexName
+      )
+  );
+  if (declarations.length !== 1) return null;
+  const declaration = declarations[0];
   if (
-    base?.type !== "Identifier" ||
-    collectionName === null ||
-    index?.type !== "BinaryOperation" ||
-    index.operator !== "%"
+    !hasRange(declaration) ||
+    nodeEnd(declaration) >= nodeStart(node) ||
+    !isStableSingleAssignment(functionNode, declaration, indexName) ||
+    !isNode(declaration.initialValue) ||
+    declaration.initialValue.type !== "BinaryOperation"
   ) {
     return null;
   }
-  const length = isNode(index.right) ? index.right : undefined;
+  return exactModuloDependency(declaration.initialValue, collectionName);
+}
+
+function exactModuloDependency(
+  modulo: AstNode,
+  collectionName: string
+): { collectionName: string; dependency: AstNode } | null {
+  if (modulo.operator !== "%" || !isNode(modulo.left)) return null;
+  const length = isNode(modulo.right) ? modulo.right : undefined;
   if (
     length?.type !== "MemberAccess" ||
     length.memberName !== "length" ||
@@ -442,24 +499,89 @@ function exactDirectCollectionSelection(
   ) {
     return null;
   }
-  const sourceOffset = directSourceOffset(index.left);
-  return sourceOffset === null ? null : { collectionName, sourceOffset };
+  return { collectionName, dependency: modulo.left };
 }
 
-function directSourceOffset(value: unknown): number | null {
-  return isNode(value) && isBlockPrevrandao(value) && hasRange(value)
-    ? nodeStart(value)
-    : null;
+function exactSelectionSource(
+  dependency: AstNode,
+  sources: readonly PrevrandaoSourceRecord[]
+): PrevrandaoSourceRecord | undefined {
+  if (dependency.type === "Identifier") {
+    const name = stringValue(dependency.name);
+    if (name === null) return undefined;
+    return sources.find(
+      (source) =>
+        source.bindingKind === "single-assignment" &&
+        source.bindingName === name &&
+        source.sourceOffset < nodeStart(dependency)
+    );
+  }
+
+  if (isBlockPrevrandao(dependency) && hasRange(dependency)) {
+    return sources.find(
+      (source) =>
+        source.bindingKind === "direct" &&
+        source.sourceKind === "block-prevrandao" &&
+        source.sourceOffset === nodeStart(dependency)
+    );
+  }
+
+  const arguments_ = exactNodeArray(dependency.arguments);
+  const directSource = arguments_?.length === 1 ? arguments_[0] : undefined;
+  if (
+    directSource === undefined ||
+    !isApprovedDirectCast(dependency, directSource) ||
+    !hasRange(directSource)
+  ) {
+    return undefined;
+  }
+  return sources.find(
+    (source) =>
+      source.bindingKind === "direct" &&
+      source.sourceKind === "block-prevrandao-cast" &&
+      source.sourceOffset === nodeStart(directSource)
+  );
 }
 
-function hasBridgeOwnerIdentifier(
+function classifySelectionShellOwner(
   functionName: string,
   collectionName: string
-): boolean {
-  return [
+): PrevrandaoFlowRecord["shellOwner"] | null {
+  const tokens = [
     ...identifierTokens(functionName),
     ...identifierTokens(collectionName)
-  ].some((token) => BRIDGE_OWNER_IDENTIFIERS.has(token));
+  ];
+  const bridge = tokens.some((token) => BRIDGE_OWNER_IDENTIFIERS.has(token));
+  const wallet = tokens.some((token) => WALLET_OWNER_IDENTIFIERS.has(token));
+  if (bridge && wallet) return null;
+  return bridge ? "bridge-relay" : "wallet-compatibility";
+}
+
+function isWithinUnsupportedSelectionControlFlow(
+  node: AstNode,
+  parents: ReadonlyMap<AstNode, AstNode>,
+  functionNode: AstNode
+): boolean {
+  let current = node;
+  while (current !== functionNode) {
+    const parent = parents.get(current);
+    if (parent === undefined) return true;
+    if (
+      parent.type === "ForStatement" ||
+      parent.type === "WhileStatement" ||
+      parent.type === "DoWhileStatement"
+    ) {
+      return true;
+    }
+    if (
+      parent !== functionNode &&
+      !KNOWN_DIRECT_SOURCE_CONTEXTS.has(parent.type ?? "")
+    ) {
+      return true;
+    }
+    current = parent;
+  }
+  return false;
 }
 
 function identifierTokens(value: string): string[] {
