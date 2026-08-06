@@ -1,7 +1,7 @@
 # ArcReady Rule Development Backlog
 
 **Status:** Active decision record
-**Last reviewed:** 2026-08-05
+**Last reviewed:** 2026-08-06
 **Applies to:** Active and proposed ArcReady static-analysis rules
 
 ## Purpose
@@ -125,11 +125,13 @@ The private canonical runtime remains exactly four rules.
 
 ### `wallet/PREVRANDAO_NOT_SUPPORTED`
 
-- Decision: Replace.
+- Decision: Build selected; C09A implementation pending.
 - Priority: P1.
 - Impact: Required change.
-- Replace with one shared Solidity value-dependency rule.
-- Do not preserve blanket `mixHash` equivalence.
+- Retain as a temporary compatibility shell over one shared private analyzer.
+- Emit only exact owned non-bridge records when this shell is selected.
+- Remove the current keyword detector and all blanket `mixHash` equivalence.
+- Preserve non-canonical status and inventory during the compatibility period.
 
 ### `wallet/NO_ETH_GAS_LABEL`
 
@@ -194,10 +196,14 @@ It must not be used as an implementation base.
 
 ### `bridge/NO_PREVRANDAO_RELAY_SELECTION`
 
-- Decision: Replace.
+- Decision: Build selected; C09A implementation pending.
 - Priority: P1.
 - Impact: Required change.
-- Merge into the shared Solidity value-dependency rule.
+- Retain as a temporary relay/validator/sequencer compatibility shell over the
+  shared private analyzer.
+- Emit only exact owned bridge-relay records when this shell is selected.
+- Remove the current keyword detector and prevent cross-shell duplication.
+- Preserve non-canonical status and inventory during the compatibility period.
 
 ### `bridge/BRIDGE_CONFIRMATIONS_ONE`
 
@@ -270,13 +276,16 @@ DX01   Complete: broken/fixed demo, onboarding, and report clarity
 C06B2  Complete: exact direct viem parseEther write MVP; native remains blocked
 C08-D  Complete: Advice-only disposition selected
 C08A   Complete: default-excluded deprecated attestation advice
-C09    Next: replace duplicate PREVRANDAO keyword rules
+C09-D  Complete: bounded Build disposition selected
+C09A   Next: implement private analyzer and compatibility shells
 C10    Then: add versioned App Kit compatibility analysis
 ```
 
-C08A governance cleanup is complete. C09 is the next approved sequencing target.
-Other Advice-only expansion should not interrupt this sequence without real user
-evidence.
+C09-R1, C09-R2, C09-R3-A, and C09-R3-B are complete. C09-D selects Build, and
+C09A is the next approved sequencing target. Production remains blocked until
+the decision and implementation plan merge. The compatibility inventory target
+remains `19 known / 16 default / 7 wallet / 4 canonical`. Other analyzer
+expansion should not interrupt this sequence without real user evidence.
 
 ## Expansion triggers
 

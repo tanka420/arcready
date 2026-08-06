@@ -1,7 +1,7 @@
 # ArcReady Roadmap
 
-**Status:** Active roadmap after C08A Advice-only migration
-**Last reviewed:** 2026-08-05
+**Status:** Active roadmap after C09-D Build selection
+**Last reviewed:** 2026-08-06
 
 ArcReady is an Arc-specific, repository-level static compatibility analyzer for
 projects being ported from Ethereum or other EVM environments to Arc.
@@ -221,10 +221,21 @@ Inventory is now 19 known / 16 default / 7 wallet / 4 canonical. The R3
 prototype remains research-only. Revisit Retire after one compatibility period
 or earlier if usage evidence shows no material value.
 
-### C09 — Replace: shared Solidity `PREVRANDAO` value dependency
+### C09 — Build selected: bounded PREVRANDAO dependency analyzer
 
-Replace duplicate wallet and bridge keyword rules with one evidence-backed rule.
-Do not preserve unsupported blanket `mixHash` equivalence.
+C09-R1 through R3-B are complete. The reviewed research established bounded
+Solidity source/value feasibility and one exact Foundry contract-to-Arc
+association family.
+
+C09-D selects Build: one private analyzer with two temporary public compatibility
+shells. Both old keyword detectors must be removed. A critical finding requires
+both a supported same-function behavior dependency and exact Foundry Arc
+deployment ownership for the same concrete contract.
+
+C09A is the next implementation milestone. It must retain the two public IDs,
+prevent duplicate findings, add no `solidity` preset or category, preserve
+inventory `19 / 16 / 7 / 4`, and keep the rules non-canonical. Production remains
+blocked until the decision and implementation plan are approved and merged.
 
 ### C10 — Research/build: versioned App Kit compatibility
 
@@ -290,9 +301,9 @@ The following remain outside the near-term roadmap:
 
 ## Current recommended next step
 
-1. Begin C09 as the next separately planned milestone: replace duplicate
-   PREVRANDAO keyword rules with one evidence-backed shared rule.
-2. Continue C10 after C09 unless new user evidence changes priority.
+1. Review and implement C09A as a bounded analyzer and compatibility-shell
+   migration.
+2. Continue C10 after C09A closeout unless new user evidence changes priority.
 3. Keep native write analysis blocked pending first-party premise clarification.
 4. Continue gathering real unsupported-pattern and false-positive/negative
    evidence.
