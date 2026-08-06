@@ -137,7 +137,7 @@ contract Safe {
     ).resolves.toEqual({ status: "parser-unavailable", sources: [] });
   });
 
-  it("fails closed for missing ranges and unknown source-bearing AST nodes", async () => {
+  it("fails closed for missing source ranges", async () => {
     const missingRangeParser = {
       parse: () => ({
         type: "SourceUnit",
@@ -164,6 +164,159 @@ contract Safe {
       )
     ).resolves.toEqual({ status: "unsupported-source", sources: [] });
   });
+
+  it("fails closed for fully ranged unknown source-bearing AST wrappers", async () => {
+    const unknownWrapperParser = {
+      parse: () => ({
+        type: "SourceUnit",
+        range: [0, 100],
+        children: [
+          {
+            type: "ContractDefinition",
+            kind: "contract",
+            isAbstract: false,
+            name: "Selector",
+            range: [0, 100],
+            subNodes: [
+              {
+                type: "FunctionDefinition",
+                name: "choose",
+                range: [20, 90],
+                body: {
+                  type: "Block",
+                  range: [40, 90],
+                  statements: [
+                    {
+                      type: "MysteryExpression",
+                      range: [50, 70],
+                      child: {
+                        type: "MemberAccess",
+                        memberName: "prevrandao",
+                        range: [51, 68],
+                        expression: {
+                          type: "Identifier",
+                          name: "block",
+                          range: [51, 55]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      })
+    };
+
+    await expect(
+      analyzePrevrandaoSourceFile(
+        "src/Selector.sol",
+        "ignored",
+        async () => unknownWrapperParser
+      )
+    ).resolves.toEqual({ status: "unsupported-source", sources: [] });
+  });
+
+  it.each(["|=", "&=", "^=", "<<=", ">>="])(
+    "fails closed when a source binding is later mutated with %s",
+    async (operator) => {
+      const source = `
+contract Selector {
+  function choose() external view returns (uint256) {
+    uint256 seed = block.prevrandao;
+    seed ${operator} 1;
+    return seed;
+  }
+}`;
+
+      await expect(
+        analyzePrevrandaoSourceFile("src/Selector.sol", source)
+      ).resolves.toEqual({ status: "unsupported-source", sources: [] });
+    }
+  );
+
+  it("fails closed for tuple and assembly writes to a source binding", async () => {
+    const sources = [
+      `
+contract Selector {
+  function choose() external view returns (uint256) {
+    uint256 seed = block.prevrandao;
+    (seed,) = pair();
+    return seed;
+  }
+}`,
+      `
+contract Selector {
+  function choose() external view returns (uint256) {
+    uint256 seed = block.prevrandao;
+    assembly { seed := 1 }
+    return seed;
+  }
+}`
+    ];
+
+    for (const source of sources) {
+      await expect(
+        analyzePrevrandaoSourceFile("src/Selector.sol", source)
+      ).resolves.toEqual({ status: "unsupported-source", sources: [] });
+    }
+  });
+
+  it("fails closed when a source binding is not function-body scoped", async () => {
+    const source = `
+contract Selector {
+  function choose() external view returns (uint256) {
+    {
+      uint256 seed = block.prevrandao;
+    }
+    assembly { seed := 1 }
+    return 0;
+  }
+}`;
+
+    await expect(
+      analyzePrevrandaoSourceFile("src/Selector.sol", source)
+    ).resolves.toEqual({ status: "unsupported-source", sources: [] });
+  });
+
+  it.each([
+    "0.8.24",
+    "^0.8.24",
+    "~0.8.24",
+    ">=0.8.18 <0.9.0",
+    ">=0.8.18 <=0.8.30"
+  ])("accepts the closed Solidity pragma %s", async (pragma) => {
+    const source = `pragma solidity ${pragma};
+contract Selector {
+  function choose() external view returns (uint256) {
+    return block.prevrandao;
+  }
+}`;
+
+    await expect(
+      analyzePrevrandaoSourceFile("src/Selector.sol", source)
+    ).resolves.toEqual({
+      status: "analyzed",
+      sources: [expect.objectContaining({ functionName: "choose" })]
+    });
+  });
+
+  it.each([">=0.8.24", "^0.8.24 || ^0.9.0", "^0.9.0"])(
+    "fails closed for the open or future Solidity pragma %s",
+    async (pragma) => {
+      const source = `pragma solidity ${pragma};
+contract Selector {
+  function choose() external view returns (uint256) {
+    return block.prevrandao;
+  }
+}`;
+
+      await expect(
+        analyzePrevrandaoSourceFile("src/Selector.sol", source)
+      ).resolves.toEqual({ status: "unsupported-source", sources: [] });
+    }
+  );
 
   it("fails closed for unsupported assembly shapes", async () => {
     const source = `

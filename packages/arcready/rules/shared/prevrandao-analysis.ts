@@ -37,8 +37,45 @@ export interface PrevrandaoSourceAnalysis {
 }
 
 const DIRECT_CAST_NAMES = new Set(["uint", "uint256", "bytes32"]);
-const ASSIGNMENT_OPERATORS = new Set(["=", "+=", "-=", "*=", "/=", "%="]);
+const ASSIGNMENT_OPERATORS = new Set([
+  "=",
+  "+=",
+  "-=",
+  "*=",
+  "/=",
+  "%=",
+  "|=",
+  "&=",
+  "^=",
+  "<<=",
+  ">>="
+]);
 const MUTATION_OPERATORS = new Set(["++", "--", "delete"]);
+const KNOWN_DIRECT_SOURCE_CONTEXTS = new Set([
+  "BinaryOperation",
+  "Block",
+  "Conditional",
+  "DoWhileStatement",
+  "EmitStatement",
+  "ExpressionStatement",
+  "ForStatement",
+  "FunctionCall",
+  "FunctionCallOptions",
+  "IfStatement",
+  "IndexAccess",
+  "IndexRangeAccess",
+  "MemberAccess",
+  "NameValueExpression",
+  "ReturnStatement",
+  "RevertStatement",
+  "TryCatchClause",
+  "TryStatement",
+  "TupleExpression",
+  "UnaryOperation",
+  "UncheckedStatement",
+  "VariableDeclarationStatement",
+  "WhileStatement"
+]);
 const EXCLUDED_DIRECTORIES =
   /(?:^|\/)(?:test|tests|__tests__|generated|vendor|node_modules|lib|out|cache|broadcast|dist|build|coverage)(?:\/|$)/i;
 const require = createRequire(import.meta.url);
@@ -100,13 +137,23 @@ export async function analyzePrevrandaoSourceFile(
 }
 
 function hasUnsupportedSolidityPragma(ast: AstNode): boolean {
-  return arrayNodes(ast.children).some((node) => {
-    return (
-      node.type === "PragmaDirective" &&
-      node.name === "solidity" &&
-      (typeof node.value !== "string" || !/0\.8\.\d+/.test(node.value))
-    );
-  });
+  const pragmas = arrayNodes(ast.children).filter(
+    (node) => node.type === "PragmaDirective" && node.name === "solidity"
+  );
+  return pragmas.length > 1 || pragmas.some((node) => !isSupportedPragma(node));
+}
+
+function isSupportedPragma(node: AstNode): boolean {
+  if (typeof node.value !== "string") return false;
+  if (/^(?:\^|~)?0\.8\.\d+$/.test(node.value)) return true;
+
+  const closedRange = /^>=0\.8\.(\d+)\s+(?:<0\.9\.0|<=0\.8\.(\d+))$/.exec(
+    node.value
+  );
+  if (closedRange === null) return false;
+  const lowerPatch = Number(closedRange[1]);
+  const upperPatch = closedRange[2];
+  return upperPatch === undefined || lowerPatch <= Number(upperPatch);
 }
 
 function collectSourceRecords(
@@ -226,6 +273,10 @@ function collectDirectSources(
       continue;
     }
     const sourceExpression = cast ?? node;
+    if (!hasKnownDirectSourceContext(parents, sourceExpression, functionNode)) {
+      unsupported = true;
+      continue;
+    }
     const binding = exactInitializerBinding(
       parents,
       sourceExpression,
@@ -257,7 +308,8 @@ function collectAssemblySources(
 ): { sources: PrevrandaoSourceRecord[]; unsupported: boolean } {
   const sources: PrevrandaoSourceRecord[] = [];
   let unsupported = false;
-  const declarations = localDeclarations(functionNode);
+  const parents = parentIndex(functionNode);
+  const declarations = localDeclarations(functionNode, parents);
 
   for (const inlineNode of descendants(functionNode).filter(
     (node) => node.type === "InlineAssemblyStatement"
@@ -292,7 +344,12 @@ function collectAssemblySources(
       exactNodeArray(call.arguments)?.length === 0 &&
       targetName !== null &&
       declaration?.length === 1 &&
-      isStableSingleAssignment(functionNode, declaration[0].node, targetName) &&
+      isStableSingleAssignment(
+        functionNode,
+        declaration[0].node,
+        targetName,
+        exact
+      ) &&
       !nested.some((node) => node.type === "AssemblyFunctionDefinition");
     if (!supported || call === undefined || targetName === null) {
       unsupported = true;
@@ -331,7 +388,11 @@ function exactInitializerBinding(
     return { unsupported: false };
   }
   const variables = exactNodeArray(statement.variables);
-  if (variables?.length !== 1 || !hasRange(statement)) {
+  if (
+    variables?.length !== 1 ||
+    !hasRange(statement) ||
+    parents.get(statement) !== functionNode.body
+  ) {
     return { unsupported: true };
   }
   const name = stringValue(variables[0].name);
@@ -347,7 +408,8 @@ function exactInitializerBinding(
 function isStableSingleAssignment(
   functionNode: AstNode,
   declaration: AstNode,
-  name: string
+  name: string,
+  allowedAssemblyAssignment?: AstNode
 ): boolean {
   const declarations = descendants(functionNode).filter(
     (node) =>
@@ -363,7 +425,24 @@ function isStableSingleAssignment(
     if (
       node.type === "BinaryOperation" &&
       ASSIGNMENT_OPERATORS.has(stringValue(node.operator) ?? "") &&
-      isIdentifierNamed(node.left, name)
+      writesBindingTarget(node.left, name)
+    ) {
+      return false;
+    }
+    if (
+      node.type === "AssemblyAssignment" &&
+      node !== allowedAssemblyAssignment &&
+      (exactNodeArray(node.names) ?? []).some((target) =>
+        isIdentifierNamed(target, name)
+      )
+    ) {
+      return false;
+    }
+    if (
+      node.type === "AssemblyLocalDefinition" &&
+      (exactNodeArray(node.names) ?? []).some((target) =>
+        isIdentifierNamed(target, name)
+      )
     ) {
       return false;
     }
@@ -384,12 +463,21 @@ function isStableSingleAssignment(
   return true;
 }
 
+function writesBindingTarget(value: unknown, name: string): boolean {
+  if (isIdentifierNamed(value, name)) return true;
+  if (!isNode(value) || value.type !== "TupleExpression") return false;
+  return arrayNodes(value.components).some((item) =>
+    writesBindingTarget(item, name)
+  );
+}
+
 function isIdentifierNamed(value: unknown, name: string): boolean {
   return isNode(value) && value.type === "Identifier" && value.name === name;
 }
 
 function localDeclarations(
-  functionNode: AstNode
+  functionNode: AstNode,
+  parents: ReadonlyMap<AstNode, AstNode>
 ): Array<{ name: string; offset: number; node: AstNode }> {
   const declarations: Array<{ name: string; offset: number; node: AstNode }> =
     [];
@@ -397,7 +485,8 @@ function localDeclarations(
     if (
       statement.type !== "VariableDeclarationStatement" ||
       statement.initialValue !== null ||
-      !hasRange(statement)
+      !hasRange(statement) ||
+      parents.get(statement) !== functionNode.body
     ) {
       continue;
     }
@@ -413,6 +502,22 @@ function localDeclarations(
     }
   }
   return declarations;
+}
+
+function hasKnownDirectSourceContext(
+  parents: ReadonlyMap<AstNode, AstNode>,
+  source: AstNode,
+  functionNode: AstNode
+): boolean {
+  let current = source;
+  while (current !== functionNode) {
+    const parent = parents.get(current);
+    if (parent === undefined) return false;
+    if (parent === functionNode) return true;
+    if (!KNOWN_DIRECT_SOURCE_CONTEXTS.has(parent.type ?? "")) return false;
+    current = parent;
+  }
+  return true;
 }
 
 function isApprovedDirectCast(
