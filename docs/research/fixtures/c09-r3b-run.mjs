@@ -4,8 +4,7 @@ import { classifyFoundryArcAssociation } from "./c09-r3b-foundry-prototype.mjs";
 
 const FOUNDRY_ARTIFACT_CONTRACT =
   "foundry-forge-script-run-latest-reviewed-2026-08-05";
-const ARC_BROADCAST_PATH =
-  "broadcast/Deploy.s.sol/5042002/run-latest.json";
+const ARC_BROADCAST_PATH = "broadcast/Deploy.s.sol/5042002/run-latest.json";
 const ARC_ADDRESS = "0x1111111111111111111111111111111111111111";
 
 const EXPECTED = new Map([
@@ -140,8 +139,7 @@ const adversarialCases = [
       "src/RelaySelector.sol":
         "pragma solidity ^0.8.24;\ncontract RelaySelector {}\n",
       [ARC_BROADCAST_PATH]: foundryBroadcast(),
-      "broadcast/OtherDeploy.s.sol/5042002/run-latest.json":
-        foundryBroadcast()
+      "broadcast/OtherDeploy.s.sol/5042002/run-latest.json": foundryBroadcast()
     }),
     note: "Duplicate Arc artifacts with the same exact address are consistent."
   }

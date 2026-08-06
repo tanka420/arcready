@@ -362,7 +362,8 @@ export function classifyFoundryArcAssociation(projectCase) {
   for (const root of [...roots].sort()) {
     const sourceNameCounts = sourceNameCountsByRoot.get(root);
     const broadcasts = broadcastsByRoot.get(root);
-    if (!sourceNameCounts || sourceNameCounts.size === 0 || !broadcasts) continue;
+    if (!sourceNameCounts || sourceNameCounts.size === 0 || !broadcasts)
+      continue;
     statuses.push(classifyProjectRoot(sourceNameCounts, broadcasts));
   }
 
