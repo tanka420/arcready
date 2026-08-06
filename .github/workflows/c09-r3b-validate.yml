@@ -1,0 +1,67 @@
+name: C09 R3B Validate
+
+on:
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout head branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.1
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: corepack pnpm install --frozen-lockfile
+
+      - name: Run C09-R3B corpus contract
+        run: |
+          node --check docs/research/fixtures/c09-r3b-foundry-prototype.mjs
+          node --check docs/research/fixtures/c09-r3b-run.mjs
+          node docs/research/fixtures/c09-r2-corpus.mjs
+          node docs/research/fixtures/c09-r3b-run.mjs
+
+      - name: Format research artifacts
+        run: |
+          corepack pnpm exec prettier --write \
+            docs/research/C09-R3-B.md \
+            docs/research/fixtures/c09-r3b-foundry-prototype.mjs \
+            docs/research/fixtures/c09-r3b-run.mjs
+          corepack pnpm exec prettier --check \
+            docs/research/C09-R3-B.md \
+            docs/research/fixtures/c09-r3b-foundry-prototype.mjs \
+            docs/research/fixtures/c09-r3b-run.mjs
+          git diff --check
+
+      - name: Run full repository gate
+        run: corepack pnpm verify:full
+
+      - name: Commit formatted candidate and self-clean
+        run: |
+          git rm .github/workflows/c09-r3b-validate.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            docs/research/C09-R3-B.md \
+            docs/research/fixtures/c09-r3b-foundry-prototype.mjs \
+            docs/research/fixtures/c09-r3b-run.mjs
+          git commit -m "research: validate C09-R3B Foundry association"
+          git push origin HEAD:${{ github.head_ref }}
