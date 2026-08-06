@@ -73,15 +73,101 @@ function getBroadcastDescriptor(filePath) {
   return { projectRoot, scriptName, chainId };
 }
 
-function readContractNames(source) {
-  const names = new Set();
-  const pattern = /\b(?:abstract\s+)?contract\s+([A-Za-z_$][\w$]*)\b/g;
+function maskSolidityNonCode(source) {
+  let state = "code";
+  let escaped = false;
+  let output = "";
 
-  for (const match of source.matchAll(pattern)) {
-    names.add(match[1]);
+  for (let index = 0; index < source.length; index += 1) {
+    const current = source[index];
+    const next = source[index + 1];
+
+    if (state === "code") {
+      if (current === "/" && next === "/") {
+        output += "  ";
+        index += 1;
+        state = "line-comment";
+        continue;
+      }
+      if (current === "/" && next === "*") {
+        output += "  ";
+        index += 1;
+        state = "block-comment";
+        continue;
+      }
+      if (current === '"') {
+        output += " ";
+        state = "double-string";
+        escaped = false;
+        continue;
+      }
+      if (current === "'") {
+        output += " ";
+        state = "single-string";
+        escaped = false;
+        continue;
+      }
+
+      output += current;
+      continue;
+    }
+
+    if (state === "line-comment") {
+      if (current === "\n" || current === "\r") {
+        output += current;
+        state = "code";
+      } else {
+        output += " ";
+      }
+      continue;
+    }
+
+    if (state === "block-comment") {
+      if (current === "*" && next === "/") {
+        output += "  ";
+        index += 1;
+        state = "code";
+      } else {
+        output += current === "\n" || current === "\r" ? current : " ";
+      }
+      continue;
+    }
+
+    const quote = state === "double-string" ? '"' : "'";
+    if (escaped) {
+      output += current === "\n" || current === "\r" ? current : " ";
+      escaped = false;
+      continue;
+    }
+    if (current === "\\") {
+      output += " ";
+      escaped = true;
+      continue;
+    }
+    if (current === quote) {
+      output += " ";
+      state = "code";
+      continue;
+    }
+
+    output += current === "\n" || current === "\r" ? current : " ";
   }
 
-  return names;
+  return output;
+}
+
+function readConcreteContractNameCounts(source) {
+  const counts = new Map();
+  const maskedSource = maskSolidityNonCode(source);
+  const pattern = /\b(abstract\s+)?contract\s+([A-Za-z_$][\w$]*)\b/g;
+
+  for (const match of maskedSource.matchAll(pattern)) {
+    if (match[1]) continue;
+    const name = match[2];
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+  }
+
+  return counts;
 }
 
 function parseFoundryBroadcast(content, descriptor) {
@@ -138,15 +224,16 @@ function parseFoundryBroadcast(content, descriptor) {
   return { kind: "valid", creates };
 }
 
-function similarContractCandidates(sourceNames, artifactName) {
-  return [...sourceNames].filter(
+function similarContractCandidates(sourceNameCounts, artifactName) {
+  return [...sourceNameCounts.keys()].filter(
     (sourceName) =>
       sourceName.startsWith(artifactName) || artifactName.startsWith(sourceName)
   );
 }
 
-function classifyProjectRoot(sourceNames, broadcasts) {
+function classifyProjectRoot(sourceNameCounts, broadcasts) {
   const exactRecords = [];
+  let duplicateExactOwner = false;
   let sawConflict = false;
   let similarCandidateCount = 0;
 
@@ -158,11 +245,14 @@ function classifyProjectRoot(sourceNames, broadcasts) {
     if (broadcast.result.kind !== "valid") continue;
 
     for (const create of broadcast.result.creates) {
-      if (sourceNames.has(create.contractName)) {
+      const definitionCount = sourceNameCounts.get(create.contractName) ?? 0;
+      if (definitionCount === 1) {
         exactRecords.push(create);
+      } else if (definitionCount > 1) {
+        duplicateExactOwner = true;
       } else {
         similarCandidateCount += similarContractCandidates(
-          sourceNames,
+          sourceNameCounts,
           create.contractName
         ).length;
       }
@@ -170,6 +260,7 @@ function classifyProjectRoot(sourceNames, broadcasts) {
   }
 
   if (sawConflict) return "conflict";
+  if (duplicateExactOwner) return "ambiguous";
 
   if (exactRecords.length === 0) {
     return similarCandidateCount > 1 ? "ambiguous" : "unknown";
@@ -232,7 +323,7 @@ export function classifyFoundryArcAssociation(projectCase) {
     };
   }
 
-  const sourceNamesByRoot = new Map();
+  const sourceNameCountsByRoot = new Map();
   const broadcastsByRoot = new Map();
 
   for (const [rawPath, content] of Object.entries(projectCase.files)) {
@@ -243,9 +334,11 @@ export function classifyFoundryArcAssociation(projectCase) {
       const projectRoot = getSourceProjectRoot(filePath);
       if (projectRoot === null) continue;
 
-      const names = sourceNamesByRoot.get(projectRoot) ?? new Set();
-      for (const name of readContractNames(content)) names.add(name);
-      sourceNamesByRoot.set(projectRoot, names);
+      const rootCounts = sourceNameCountsByRoot.get(projectRoot) ?? new Map();
+      for (const [name, count] of readConcreteContractNameCounts(content)) {
+        rootCounts.set(name, (rootCounts.get(name) ?? 0) + count);
+      }
+      sourceNameCountsByRoot.set(projectRoot, rootCounts);
       continue;
     }
 
@@ -262,15 +355,15 @@ export function classifyFoundryArcAssociation(projectCase) {
 
   const statuses = [];
   const roots = new Set([
-    ...sourceNamesByRoot.keys(),
+    ...sourceNameCountsByRoot.keys(),
     ...broadcastsByRoot.keys()
   ]);
 
   for (const root of [...roots].sort()) {
-    const sourceNames = sourceNamesByRoot.get(root);
+    const sourceNameCounts = sourceNameCountsByRoot.get(root);
     const broadcasts = broadcastsByRoot.get(root);
-    if (!sourceNames || sourceNames.size === 0 || !broadcasts) continue;
-    statuses.push(classifyProjectRoot(sourceNames, broadcasts));
+    if (!sourceNameCounts || sourceNameCounts.size === 0 || !broadcasts) continue;
+    statuses.push(classifyProjectRoot(sourceNameCounts, broadcasts));
   }
 
   const status = mergeStatuses(statuses);
