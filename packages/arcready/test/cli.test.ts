@@ -299,10 +299,7 @@ function createIo(output: string[]): CliIo {
   };
 }
 
-function createIoWithStreams(
-  stdout: string[],
-  stderr: string[]
-): CliIo {
+function createIoWithStreams(stdout: string[], stderr: string[]): CliIo {
   const cwd = mkdtempSync(join(tmpdir(), "arcready-"));
   tempDirs.push(cwd);
 

@@ -88,7 +88,9 @@ describe("Contract v2 version and source locations", () => {
   );
 
   it("requires one-based positive lines and columns", () => {
-    expect(() => validateSourcePositionV2({ line: 1, column: 1 })).not.toThrow();
+    expect(() =>
+      validateSourcePositionV2({ line: 1, column: 1 })
+    ).not.toThrow();
     expect(() => validateSourcePositionV2({ line: 0, column: 1 })).toThrow(
       /one-based/
     );
@@ -190,7 +192,9 @@ describe("Contract v2 exact-location fingerprints", () => {
     ["rule ID", { ruleId: "wallet/OTHER" }],
     [
       "path",
-      { primaryLocation: { ...baseInput.primaryLocation!, path: "src/other.ts" } }
+      {
+        primaryLocation: { ...baseInput.primaryLocation!, path: "src/other.ts" }
+      }
     ],
     [
       "region",
@@ -206,9 +210,9 @@ describe("Contract v2 exact-location fingerprints", () => {
     ],
     ["discriminator", { detectorDiscriminator: "native-currency.name" }]
   ])("changes when the %s changes", (_label, change) => {
-    expect(createExactFindingFingerprint({ ...baseInput, ...change })).not.toEqual(
-      createExactFindingFingerprint(baseInput)
-    );
+    expect(
+      createExactFindingFingerprint({ ...baseInput, ...change })
+    ).not.toEqual(createExactFindingFingerprint(baseInput));
   });
 
   it("uses the stable project-level marker in the canonical array", () => {
@@ -269,7 +273,9 @@ describe("Contract v2 exact-location fingerprints", () => {
 
 describe("FindingV2 validation", () => {
   it("accepts valid findings with at least one evidence item", () => {
-    expect(() => validateFindingV2(createFinding(regionLocation))).not.toThrow();
+    expect(() =>
+      validateFindingV2(createFinding(regionLocation))
+    ).not.toThrow();
     expect(() =>
       validateFindingV2(createFinding({ path: "src/wallet.ts" }))
     ).not.toThrow();
@@ -443,9 +449,9 @@ describe("ScanDiagnosticV2 validation", () => {
     ["phase", { phase: "execution" }],
     ["origin", { origin: "network" }]
   ])("rejects an invalid %s", (_label, change) => {
-    expect(() => validateScanDiagnosticV2({ ...createDiagnostic(), ...change })).toThrow(
-      ContractV2ValidationError
-    );
+    expect(() =>
+      validateScanDiagnosticV2({ ...createDiagnostic(), ...change })
+    ).toThrow(ContractV2ValidationError);
   });
 
   it("validates diagnostic locations", () => {
@@ -483,22 +489,28 @@ describe("RuleDefinitionV2", () => {
     expect(definition.contractVersion).toBe("2.0");
     expect(definition.rule).toBe(arcChainMetadataRule);
     expect(definition.metadata).toBe(metadata);
-    expect(definition.capabilities.supportedExtensions).toEqual([".ts", ".tsx"]);
+    expect(definition.capabilities.supportedExtensions).toEqual([
+      ".ts",
+      ".tsx"
+    ]);
     expect(() => validateRuleDefinitionV2(definition)).not.toThrow();
   });
 
   it("rejects rule and metadata ID mismatch", () => {
-    const mismatchedRule: Rule = { ...arcChainMetadataRule, id: "wallet/OTHER" };
-    expect(() => defineLegacyRuleV2(mismatchedRule, metadata, capabilities)).toThrow(
-      /rule id must equal metadata id/
-    );
+    const mismatchedRule: Rule = {
+      ...arcChainMetadataRule,
+      id: "wallet/OTHER"
+    };
+    expect(() =>
+      defineLegacyRuleV2(mismatchedRule, metadata, capabilities)
+    ).toThrow(/rule id must equal metadata id/);
   });
 
   it("rejects rule preset and metadata category mismatch", () => {
     const mismatchedRule: Rule = { ...arcChainMetadataRule, preset: "bridge" };
-    expect(() => defineLegacyRuleV2(mismatchedRule, metadata, capabilities)).toThrow(
-      /rule preset must equal metadata category/
-    );
+    expect(() =>
+      defineLegacyRuleV2(mismatchedRule, metadata, capabilities)
+    ).toThrow(/rule preset must equal metadata category/);
   });
 
   it("rejects an empty engine list", () => {
@@ -524,7 +536,10 @@ describe("RuleDefinitionV2", () => {
   });
 
   it("does not mutate Rule, metadata, or capabilities inputs", () => {
-    const ruleSnapshot = { ...arcChainMetadataRule, docs: [...arcChainMetadataRule.docs] };
+    const ruleSnapshot = {
+      ...arcChainMetadataRule,
+      docs: [...arcChainMetadataRule.docs]
+    };
     const metadataSnapshot = JSON.stringify(metadata);
     const capabilitiesSnapshot = JSON.stringify(capabilities);
 
@@ -539,9 +554,7 @@ describe("RuleDefinitionV2", () => {
     const removedRule = appKitRules.find(
       (rule) => rule.id === "app-kit/APPKIT_CAPABILITY_SUPPORTED"
     );
-    const removedMetadata = findMetadata(
-      "app-kit/APPKIT_CAPABILITY_SUPPORTED"
-    );
+    const removedMetadata = findMetadata("app-kit/APPKIT_CAPABILITY_SUPPORTED");
     if (!removedRule) {
       throw new Error("Missing deprecated App Kit rule");
     }
@@ -644,7 +657,10 @@ function createFinding(primaryLocation?: SourceLocationV2): FindingV2 {
     ],
     remediation: { summary: "Use the Arc Testnet chain ID." },
     documentation: [
-      { title: "Arc network information", url: "https://docs.arc.io/arc/references/network-information" }
+      {
+        title: "Arc network information",
+        url: "https://docs.arc.io/arc/references/network-information"
+      }
     ],
     fingerprints: {
       exact: createExactFindingFingerprint({

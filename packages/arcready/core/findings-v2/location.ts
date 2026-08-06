@@ -45,7 +45,9 @@ function parseTrustedRoot(projectRoot: string): TrustedRoot {
     isUrlLike(projectRoot) ||
     containsParentTraversal(projectRoot)
   ) {
-    throw new TypeError("projectRoot must be a safe absolute POSIX or Windows path");
+    throw new TypeError(
+      "projectRoot must be a safe absolute POSIX or Windows path"
+    );
   }
 
   if (isWindowsDriveAbsolute(projectRoot)) {
@@ -55,7 +57,9 @@ function parseTrustedRoot(projectRoot: string): TrustedRoot {
     return { family: "posix", path: posix.resolve(projectRoot) };
   }
 
-  throw new TypeError("projectRoot must be a safe absolute POSIX or Windows path");
+  throw new TypeError(
+    "projectRoot must be a safe absolute POSIX or Windows path"
+  );
 }
 
 function resolveRepositoryLocation(
@@ -164,10 +168,7 @@ function isUncPath(value: string): boolean {
 }
 
 function isUrlLike(value: string): boolean {
-  return (
-    !/^[A-Za-z]:/.test(value) &&
-    /^[A-Za-z][A-Za-z\d+.-]*:/.test(value)
-  );
+  return !/^[A-Za-z]:/.test(value) && /^[A-Za-z][A-Za-z\d+.-]*:/.test(value);
 }
 
 function containsParentTraversal(value: string): boolean {

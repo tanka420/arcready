@@ -189,8 +189,7 @@ function validateCoverageScope(
   }
   const observedRootOutcomes = value.roots.observedRootOutcomes as number;
   const acceptedRootOutcomes = value.roots.acceptedRootOutcomes as number;
-  const unavailableRootOutcomes = value.roots
-    .unavailableRootOutcomes as number;
+  const unavailableRootOutcomes = value.roots.unavailableRootOutcomes as number;
   const outsideProjectRootOutcomes = value.roots
     .outsideProjectRootOutcomes as number;
   const dispositionRootOutcomes = checkedSafeIntegerAdd(
@@ -202,9 +201,7 @@ function validateCoverageScope(
     outsideProjectRootOutcomes,
     "CoverageV2 root disposition outcome total"
   );
-  if (
-    observedRootOutcomes !== dispositionRootOutcomes
-  ) {
+  if (observedRootOutcomes !== dispositionRootOutcomes) {
     fail("CoverageV2 observed root outcomes must equal disposition outcomes");
   }
   if (
@@ -272,8 +269,7 @@ function validateCoverageScope(
     );
   }
   if (
-    (value.entries.candidateFiles as number) >
-    extensionSupportedRegularFiles
+    (value.entries.candidateFiles as number) > extensionSupportedRegularFiles
   ) {
     fail("CoverageV2 candidate files exceed supported regular files");
   }
@@ -463,10 +459,7 @@ function validateRuleExecutionCoverage(value: unknown): void {
       }
       return;
     case "partial":
-      if (
-        counts.completedOccurrences === 0 ||
-        counts.failedOccurrences === 0
-      ) {
+      if (counts.completedOccurrences === 0 || counts.failedOccurrences === 0) {
         fail("CoverageV2 partial rule execution invariants are not satisfied");
       }
       return;
@@ -590,10 +583,20 @@ export function validateFindingEvidenceV2(
         ["kind", "name", "observed", "expected", "location"],
         "observed-value evidence"
       );
-      assertBoundedString(value.name, "observed-value evidence name", MAX_IDENTIFIER_LENGTH);
-      validateEvidenceScalar(value.observed, "observed-value evidence observed");
+      assertBoundedString(
+        value.name,
+        "observed-value evidence name",
+        MAX_IDENTIFIER_LENGTH
+      );
+      validateEvidenceScalar(
+        value.observed,
+        "observed-value evidence observed"
+      );
       if (value.expected !== undefined) {
-        validateEvidenceScalar(value.expected, "observed-value evidence expected");
+        validateEvidenceScalar(
+          value.expected,
+          "observed-value evidence expected"
+        );
       }
       validateOptionalLocation(value.location);
       return;
@@ -603,7 +606,10 @@ export function validateFindingEvidenceV2(
         ["kind", "patternId", "location", "excerpt"],
         "pattern-match evidence"
       );
-      assertStableIdentifier(value.patternId, "pattern-match evidence patternId");
+      assertStableIdentifier(
+        value.patternId,
+        "pattern-match evidence patternId"
+      );
       validateOptionalLocation(value.location);
       if (value.excerpt !== undefined) {
         if (typeof value.excerpt !== "string") {
@@ -622,10 +628,17 @@ export function validateFindingEvidenceV2(
         ["kind", "key", "observed", "expected", "location"],
         "configuration evidence"
       );
-      assertBoundedString(value.key, "configuration evidence key", MAX_IDENTIFIER_LENGTH);
+      assertBoundedString(
+        value.key,
+        "configuration evidence key",
+        MAX_IDENTIFIER_LENGTH
+      );
       validateEvidenceScalar(value.observed, "configuration evidence observed");
       if (value.expected !== undefined) {
-        validateEvidenceScalar(value.expected, "configuration evidence expected");
+        validateEvidenceScalar(
+          value.expected,
+          "configuration evidence expected"
+        );
       }
       validateOptionalLocation(value.location);
       return;
@@ -680,7 +693,11 @@ export function validateFindingV2(value: unknown): asserts value is FindingV2 {
   for (const relatedLocation of value.relatedLocations) {
     assertRecord(relatedLocation, "related location");
     assertOnlyKeys(relatedLocation, ["label", "location"], "related location");
-    assertBoundedString(relatedLocation.label, "related location label", MAX_TITLE_LENGTH);
+    assertBoundedString(
+      relatedLocation.label,
+      "related location label",
+      MAX_TITLE_LENGTH
+    );
     validateSourceLocationV2(relatedLocation.location);
   }
 
@@ -746,7 +763,11 @@ export function validateScanDiagnosticV2(
   if (!includesValue(DIAGNOSTIC_ORIGINS, value.origin)) {
     fail("ScanDiagnosticV2 origin is unsupported");
   }
-  assertBoundedString(value.message, "ScanDiagnosticV2 message", MAX_MESSAGE_LENGTH);
+  assertBoundedString(
+    value.message,
+    "ScanDiagnosticV2 message",
+    MAX_MESSAGE_LENGTH
+  );
   if (typeof value.recoverable !== "boolean") {
     fail("ScanDiagnosticV2 recoverable must be a boolean");
   }
@@ -762,7 +783,12 @@ export function validateRuleCapabilitiesV2(
   assertRecord(value, "RuleCapabilitiesV2");
   assertOnlyKeys(
     value,
-    ["engines", "supportedExtensions", "locationPrecision", "parserRequirements"],
+    [
+      "engines",
+      "supportedExtensions",
+      "locationPrecision",
+      "parserRequirements"
+    ],
     "RuleCapabilitiesV2"
   );
 
@@ -778,7 +804,10 @@ export function validateRuleCapabilitiesV2(
   assertUniqueStrings(value.engines, "RuleCapabilitiesV2 engines");
   assertDeterministicOrder(value.engines, "RuleCapabilitiesV2 engines");
 
-  assertArray(value.supportedExtensions, "RuleCapabilitiesV2 supportedExtensions");
+  assertArray(
+    value.supportedExtensions,
+    "RuleCapabilitiesV2 supportedExtensions"
+  );
   for (const extension of value.supportedExtensions) {
     if (typeof extension !== "string" || !EXTENSION_PATTERN.test(extension)) {
       fail(
@@ -799,7 +828,10 @@ export function validateRuleCapabilitiesV2(
     fail("RuleCapabilitiesV2 locationPrecision is unsupported");
   }
 
-  assertArray(value.parserRequirements, "RuleCapabilitiesV2 parserRequirements");
+  assertArray(
+    value.parserRequirements,
+    "RuleCapabilitiesV2 parserRequirements"
+  );
   for (const requirement of value.parserRequirements) {
     assertStableIdentifier(
       requirement,
@@ -826,12 +858,18 @@ export function validateRuleDefinitionV2(
     "RuleDefinitionV2"
   );
   if (value.contractVersion !== ARCREADY_CONTRACT_VERSION) {
-    fail(`RuleDefinitionV2 contractVersion must be "${ARCREADY_CONTRACT_VERSION}"`);
+    fail(
+      `RuleDefinitionV2 contractVersion must be "${ARCREADY_CONTRACT_VERSION}"`
+    );
   }
 
   assertRecord(value.rule, "RuleDefinitionV2 rule");
   assertStableIdentifier(value.rule.id, "RuleDefinitionV2 rule id");
-  assertBoundedString(value.rule.name, "RuleDefinitionV2 rule name", MAX_TITLE_LENGTH);
+  assertBoundedString(
+    value.rule.name,
+    "RuleDefinitionV2 rule name",
+    MAX_TITLE_LENGTH
+  );
   assertBoundedString(
     value.rule.description,
     "RuleDefinitionV2 rule description",
@@ -840,7 +878,12 @@ export function validateRuleDefinitionV2(
   if (!includesValue(RULE_CATEGORIES, value.rule.preset)) {
     fail("RuleDefinitionV2 rule preset is unsupported");
   }
-  if (!includesValue(["info", "warning", "critical"] as const, value.rule.defaultSeverity)) {
+  if (
+    !includesValue(
+      ["info", "warning", "critical"] as const,
+      value.rule.defaultSeverity
+    )
+  ) {
     fail("RuleDefinitionV2 rule defaultSeverity is unsupported");
   }
   assertArray(value.rule.docs, "RuleDefinitionV2 rule docs");
@@ -887,7 +930,10 @@ export function validateFindingFingerprintV1(
   if (value.algorithm !== "sha256") {
     fail("FindingFingerprintV1 algorithm must be sha256");
   }
-  if (typeof value.value !== "string" || !FINGERPRINT_VALUE_PATTERN.test(value.value)) {
+  if (
+    typeof value.value !== "string" ||
+    !FINGERPRINT_VALUE_PATTERN.test(value.value)
+  ) {
     fail("FindingFingerprintV1 value must be a lowercase SHA-256 digest");
   }
   if (value.stability !== "exact") {
@@ -929,12 +975,17 @@ function validateClassification(value: unknown): void {
     }
   }
   assertUniqueStrings(value.rulePacks, "FindingV2 classification rulePacks");
-  assertDeterministicOrder(value.rulePacks, "FindingV2 classification rulePacks");
+  assertDeterministicOrder(
+    value.rulePacks,
+    "FindingV2 classification rulePacks"
+  );
 
   switch (value.taxonomy) {
     case "stable-compatibility":
       if (value.impact !== "blocker" && value.impact !== "required-change") {
-        fail("stable compatibility findings require blocker or required-change impact");
+        fail(
+          "stable compatibility findings require blocker or required-change impact"
+        );
       }
       if (value.maturity !== "validated") {
         fail("stable compatibility findings require validated maturity");
@@ -967,16 +1018,29 @@ function validateConfidence(value: unknown): void {
   if (!includesValue(RULE_CONFIDENCE_LEVELS, value.level)) {
     fail("FindingV2 confidence level is unsupported");
   }
-  if (!includesValue(["detector", "rule-default", "adapter"] as const, value.basis)) {
+  if (
+    !includesValue(
+      ["detector", "rule-default", "adapter"] as const,
+      value.basis
+    )
+  ) {
     fail("FindingV2 confidence basis is unsupported");
   }
-  assertBoundedString(value.reason, "FindingV2 confidence reason", MAX_REASON_LENGTH);
+  assertBoundedString(
+    value.reason,
+    "FindingV2 confidence reason",
+    MAX_REASON_LENGTH
+  );
 }
 
 function validateDocumentationLink(value: unknown): void {
   assertRecord(value, "FindingV2 documentation link");
   assertOnlyKeys(value, ["title", "url"], "FindingV2 documentation link");
-  assertBoundedString(value.title, "FindingV2 documentation title", MAX_TITLE_LENGTH);
+  assertBoundedString(
+    value.title,
+    "FindingV2 documentation title",
+    MAX_TITLE_LENGTH
+  );
   assertBoundedString(value.url, "FindingV2 documentation URL", MAX_URL_LENGTH);
   let parsed: URL;
   try {
@@ -1076,7 +1140,11 @@ function assertRuleMetadataShape(
       fail("RuleDefinitionV2 metadata applicability is unsupported");
     }
   }
-  assertBoundedString(value.rationale, "RuleDefinitionV2 metadata rationale", MAX_MESSAGE_LENGTH);
+  assertBoundedString(
+    value.rationale,
+    "RuleDefinitionV2 metadata rationale",
+    MAX_MESSAGE_LENGTH
+  );
   if (
     typeof value.recommendedDefaultEnabled !== "boolean" ||
     typeof value.recommendedCiFailureEligible !== "boolean" ||
@@ -1125,9 +1193,21 @@ function validateMetadataDocumentationReference(value: unknown): void {
     "RuleDefinitionV2 metadata documentation entry"
   );
   assertBoundedString(value.url, "metadata documentation URL", MAX_URL_LENGTH);
-  assertBoundedString(value.title, "metadata documentation title", MAX_TITLE_LENGTH);
-  assertBoundedString(value.claim, "metadata documentation claim", MAX_MESSAGE_LENGTH);
-  assertBoundedString(value.verifiedAt, "metadata documentation verifiedAt", 10);
+  assertBoundedString(
+    value.title,
+    "metadata documentation title",
+    MAX_TITLE_LENGTH
+  );
+  assertBoundedString(
+    value.claim,
+    "metadata documentation claim",
+    MAX_MESSAGE_LENGTH
+  );
+  assertBoundedString(
+    value.verifiedAt,
+    "metadata documentation verifiedAt",
+    10
+  );
   if (!includesValue(DOCUMENTATION_PUBLISHERS, value.publisher)) {
     fail("RuleDefinitionV2 metadata documentation publisher is unsupported");
   }
@@ -1206,7 +1286,10 @@ function assertUniqueStrings(value: readonly unknown[], label: string): void {
   }
 }
 
-function assertDeterministicOrder(value: readonly unknown[], label: string): void {
+function assertDeterministicOrder(
+  value: readonly unknown[],
+  label: string
+): void {
   const strings = value as readonly string[];
   for (let index = 1; index < strings.length; index += 1) {
     if (strings[index - 1]! > strings[index]!) {
@@ -1215,7 +1298,10 @@ function assertDeterministicOrder(value: readonly unknown[], label: string): voi
   }
 }
 
-function includesValue(values: readonly string[], value: unknown): value is string {
+function includesValue(
+  values: readonly string[],
+  value: unknown
+): value is string {
   return typeof value === "string" && values.includes(value);
 }
 
@@ -1254,11 +1340,7 @@ function assertNonNegativeSafeInteger(
   value: unknown,
   label: string
 ): asserts value is number {
-  if (
-    typeof value !== "number" ||
-    !Number.isSafeInteger(value) ||
-    value < 0
-  ) {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
     fail(`${label} must be a non-negative safe integer`);
   }
 }

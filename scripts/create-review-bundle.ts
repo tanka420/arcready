@@ -65,11 +65,7 @@ export function createReviewBundle(
 
   const headSha = git(repoRoot, ["rev-parse", "HEAD"]);
   const baseSha = git(repoRoot, ["rev-parse", options.baseRef]);
-  const mergeBaseSha = git(repoRoot, [
-    "merge-base",
-    options.baseRef,
-    "HEAD"
-  ]);
+  const mergeBaseSha = git(repoRoot, ["merge-base", options.baseRef, "HEAD"]);
   const branch = git(repoRoot, ["branch", "--show-current"]) || "DETACHED";
 
   const committedPatch = git(repoRoot, [
@@ -114,11 +110,7 @@ export function createReviewBundle(
     source === "committed" ? [`${mergeBaseSha}..HEAD`] : ["--cached"];
   git(repoRoot, ["diff", ...diffArgs, "--check"]);
 
-  const nameStatus = git(repoRoot, [
-    "diff",
-    ...diffArgs,
-    "--name-status"
-  ]);
+  const nameStatus = git(repoRoot, ["diff", ...diffArgs, "--name-status"]);
   const shortStat = git(repoRoot, ["diff", ...diffArgs, "--shortstat"]);
   const changedFiles = parseNameStatus(nameStatus);
 
@@ -128,7 +120,9 @@ export function createReviewBundle(
       : resolve(repoRoot, options.validationFile);
   if (validationSourcePath !== undefined) {
     if (!existsSync(validationSourcePath)) {
-      throw new Error(`Validation file does not exist: ${validationSourcePath}`);
+      throw new Error(
+        `Validation file does not exist: ${validationSourcePath}`
+      );
     }
     assertJsonFile(validationSourcePath);
   }
@@ -298,11 +292,7 @@ function git(repoRoot: string, args: string[]): string {
   return run(repoRoot, "git", args);
 }
 
-function tryCommand(
-  repoRoot: string,
-  command: string,
-  args: string[]
-): string {
+function tryCommand(repoRoot: string, command: string, args: string[]): string {
   try {
     return run(repoRoot, command, args);
   } catch (error) {
@@ -322,5 +312,7 @@ function run(repoRoot: string, command: string, args: string[]): string {
 
 function isMainModule(): boolean {
   const entry = process.argv[1];
-  return entry !== undefined && resolve(entry) === fileURLToPath(import.meta.url);
+  return (
+    entry !== undefined && resolve(entry) === fileURLToPath(import.meta.url)
+  );
 }

@@ -34,14 +34,14 @@ jobs:
 
 ## Inputs
 
-| Input | Default | Description |
-| --- | --- | --- |
-| `arcready-version` | `0.3.0` | ArcReady npm package version to run |
-| `working-directory` | `.` | Directory to scan |
-| `fail-on` | `critical` | Fail when findings reach `critical`, `warning`, `info`, or `none` |
-| `output-dir` | `.arcready/reports` | Directory for ArcReady report files |
-| `upload-artifact` | `true` | Upload ArcReady reports as a workflow artifact |
-| `artifact-name` | `arcready-report` | Artifact name for uploaded ArcReady reports |
+| Input               | Default             | Description                                                       |
+| ------------------- | ------------------- | ----------------------------------------------------------------- |
+| `arcready-version`  | `0.3.0`             | ArcReady npm package version to run                               |
+| `working-directory` | `.`                 | Directory to scan                                                 |
+| `fail-on`           | `critical`          | Fail when findings reach `critical`, `warning`, `info`, or `none` |
+| `output-dir`        | `.arcready/reports` | Directory for ArcReady report files                               |
+| `upload-artifact`   | `true`              | Upload ArcReady reports as a workflow artifact                    |
+| `artifact-name`     | `arcready-report`   | Artifact name for uploaded ArcReady reports                       |
 
 ## Working Directory
 

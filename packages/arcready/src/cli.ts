@@ -1,9 +1,6 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import {
-  loadConfig,
-  type ArcReadyFailLevel
-} from "../core/config/index.js";
+import { loadConfig, type ArcReadyFailLevel } from "../core/config/index.js";
 import type { ScanResultV2 } from "../core/contracts/v2/model.js";
 import type { ScanSummary } from "../core/findings/index.js";
 import { runInternalScanV2 } from "../core/scan-v2/index.js";
@@ -44,8 +41,7 @@ Options:
 
 const JSON_V2_OPTION_CONFLICT =
   "--json-v2 cannot be combined with --format, --out, or --fail-on";
-const JSON_V2_CONFIG_ERROR =
-  "ArcReady json-v2 error: invalid configuration.\n";
+const JSON_V2_CONFIG_ERROR = "ArcReady json-v2 error: invalid configuration.\n";
 const JSON_V2_PRODUCTION_ERROR =
   "ArcReady json-v2 error: unable to produce canonical scan output.\n";
 const JSON_V2_WRITE_ERROR =
@@ -174,9 +170,7 @@ function parseScanOptions(argv: string[]): ScanOptions {
       const value = argv[index + 1];
 
       if (!isFailLevel(value)) {
-        throw new Error(
-          "--fail-on must be critical, warning, info, or none"
-        );
+        throw new Error("--fail-on must be critical, warning, info, or none");
       }
 
       options.failOn = value;
@@ -270,7 +264,10 @@ function isImplementedFormat(value: unknown): value is ScanOptions["format"] {
 }
 
 function isFailLevel(value: unknown): value is ArcReadyFailLevel {
-  return typeof value === "string" && FAIL_LEVELS.includes(value as ArcReadyFailLevel);
+  return (
+    typeof value === "string" &&
+    FAIL_LEVELS.includes(value as ArcReadyFailLevel)
+  );
 }
 
 function shouldFail(summary: ScanSummary, failOn: ArcReadyFailLevel): boolean {

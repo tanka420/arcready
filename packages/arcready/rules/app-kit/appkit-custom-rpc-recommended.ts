@@ -21,12 +21,12 @@ export const appKitCustomRpcRecommendedRule: Rule = {
     const findings = [];
 
     for (const { filePath, content } of await readAppKitFiles(context)) {
-      const activeContent = getActiveContent(content, /\b(RPC|rpc|Arc_Testnet)\b/);
+      const activeContent = getActiveContent(
+        content,
+        /\b(RPC|rpc|Arc_Testnet)\b/
+      );
 
-      if (
-        !isAppKitRelated(content) ||
-        !/\bArc_Testnet\b/.test(activeContent)
-      ) {
+      if (!isAppKitRelated(content) || !/\bArc_Testnet\b/.test(activeContent)) {
         continue;
       }
 

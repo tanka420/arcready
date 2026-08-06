@@ -17,7 +17,10 @@ export async function pollCctpAttestation(response: Response) {
   return response.json();
 }
 
-export function chooseRelayer(block: { prevrandao: bigint }, relayers: string[]) {
+export function chooseRelayer(
+  block: { prevrandao: bigint },
+  relayers: string[]
+) {
   const relaySelection = Number(block.prevrandao % BigInt(relayers.length));
   return relayers[relaySelection];
 }

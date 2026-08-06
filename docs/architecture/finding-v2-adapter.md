@@ -47,12 +47,12 @@ duplicated in adapter metadata.
 
 The adapter-specific values are:
 
-| Rule | Pattern ID | Detector discriminator |
-|---|---|---|
-| `bridge/CCTP_DOMAIN_26` | `bridge.cctp-domain.non-26` | `cctp-domain-non-26` |
-| `bridge/NO_WRAPPED_USDC_ON_ARC` | `bridge.wrapped-usdc.arc-route` | `wrapped-usdc-arc-route` |
-| `bridge/RELAYER_USES_USDC_FOR_GAS` | `bridge.relayer-gas-token.eth-on-arc` | `relayer-gas-token-eth-on-arc` |
-| `wallet/ARC_CHAIN_METADATA` | `wallet.arc-chain-metadata.incompatible` | `arc-chain-metadata-incompatible` |
+| Rule                               | Pattern ID                               | Detector discriminator            |
+| ---------------------------------- | ---------------------------------------- | --------------------------------- |
+| `bridge/CCTP_DOMAIN_26`            | `bridge.cctp-domain.non-26`              | `cctp-domain-non-26`              |
+| `bridge/NO_WRAPPED_USDC_ON_ARC`    | `bridge.wrapped-usdc.arc-route`          | `wrapped-usdc-arc-route`          |
+| `bridge/RELAYER_USES_USDC_FOR_GAS` | `bridge.relayer-gas-token.eth-on-arc`    | `relayer-gas-token-eth-on-arc`    |
+| `wallet/ARC_CHAIN_METADATA`        | `wallet.arc-chain-metadata.incompatible` | `arc-chain-metadata-incompatible` |
 
 Specifications additionally carry the approved rule-specific confidence reason
 and remediation summary. Confidence basis is `adapter`; all four catalog confidence

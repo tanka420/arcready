@@ -24,14 +24,14 @@ describe("GitHub Action wrapper", () => {
     expect(action).not.toContain("node packages/arcready/dist/bin.js");
     expect(action).not.toContain("corepack pnpm --filter arcready exec");
     expect(action).toContain("--format json");
-    expect(action).toContain("--out \"${OUTPUT_DIR}/arcready.json\"");
+    expect(action).toContain('--out "${OUTPUT_DIR}/arcready.json"');
     expect(action).toContain("--format markdown");
-    expect(action).toContain("--out \"${OUTPUT_DIR}/arcready.md\"");
+    expect(action).toContain('--out "${OUTPUT_DIR}/arcready.md"');
     expect(action).toContain("--format html");
-    expect(action).toContain("--out \"${OUTPUT_DIR}/arcready.html\"");
+    expect(action).toContain('--out "${OUTPUT_DIR}/arcready.html"');
     expect(action).toContain("actions/upload-artifact@v4");
-    expect(action).toContain("scan_exit_code=\"$?\"");
-    expect(action).toContain("exit \"${{ steps.scan.outputs.exit-code }}\"");
+    expect(action).toContain('scan_exit_code="$?"');
+    expect(action).toContain('exit "${{ steps.scan.outputs.exit-code }}"');
   });
 
   it("defines the local composite action with required inputs", () => {
@@ -48,18 +48,18 @@ describe("GitHub Action wrapper", () => {
     expect(action).toContain("artifact-name:");
     expect(action).toContain("corepack pnpm install --frozen-lockfile");
     expect(action).toContain("corepack pnpm build");
-    expect(action).toContain("ARC_READY_CLI=\"packages/arcready/dist/bin.js\"");
+    expect(action).toContain('ARC_READY_CLI="packages/arcready/dist/bin.js"');
     expect(action).toContain(
-      "node \"${ARC_READY_CLI}\" scan --format \"${{ inputs.format }}\" --fail-on none"
+      'node "${ARC_READY_CLI}" scan --format "${{ inputs.format }}" --fail-on none'
     );
     expect(action).toContain(
-      "node \"${ARC_READY_CLI}\" scan --format json --out .arcready/reports/arcready.json"
+      'node "${ARC_READY_CLI}" scan --format json --out .arcready/reports/arcready.json'
     );
     expect(action).toContain(
-      "node \"${ARC_READY_CLI}\" scan --format markdown --out .arcready/reports/arcready.md"
+      'node "${ARC_READY_CLI}" scan --format markdown --out .arcready/reports/arcready.md'
     );
     expect(action).toContain(
-      "node \"${ARC_READY_CLI}\" scan --format html --out .arcready/reports/arcready.html"
+      'node "${ARC_READY_CLI}" scan --format html --out .arcready/reports/arcready.html'
     );
     expect(action).not.toContain("node_modules/.bin/arcready");
     expect(action).not.toContain("--filter arcready exec arcready scan");

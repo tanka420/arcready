@@ -136,7 +136,9 @@ export function validateRuleExecutionResult(
         "failed RuleExecutionResult occurrence"
       );
       if (occurrence.detectorFindings.length !== 0) {
-        fail("failed RuleExecutionResult occurrence cannot have detector findings");
+        fail(
+          "failed RuleExecutionResult occurrence cannot have detector findings"
+        );
       }
       assertPlainRecord(
         occurrence.fallbackFinding,
@@ -223,11 +225,7 @@ function assertArray(
 }
 
 function assertNonNegativeSafeInteger(value: unknown, label: string): void {
-  if (
-    typeof value !== "number" ||
-    !Number.isSafeInteger(value) ||
-    value < 0
-  ) {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
     fail(`${label} must be a non-negative safe integer`);
   }
 }

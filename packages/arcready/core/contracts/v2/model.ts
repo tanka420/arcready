@@ -149,10 +149,7 @@ export interface ScanDiagnosticV2 {
   location?: SourceLocationV2;
 }
 
-export type AnalysisEngineV2 =
-  | "text-pattern"
-  | "structured-config"
-  | "ast";
+export type AnalysisEngineV2 = "text-pattern" | "structured-config" | "ast";
 
 export interface RuleCapabilitiesV2 {
   engines: readonly AnalysisEngineV2[];
