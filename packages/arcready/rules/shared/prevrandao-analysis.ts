@@ -36,6 +36,23 @@ export interface PrevrandaoSourceAnalysis {
   readonly sources: readonly PrevrandaoSourceRecord[];
 }
 
+export interface PrevrandaoFlowRecord extends PrevrandaoSourceRecord {
+  readonly sinkKind: "collection-selection";
+  readonly sinkOffset: number;
+  readonly shellOwner: "bridge-relay";
+}
+
+export interface PrevrandaoFlowAnalysis {
+  readonly status: PrevrandaoSourceAnalysisStatus;
+  readonly records: readonly PrevrandaoFlowRecord[];
+}
+
+export interface PrevrandaoScanInput {
+  readonly files: readonly string[];
+  readFile(filePath: string): Promise<string>;
+  readonly parserLoader?: () => Promise<unknown>;
+}
+
 const DIRECT_CAST_NAMES = new Set(["uint", "uint256", "bytes32"]);
 const ASSIGNMENT_OPERATORS = new Set([
   "=",
@@ -51,6 +68,12 @@ const ASSIGNMENT_OPERATORS = new Set([
   ">>="
 ]);
 const MUTATION_OPERATORS = new Set(["++", "--", "delete"]);
+const BRIDGE_OWNER_IDENTIFIERS = new Set([
+  "relay",
+  "relays",
+  "relayer",
+  "relayers"
+]);
 const KNOWN_DIRECT_SOURCE_CONTEXTS = new Set([
   "BinaryOperation",
   "Block",
@@ -79,6 +102,10 @@ const KNOWN_DIRECT_SOURCE_CONTEXTS = new Set([
 const EXCLUDED_DIRECTORIES =
   /(?:^|\/)(?:test|tests|__tests__|generated|vendor|node_modules|lib|out|cache|broadcast|dist|build|coverage)(?:\/|$)/i;
 const require = createRequire(import.meta.url);
+const flowRecordsByScanFiles = new WeakMap<
+  readonly string[],
+  Promise<readonly PrevrandaoFlowRecord[]>
+>();
 
 export function supportsPrevrandaoSourcePath(filePath: string): boolean {
   const normalized = filePath.replaceAll("\\", "/");
@@ -96,20 +123,97 @@ export async function analyzePrevrandaoSourceFile(
   parserLoader: () => Promise<unknown> = () =>
     Promise.resolve(require("@solidity-parser/parser"))
 ): Promise<PrevrandaoSourceAnalysis> {
+  return (
+    await analyzeParsedPrevrandaoSourceFile(filePath, source, parserLoader)
+  ).analysis;
+}
+
+export async function analyzePrevrandaoFlowFile(
+  filePath: string,
+  source: string,
+  parserLoader: () => Promise<unknown> = () =>
+    Promise.resolve(require("@solidity-parser/parser"))
+): Promise<PrevrandaoFlowAnalysis> {
+  const parsed = await analyzeParsedPrevrandaoSourceFile(
+    filePath,
+    source,
+    parserLoader
+  );
+  if (parsed.ast === undefined || parsed.analysis.status !== "analyzed") {
+    return { status: parsed.analysis.status, records: [] };
+  }
+  return {
+    status: "analyzed",
+    records: collectDirectBridgeSelectionRecords(
+      parsed.ast,
+      parsed.analysis.sources
+    )
+  };
+}
+
+export function requestPrevrandaoFlowRecords(
+  input: PrevrandaoScanInput
+): Promise<readonly PrevrandaoFlowRecord[]> {
+  const cached = flowRecordsByScanFiles.get(input.files);
+  if (cached !== undefined) return cached;
+
+  const requested = collectScanFlowRecords(input);
+  flowRecordsByScanFiles.set(input.files, requested);
+  return requested;
+}
+
+async function collectScanFlowRecords(
+  input: PrevrandaoScanInput
+): Promise<readonly PrevrandaoFlowRecord[]> {
+  const records: PrevrandaoFlowRecord[] = [];
+  const files = [...new Set(input.files.filter(supportsPrevrandaoSourcePath))]
+    .slice()
+    .sort(compareText);
+
+  for (const filePath of files) {
+    let source: string;
+    try {
+      source = await input.readFile(filePath);
+    } catch {
+      continue;
+    }
+    const result =
+      input.parserLoader === undefined
+        ? await analyzePrevrandaoFlowFile(filePath, source)
+        : await analyzePrevrandaoFlowFile(filePath, source, input.parserLoader);
+    records.push(...result.records);
+  }
+  return records.sort(
+    (left, right) =>
+      compareText(left.sourceFile, right.sourceFile) ||
+      left.sourceOffset - right.sourceOffset ||
+      left.sinkOffset - right.sinkOffset
+  );
+}
+
+function compareText(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+async function analyzeParsedPrevrandaoSourceFile(
+  filePath: string,
+  source: string,
+  parserLoader: () => Promise<unknown>
+): Promise<{ analysis: PrevrandaoSourceAnalysis; ast?: AstNode }> {
   if (!supportsPrevrandaoSourcePath(filePath)) {
-    return { status: "unsupported-file", sources: [] };
+    return { analysis: { status: "unsupported-file", sources: [] } };
   }
 
   const parser = await loadParser(parserLoader);
   if (parser === null) {
-    return { status: "parser-unavailable", sources: [] };
+    return { analysis: { status: "parser-unavailable", sources: [] } };
   }
 
   let ast: unknown;
   try {
     ast = parser.parse(source, { loc: true, range: true, tolerant: false });
   } catch {
-    return { status: "malformed", sources: [] };
+    return { analysis: { status: "malformed", sources: [] } };
   }
 
   if (
@@ -118,21 +222,24 @@ export async function analyzePrevrandaoSourceFile(
     !hasRange(ast) ||
     exactNodeArray(ast.children) === null
   ) {
-    return { status: "unsupported-source", sources: [] };
+    return { analysis: { status: "unsupported-source", sources: [] } };
   }
   if (hasUnsupportedSolidityPragma(ast)) {
-    return { status: "unsupported-source", sources: [] };
+    return { analysis: { status: "unsupported-source", sources: [] } };
   }
 
   const result = collectSourceRecords(filePath, ast);
   if (result.unsupported) {
-    return { status: "unsupported-source", sources: [] };
+    return { analysis: { status: "unsupported-source", sources: [] } };
   }
   return {
-    status: "analyzed",
-    sources: result.sources.sort(
-      (left, right) => left.sourceOffset - right.sourceOffset
-    )
+    ast,
+    analysis: {
+      status: "analyzed",
+      sources: result.sources.sort(
+        (left, right) => left.sourceOffset - right.sourceOffset
+      )
+    }
   };
 }
 
@@ -236,6 +343,127 @@ function collectSourceRecords(
   }
 
   return { sources, unsupported };
+}
+
+function collectDirectBridgeSelectionRecords(
+  ast: AstNode,
+  sources: readonly PrevrandaoSourceRecord[]
+): PrevrandaoFlowRecord[] {
+  const records: PrevrandaoFlowRecord[] = [];
+  const contracts = (exactNodeArray(ast.children) ?? []).filter(
+    (node) => node.type === "ContractDefinition"
+  );
+
+  for (const contract of contracts) {
+    const contractName = stringValue(contract.name);
+    const subNodes = exactNodeArray(contract.subNodes);
+    if (
+      contract.kind !== "contract" ||
+      contract.isAbstract === true ||
+      contractName === null ||
+      subNodes === null
+    ) {
+      continue;
+    }
+
+    for (const functionNode of subNodes) {
+      const functionName = stringValue(functionNode.name);
+      if (
+        functionNode.type !== "FunctionDefinition" ||
+        functionName === null ||
+        !isNode(functionNode.body)
+      ) {
+        continue;
+      }
+      const ownedSources = sources.filter(
+        (source) =>
+          source.contractName === contractName &&
+          source.functionName === functionName &&
+          source.bindingKind === "direct" &&
+          source.sourceKind === "block-prevrandao" &&
+          nodeStart(functionNode) <= source.sourceOffset &&
+          source.sourceOffset <= nodeEnd(functionNode)
+      );
+      if (ownedSources.length === 0) continue;
+
+      for (const node of descendants(functionNode.body)) {
+        const selection = exactDirectCollectionSelection(node);
+        if (
+          selection === null ||
+          !hasBridgeOwnerIdentifier(functionName, selection.collectionName)
+        ) {
+          continue;
+        }
+        const source = ownedSources.find(
+          (candidate) => candidate.sourceOffset === selection.sourceOffset
+        );
+        if (source === undefined) continue;
+        records.push({
+          ...source,
+          sinkKind: "collection-selection",
+          sinkOffset: nodeStart(node),
+          shellOwner: "bridge-relay"
+        });
+      }
+    }
+  }
+
+  return records.sort(
+    (left, right) =>
+      left.sourceOffset - right.sourceOffset ||
+      left.sinkOffset - right.sinkOffset
+  );
+}
+
+function exactDirectCollectionSelection(
+  node: AstNode
+): { collectionName: string; sourceOffset: number } | null {
+  if (node.type !== "IndexAccess" || !hasRange(node)) return null;
+  const base = isNode(node.base) ? node.base : undefined;
+  const index = isNode(node.index) ? node.index : undefined;
+  const collectionName = base === undefined ? null : stringValue(base.name);
+  if (
+    base?.type !== "Identifier" ||
+    collectionName === null ||
+    index?.type !== "BinaryOperation" ||
+    index.operator !== "%"
+  ) {
+    return null;
+  }
+  const length = isNode(index.right) ? index.right : undefined;
+  if (
+    length?.type !== "MemberAccess" ||
+    length.memberName !== "length" ||
+    !isIdentifierNamed(length.expression, collectionName)
+  ) {
+    return null;
+  }
+  const sourceOffset = directSourceOffset(index.left);
+  return sourceOffset === null ? null : { collectionName, sourceOffset };
+}
+
+function directSourceOffset(value: unknown): number | null {
+  return isNode(value) && isBlockPrevrandao(value) && hasRange(value)
+    ? nodeStart(value)
+    : null;
+}
+
+function hasBridgeOwnerIdentifier(
+  functionName: string,
+  collectionName: string
+): boolean {
+  return [
+    ...identifierTokens(functionName),
+    ...identifierTokens(collectionName)
+  ].some((token) => BRIDGE_OWNER_IDENTIFIERS.has(token));
+}
+
+function identifierTokens(value: string): string[] {
+  return value
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .split(/[^A-Za-z0-9]+/)
+    .filter((token) => token.length > 0)
+    .map((token) => token.toLowerCase());
 }
 
 function isWithinRanges(
