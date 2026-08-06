@@ -4,5 +4,5 @@
     "rootDir": ".",
     "outDir": "dist"
   },
-  "include": ["core", "presets", "rules", "src", "test"]
+  "include": ["core", "presets", "rules", "src", "test", "tsup.config.ts"]
 }
