@@ -33,7 +33,9 @@ jobs:
         run: corepack pnpm install --frozen-lockfile
 
       - name: Apply decision review corrections
-        run: python3 .github/scripts/c09-d-review-fix.py
+        run: |
+          python3 .github/scripts/c09-d-anchor-fix.py
+          python3 .github/scripts/c09-d-review-fix.py
 
       - name: Format and validate decision docs
         run: |
@@ -58,7 +60,8 @@ jobs:
         run: |
           git rm \
             .github/workflows/c09-d-review-fix.yml \
-            .github/scripts/c09-d-review-fix.py
+            .github/scripts/c09-d-review-fix.py \
+            .github/scripts/c09-d-anchor-fix.py
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add \
