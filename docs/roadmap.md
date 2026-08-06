@@ -1,7 +1,7 @@
 # ArcReady Roadmap
 
-**Status:** Active roadmap after C08A Advice-only migration
-**Last reviewed:** 2026-08-05
+**Status:** Active roadmap after C09-D Build selection
+**Last reviewed:** 2026-08-06
 
 ArcReady is an Arc-specific, repository-level static compatibility analyzer for
 projects being ported from Ethereum or other EVM environments to Arc.

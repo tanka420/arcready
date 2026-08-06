@@ -1,7 +1,7 @@
 # ArcReady Rule Development Backlog
 
 **Status:** Active decision record
-**Last reviewed:** 2026-08-05
+**Last reviewed:** 2026-08-06
 **Applies to:** Active and proposed ArcReady static-analysis rules
 
 ## Purpose
@@ -281,10 +281,11 @@ C09A   Next: implement private analyzer and compatibility shells
 C10    Then: add versioned App Kit compatibility analysis
 ```
 
-C09 research and decision are complete. C09A is the next approved sequencing
-target. Production remains blocked until the decision and implementation plan
-merge. Other analyzer expansion should not interrupt this sequence without real
-user evidence.
+C09-R1, C09-R2, C09-R3-A, and C09-R3-B are complete. C09-D selects Build, and
+C09A is the next approved sequencing target. Production remains blocked until
+the decision and implementation plan merge. The compatibility inventory target
+remains `19 known / 16 default / 7 wallet / 4 canonical`. Other analyzer
+expansion should not interrupt this sequence without real user evidence.
 
 ## Expansion triggers
 
