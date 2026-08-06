@@ -119,7 +119,7 @@ const adversarialCases = [
     project: adversarialProject("C09-R3B-A07", {
       "src/RelaySelector.sol":
         "pragma solidity ^0.8.24;\ncontract RelaySelector {}\n",
-      [ARC_BROADCAST_PATH]: foundryBroadcast({ contractAddress: undefined })
+      [ARC_BROADCAST_PATH]: foundryBroadcast({ contractAddress: null })
     }),
     note: "A CREATE record without a valid address is incomplete."
   },
