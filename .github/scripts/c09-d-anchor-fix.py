@@ -1,5 +1,6 @@
 from pathlib import Path
 
+# Normalize the one C09A anchor before applying the main exact-string patch.
 path = Path(".github/scripts/c09-d-review-fix.py")
 text = path.read_text(encoding="utf-8")
 marker = 'c09a = "docs/exec-plans/active/C09A.md"'
