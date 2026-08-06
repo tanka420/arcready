@@ -6,6 +6,7 @@ import type { DiscoveryPathV1 } from "../fs/instrumentation.js";
 import { representNativeDiscoveryPath } from "../fs/instrumentation.js";
 import type { Finding, Severity } from "../findings/index.js";
 import type { Rule, RuleContext } from "./index.js";
+import { runInRuleExecutionScope } from "./execution-scope.js";
 import {
   projectLegacyFindings,
   representRuleIdentity,
@@ -248,6 +249,16 @@ export async function executeRules(
 }
 
 export async function executeRulesStructured(
+  rules: Rule[],
+  context: RuleContext,
+  recorder?: RuleExecutionInstrumentationRecorder
+): Promise<RuleExecutionResult> {
+  return runInRuleExecutionScope(() =>
+    executeRulesStructuredInScope(rules, context, recorder)
+  );
+}
+
+async function executeRulesStructuredInScope(
   rules: Rule[],
   context: RuleContext,
   recorder?: RuleExecutionInstrumentationRecorder

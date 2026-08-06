@@ -1,4 +1,5 @@
 import { createRequire } from "node:module";
+import { currentRuleExecutionScope } from "../../core/rules/execution-scope.js";
 
 type AstNode = Record<string, unknown> & {
   readonly type?: string;
@@ -102,8 +103,8 @@ const KNOWN_DIRECT_SOURCE_CONTEXTS = new Set([
 const EXCLUDED_DIRECTORIES =
   /(?:^|\/)(?:test|tests|__tests__|generated|vendor|node_modules|lib|out|cache|broadcast|dist|build|coverage)(?:\/|$)/i;
 const require = createRequire(import.meta.url);
-const flowRecordsByScanFiles = new WeakMap<
-  readonly string[],
+const flowRecordsByExecution = new WeakMap<
+  object,
   Promise<readonly PrevrandaoFlowRecord[]>
 >();
 
@@ -154,11 +155,14 @@ export async function analyzePrevrandaoFlowFile(
 export function requestPrevrandaoFlowRecords(
   input: PrevrandaoScanInput
 ): Promise<readonly PrevrandaoFlowRecord[]> {
-  const cached = flowRecordsByScanFiles.get(input.files);
+  const execution = currentRuleExecutionScope();
+  if (execution === undefined) return collectScanFlowRecords(input);
+
+  const cached = flowRecordsByExecution.get(execution);
   if (cached !== undefined) return cached;
 
   const requested = collectScanFlowRecords(input);
-  flowRecordsByScanFiles.set(input.files, requested);
+  flowRecordsByExecution.set(execution, requested);
   return requested;
 }
 
