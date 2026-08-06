@@ -191,7 +191,9 @@ function classifyProjectRoot(sourceNames, broadcasts) {
   }
 
   if (arcRecords.length > 0) {
-    const addresses = new Set(arcRecords.map((record) => record.contractAddress));
+    const addresses = new Set(
+      arcRecords.map((record) => record.contractAddress)
+    );
     return addresses.size === 1 ? "arc-foundry" : "conflict";
   }
 

@@ -63,7 +63,8 @@ function run() {
 
   const summary = {
     total: results.length,
-    matched: results.filter((result) => result.expected === result.actual).length,
+    matched: results.filter((result) => result.expected === result.actual)
+      .length,
     counts,
     failures,
     results
