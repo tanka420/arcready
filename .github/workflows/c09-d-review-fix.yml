@@ -58,7 +58,7 @@ jobs:
 
       - name: Commit corrected decision and self-clean
         run: |
-          git rm \
+          git rm -f \
             .github/workflows/c09-d-review-fix.yml \
             .github/scripts/c09-d-review-fix.py \
             .github/scripts/c09-d-anchor-fix.py
