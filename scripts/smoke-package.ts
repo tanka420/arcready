@@ -14,7 +14,7 @@ import {
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 interface PackageJson {
   name: string;
@@ -30,8 +30,11 @@ const packageRoot = join(repoRoot, "packages", "arcready");
 const packageJson = JSON.parse(
   readFileSync(join(packageRoot, "package.json"), "utf8")
 ) as PackageJson;
-const C07A_BASELINE_PACKED_SIZE = 59_591;
-const MAX_C07B_PACKED_DELTA = 20_000;
+const C09_PRE_E1_PACKED_SIZE = 78_086;
+const MAX_C09_E1_PACKED_DELTA = 15_000;
+const SOLIDITY_PARSER_VERSION = "0.20.2";
+const SOLIDITY_PARSER_INTEGRITY =
+  "sha512-rbu0bzwNvMcwAjH86hiEAcOeRI2EeK8zCkHDrFykh/Al8mvJeFmjy3UrE7GYQjNwOgbGUUtCn5/k8CB8zIu7QA==";
 const tarballName = `${packageJson.name}-${packageJson.version}-smoke-${randomUUID()}.tgz`;
 const tarballPath = join(repoRoot, tarballName);
 
@@ -42,6 +45,7 @@ try {
   assertDependencyBoundary();
   run("corepack", ["pnpm", "--filter", "arcready", "build"], repoRoot);
   assertCompilerIsExternal();
+  assertParserIsExternal();
 
   cliFixtureRoot = createJsonV2Fixture();
   validateJsonV2Execution(
@@ -63,14 +67,14 @@ try {
     throw new Error(`Expected package tarball was not created: ${tarballPath}`);
   }
   const candidatePackedSize = statSync(tarballPath).size;
-  const packedSizeDelta = candidatePackedSize - C07A_BASELINE_PACKED_SIZE;
-  if (packedSizeDelta <= 0 || packedSizeDelta > MAX_C07B_PACKED_DELTA) {
+  const packedSizeDelta = candidatePackedSize - C09_PRE_E1_PACKED_SIZE;
+  if (packedSizeDelta <= 0 || packedSizeDelta > MAX_C09_E1_PACKED_DELTA) {
     throw new Error(
-      `Unexpected C07B packed-size delta: ${packedSizeDelta} bytes`
+      `Unexpected C09A-E1 packed-size delta: ${packedSizeDelta} bytes`
     );
   }
   console.log(
-    `C07B packed size: ${candidatePackedSize} bytes (${packedSizeDelta >= 0 ? "+" : ""}${packedSizeDelta} from C07A baseline ${C07A_BASELINE_PACKED_SIZE}).`
+    `C09A-E1 packed size: ${candidatePackedSize} bytes (${packedSizeDelta >= 0 ? "+" : ""}${packedSizeDelta} from pre-E1 baseline ${C09_PRE_E1_PACKED_SIZE}).`
   );
 
   smokeRoot = mkdtempSync(join(tmpdir(), "arcready-package-smoke-"));
@@ -88,8 +92,43 @@ try {
     throw new Error("Expected npm pack to return a TypeScript tarball name");
   }
   const typescriptTarballPath = join(smokeRoot, typescriptTarballName);
-
+  const parserTarballName = run(
+    "npm",
+    [
+      "pack",
+      `@solidity-parser/parser@${SOLIDITY_PARSER_VERSION}`,
+      "--pack-destination",
+      smokeRoot,
+      "--ignore-scripts"
+    ],
+    repoRoot
+  )
+    .trim()
+    .split(/\r?\n/)
+    .at(-1);
+  if (!parserTarballName) {
+    throw new Error(
+      "Expected npm pack to return a Solidity parser tarball name"
+    );
+  }
+  const parserTarballPath = join(smokeRoot, parserTarballName);
+  console.log(
+    `Solidity parser packed size: ${statSync(parserTarballPath).size} bytes.`
+  );
   run("npm", ["init", "-y"], smokeRoot);
+  run(
+    "npm",
+    [
+      "install",
+      parserTarballPath,
+      "--cache",
+      npmCache,
+      "--offline",
+      "--no-audit",
+      "--fund=false"
+    ],
+    smokeRoot
+  );
   run(
     "npm",
     [
@@ -105,6 +144,8 @@ try {
     smokeRoot
   );
   assertInstalledTypeScript(smokeRoot);
+  assertInstalledParser(smokeRoot);
+  validateLazyParserBoundary(smokeRoot);
 
   run("npx", ["--no-install", "arcready", "--help"], smokeRoot);
   run("npx", ["--no-install", "arcready", "init"], smokeRoot);
@@ -172,6 +213,38 @@ function assertDependencyBoundary(): void {
       `Unexpected TypeScript Node engine: ${manifest.engines?.node}`
     );
   }
+  if (
+    packageJson.dependencies?.["@solidity-parser/parser"] !==
+    SOLIDITY_PARSER_VERSION
+  ) {
+    throw new Error(
+      `Expected exact runtime dependency @solidity-parser/parser@${SOLIDITY_PARSER_VERSION}`
+    );
+  }
+  const parserManifest = JSON.parse(
+    readFileSync(
+      require.resolve("@solidity-parser/parser/package.json"),
+      "utf8"
+    )
+  ) as PackageJson;
+  if (
+    parserManifest.version !== SOLIDITY_PARSER_VERSION ||
+    parserManifest.license !== "MIT" ||
+    Object.keys(parserManifest.dependencies ?? {}).length !== 0
+  ) {
+    throw new Error("Unexpected Solidity parser dependency metadata");
+  }
+  const lockfile = readFileSync(join(repoRoot, "pnpm-lock.yaml"), "utf8");
+  if (
+    !lockfile.includes(
+      `"@solidity-parser/parser@${SOLIDITY_PARSER_VERSION}"`
+    ) ||
+    !lockfile.includes(`integrity: ${SOLIDITY_PARSER_INTEGRITY}`)
+  ) {
+    throw new Error(
+      "Expected exact Solidity parser version and integrity in lockfile"
+    );
+  }
 }
 
 function assertCompilerIsExternal(): void {
@@ -205,6 +278,29 @@ function assertCompilerIsExternal(): void {
   }
 }
 
+function assertParserIsExternal(): void {
+  const analyzerPath = join(packageRoot, "dist", "prevrandao-analysis.js");
+  const declarationPath = join(packageRoot, "dist", "prevrandao-analysis.d.ts");
+  if (!existsSync(analyzerPath) || !existsSync(declarationPath)) {
+    throw new Error("Expected private prevrandao analyzer package entries");
+  }
+  const analyzer = readFileSync(analyzerPath, "utf8");
+  const declaration = readFileSync(declarationPath, "utf8");
+  if (!analyzer.includes("@solidity-parser/parser")) {
+    throw new Error(
+      "Expected the private analyzer to resolve the external parser"
+    );
+  }
+  if (
+    analyzer.length > 30_000 ||
+    declaration.includes("@solidity-parser/parser")
+  ) {
+    throw new Error(
+      "Solidity parser implementation or types leaked into ArcReady"
+    );
+  }
+}
+
 function assertInstalledTypeScript(root: string): void {
   const manifestPath = join(root, "node_modules", "typescript", "package.json");
   if (!existsSync(manifestPath)) {
@@ -216,6 +312,115 @@ function assertInstalledTypeScript(root: string): void {
   if (manifest.version !== "5.9.3" || manifest.license !== "Apache-2.0") {
     throw new Error("Installed TypeScript dependency metadata did not match");
   }
+}
+
+function assertInstalledParser(root: string): void {
+  const parserRoot = join(root, "node_modules", "@solidity-parser", "parser");
+  const manifestPath = join(parserRoot, "package.json");
+  if (!existsSync(manifestPath)) {
+    throw new Error("Expected installed Solidity parser to resolve separately");
+  }
+  const manifest = JSON.parse(
+    readFileSync(manifestPath, "utf8")
+  ) as PackageJson;
+  if (
+    manifest.version !== SOLIDITY_PARSER_VERSION ||
+    manifest.license !== "MIT" ||
+    Object.keys(manifest.dependencies ?? {}).length !== 0
+  ) {
+    throw new Error(
+      "Installed Solidity parser dependency metadata did not match"
+    );
+  }
+  const stats = directoryStats(parserRoot);
+  console.log(
+    `Solidity parser installed contents: ${stats.files} files, ${stats.bytes} bytes.`
+  );
+}
+
+function validateLazyParserBoundary(root: string): void {
+  const installed = join(root, "node_modules", "@solidity-parser", "parser");
+  const withdrawn = `${installed}-withdrawn`;
+  const analyzerUrl = pathToFileURL(
+    join(root, "node_modules", "arcready", "dist", "prevrandao-analysis.js")
+  ).href;
+  if (!resolve(installed).startsWith(resolve(root)) || !existsSync(installed)) {
+    throw new Error(
+      "Refusing to move an unverified Solidity parser dependency"
+    );
+  }
+
+  renameSync(installed, withdrawn);
+  try {
+    const unsupported = runInstalledParserProbe(
+      root,
+      analyzerUrl,
+      "src/client.ts",
+      "block.prevrandao"
+    );
+    if (unsupported.status !== "unsupported-file") {
+      throw new Error("Non-Solidity parser probe did not remain lazy");
+    }
+
+    const unavailable = runInstalledParserProbe(
+      root,
+      analyzerUrl,
+      "src/Selector.sol",
+      "contract Selector {}"
+    );
+    if (unavailable.status !== "parser-unavailable") {
+      throw new Error(
+        `Missing parser did not fail closed: ${JSON.stringify(unavailable)}`
+      );
+    }
+  } finally {
+    renameSync(withdrawn, installed);
+  }
+
+  const analyzed = runInstalledParserProbe(
+    root,
+    analyzerUrl,
+    "src/Selector.sol",
+    "contract Selector { function choose() external view returns (uint256) { return block.prevrandao; } }"
+  );
+  if (analyzed.status !== "analyzed" || analyzed.sources.length !== 1) {
+    throw new Error("Packed ArcReady package could not lazy-load the parser");
+  }
+}
+
+function runInstalledParserProbe(
+  root: string,
+  analyzerUrl: string,
+  filePath: string,
+  source: string
+): { status: string; sources: unknown[] } {
+  const program = `const module = await import(${JSON.stringify(analyzerUrl)}); const result = await module.analyzePrevrandaoSourceFile(${JSON.stringify(filePath)}, ${JSON.stringify(source)}); process.stdout.write(JSON.stringify(result));`;
+  const execution = runCaptured(
+    process.execPath,
+    ["--input-type=module", "-e", program],
+    root
+  );
+  if (execution.status !== 0) {
+    throw new Error(`Installed parser probe failed: ${execution.stderr}`);
+  }
+  return JSON.parse(execution.stdout) as { status: string; sources: unknown[] };
+}
+
+function directoryStats(root: string): { files: number; bytes: number } {
+  let files = 0;
+  let bytes = 0;
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
+    const path = join(root, entry.name);
+    if (entry.isDirectory()) {
+      const child = directoryStats(path);
+      files += child.files;
+      bytes += child.bytes;
+    } else if (entry.isFile()) {
+      files += 1;
+      bytes += statSync(path).size;
+    }
+  }
+  return { files, bytes };
 }
 
 function validateInstalledAmountFixtures(root: string): void {
@@ -728,6 +933,7 @@ function sanitizedEnvironment(): NodeJS.ProcessEnv {
   for (const key of Object.keys(environment)) {
     const normalized = key.toLowerCase();
     if (
+      normalized === "node_path" ||
       normalized.includes("verify_deps_before_run") ||
       normalized.includes("verify-deps-before-run") ||
       normalized.includes("jsr")
