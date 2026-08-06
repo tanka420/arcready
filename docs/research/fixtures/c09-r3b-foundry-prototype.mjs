@@ -4,6 +4,10 @@ const ARC_TESTNET_CHAIN_ID = 5042002;
 const FOUNDRY_VERSION = "1.7.1";
 const FOUNDRY_ARTIFACT_CONTRACT =
   "foundry-forge-script-run-latest-reviewed-2026-08-05";
+const UNSUPPORTED_ARTIFACT_CONTRACTS = new Set([
+  "hardhat-deploy-v1",
+  "nonstandard-hardhat-like"
+]);
 
 const ASSOCIATION_STATUS = new Set([
   "arc-foundry",
@@ -25,7 +29,11 @@ function normalizeRepositoryPath(filePath) {
   }
 
   const segments = filePath.split("/");
-  if (segments.some((segment) => segment === "" || segment === "." || segment === "..")) {
+  if (
+    segments.some(
+      (segment) => segment === "" || segment === "." || segment === ".."
+    )
+  ) {
     return null;
   }
 
@@ -194,9 +202,7 @@ function mergeStatuses(statuses) {
   if (statuses.includes("conflict")) return "conflict";
   if (statuses.includes("ambiguous")) return "ambiguous";
 
-  const material = new Set(
-    statuses.filter((status) => status !== "unknown")
-  );
+  const material = new Set(statuses.filter((status) => status !== "unknown"));
   if (material.size > 1) return "ambiguous";
   if (material.size === 1) return [...material][0];
   return "unknown";
@@ -216,7 +222,7 @@ export function classifyFoundryArcAssociation(projectCase) {
     };
   }
 
-  if (projectCase.artifactContract !== FOUNDRY_ARTIFACT_CONTRACT) {
+  if (UNSUPPORTED_ARTIFACT_CONTRACTS.has(projectCase.artifactContract)) {
     return {
       status: "unsupported-adapter",
       foundryVersion: FOUNDRY_VERSION,
