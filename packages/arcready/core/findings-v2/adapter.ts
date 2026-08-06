@@ -35,9 +35,7 @@ export type AdaptableCompletedRuleOccurrenceV2 = Omit<
 export interface AdaptDetectorOccurrenceV2Input {
   readonly occurrence: AdaptableCompletedRuleOccurrenceV2;
   readonly specification: PatternFindingV2AdapterSpecification;
-  readonly resolveLocation: (
-    legacyPath: string
-  ) => SourceLocationResolutionV2;
+  readonly resolveLocation: (legacyPath: string) => SourceLocationResolutionV2;
 }
 
 export interface AdaptDetectorOccurrenceV2Result {
@@ -61,15 +59,16 @@ interface OrderedDiagnostic {
   readonly diagnostic: ScanDiagnosticV2;
 }
 
-const REJECTION_REASONS: readonly SourceLocationResolutionRejectionReasonV2[] = [
-  "empty",
-  "outside-project-root",
-  "parent-traversal",
-  "drive-mismatch",
-  "url-like",
-  "control-character",
-  "unrepresentable"
-];
+const REJECTION_REASONS: readonly SourceLocationResolutionRejectionReasonV2[] =
+  [
+    "empty",
+    "outside-project-root",
+    "parent-traversal",
+    "drive-mismatch",
+    "url-like",
+    "control-character",
+    "unrepresentable"
+  ];
 
 export function adaptDetectorOccurrenceV2(
   input: AdaptDetectorOccurrenceV2Input
@@ -80,7 +79,10 @@ export function adaptDetectorOccurrenceV2(
   const candidates: AdaptedCandidate[] = [];
   const orderedDiagnostics: OrderedDiagnostic[] = [];
 
-  for (const [detectorIndex, legacyFinding] of occurrence.detectorFindings.entries()) {
+  for (const [
+    detectorIndex,
+    legacyFinding
+  ] of occurrence.detectorFindings.entries()) {
     validateLegacyFindingIdentity(legacyFinding, specification.ruleId);
 
     if (!Array.isArray(legacyFinding.files)) {
@@ -133,7 +135,11 @@ export function adaptDetectorOccurrenceV2(
 
     candidates.push({
       detectorIndex,
-      finding: createFindingV2(legacyFinding, resolution.location, specification)
+      finding: createFindingV2(
+        legacyFinding,
+        resolution.location,
+        specification
+      )
     });
   }
 
@@ -218,7 +224,10 @@ function createFindingV2(
       }
     ],
     remediation: { summary: specification.remediationSummary },
-    documentation: metadata.documentation.map(({ title, url }) => ({ title, url })),
+    documentation: metadata.documentation.map(({ title, url }) => ({
+      title,
+      url
+    })),
     fingerprints: {
       exact: createExactFindingFingerprint({
         ruleId: specification.ruleId,
@@ -263,7 +272,9 @@ function createDiagnostic(
   return diagnostic;
 }
 
-function validateInput(input: unknown): asserts input is AdaptDetectorOccurrenceV2Input {
+function validateInput(
+  input: unknown
+): asserts input is AdaptDetectorOccurrenceV2Input {
   assertPlainRecord(input, "FindingV2 adapter input");
   assertOnlyKeys(
     input,
@@ -271,7 +282,9 @@ function validateInput(input: unknown): asserts input is AdaptDetectorOccurrence
     "FindingV2 adapter input"
   );
   if (typeof input.resolveLocation !== "function") {
-    throw new TypeError("FindingV2 adapter location resolver must be a function");
+    throw new TypeError(
+      "FindingV2 adapter location resolver must be a function"
+    );
   }
   validatePatternFindingV2AdapterSpecification(input.specification);
 
@@ -285,13 +298,17 @@ function validateInput(input: unknown): asserts input is AdaptDetectorOccurrence
     !Number.isSafeInteger(input.occurrence.selectionIndex) ||
     (input.occurrence.selectionIndex as number) < 0
   ) {
-    throw new TypeError("FindingV2 adapter selectionIndex must be non-negative");
+    throw new TypeError(
+      "FindingV2 adapter selectionIndex must be non-negative"
+    );
   }
   if (
     input.occurrence.scheduling !== "scheduled" ||
     input.occurrence.execution !== "completed"
   ) {
-    throw new TypeError("FindingV2 adapter requires a completed scheduled occurrence");
+    throw new TypeError(
+      "FindingV2 adapter requires a completed scheduled occurrence"
+    );
   }
   if (!Array.isArray(input.occurrence.detectorFindings)) {
     throw new TypeError("FindingV2 adapter detectorFindings must be an array");
@@ -306,7 +323,9 @@ function validateInput(input: unknown): asserts input is AdaptDetectorOccurrence
     throw new TypeError("FindingV2 adapter rule identity is unsupported");
   }
   if (input.occurrence.rule.id !== input.specification.ruleId) {
-    throw new TypeError("FindingV2 adapter occurrence and specification IDs must match");
+    throw new TypeError(
+      "FindingV2 adapter occurrence and specification IDs must match"
+    );
   }
 }
 
@@ -331,7 +350,11 @@ function validateResolution(
   }
   if (value.status === "rejected") {
     assertOnlyKeys(value, ["status", "reason"], "Rejected source location");
-    if (!REJECTION_REASONS.includes(value.reason as SourceLocationResolutionRejectionReasonV2)) {
+    if (
+      !REJECTION_REASONS.includes(
+        value.reason as SourceLocationResolutionRejectionReasonV2
+      )
+    ) {
       throw new TypeError("Source location rejection reason is unsupported");
     }
     return;

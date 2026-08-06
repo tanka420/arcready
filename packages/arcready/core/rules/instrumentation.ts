@@ -127,9 +127,7 @@ class RuleExecutionInstrumentationRecorder {
   private readonly outcomes: RuleExecutionOutcomeV1[] = [];
   private readonly diagnostics: ScanDiagnosticV2[] = [];
 
-  recordDisabled(
-    occurrence: DisabledRuleOccurrenceExecutionResult
-  ): void {
+  recordDisabled(occurrence: DisabledRuleOccurrenceExecutionResult): void {
     this.outcomes.push({
       selectionIndex: occurrence.selectionIndex,
       rule: occurrence.rule,
@@ -142,9 +140,7 @@ class RuleExecutionInstrumentationRecorder {
     });
   }
 
-  startScheduled(
-    context: RuleContext
-  ): ScheduledRuleExecution {
+  startScheduled(context: RuleContext): ScheduledRuleExecution {
     return {
       reads: new ScheduledRuleRecorder(context.projectRoot)
     };
@@ -217,8 +213,10 @@ export async function runRulesInstrumented(
   rules: Rule[],
   context: RuleContext
 ): Promise<InstrumentedRuleRunResult> {
-  const { execution, instrumentation } =
-    await runRulesStructuredInstrumented(rules, context);
+  const { execution, instrumentation } = await runRulesStructuredInstrumented(
+    rules,
+    context
+  );
 
   return {
     findings: projectLegacyFindings(execution),

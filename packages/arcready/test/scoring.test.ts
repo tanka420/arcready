@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { createScanReport, scoreFindings, statusFromSummary } from "../src/index.js";
+import {
+  createScanReport,
+  scoreFindings,
+  statusFromSummary
+} from "../src/index.js";
 import type { Finding } from "../src/index.js";
 
 describe("scoring", () => {
@@ -50,18 +54,30 @@ describe("scoring", () => {
 
 describe("statusFromSummary", () => {
   it("returns fail when there are critical findings", () => {
-    expect(statusFromSummary({ critical: 1, warning: 0, info: 0 })).toBe("fail");
-    expect(statusFromSummary({ critical: 3, warning: 2, info: 1 })).toBe("fail");
+    expect(statusFromSummary({ critical: 1, warning: 0, info: 0 })).toBe(
+      "fail"
+    );
+    expect(statusFromSummary({ critical: 3, warning: 2, info: 1 })).toBe(
+      "fail"
+    );
   });
 
   it("returns warn when there are warnings but no criticals", () => {
-    expect(statusFromSummary({ critical: 0, warning: 1, info: 0 })).toBe("warn");
-    expect(statusFromSummary({ critical: 0, warning: 2, info: 5 })).toBe("warn");
+    expect(statusFromSummary({ critical: 0, warning: 1, info: 0 })).toBe(
+      "warn"
+    );
+    expect(statusFromSummary({ critical: 0, warning: 2, info: 5 })).toBe(
+      "warn"
+    );
   });
 
   it("returns pass when there are no criticals or warnings", () => {
-    expect(statusFromSummary({ critical: 0, warning: 0, info: 0 })).toBe("pass");
-    expect(statusFromSummary({ critical: 0, warning: 0, info: 3 })).toBe("pass");
+    expect(statusFromSummary({ critical: 0, warning: 0, info: 0 })).toBe(
+      "pass"
+    );
+    expect(statusFromSummary({ critical: 0, warning: 0, info: 3 })).toBe(
+      "pass"
+    );
   });
 });
 

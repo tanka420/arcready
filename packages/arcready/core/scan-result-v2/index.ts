@@ -19,9 +19,7 @@ export interface BuildScanResultV2Input {
   diagnostics: readonly ScanDiagnosticV2[];
 }
 
-export function buildScanResultV2(
-  input: BuildScanResultV2Input
-): ScanResultV2 {
+export function buildScanResultV2(input: BuildScanResultV2Input): ScanResultV2 {
   validateCoverageV2(input.coverage);
   assertArray(input.findings, "BuildScanResultV2Input findings");
   for (const finding of input.findings) {

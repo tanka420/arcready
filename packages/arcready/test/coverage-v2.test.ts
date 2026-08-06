@@ -89,10 +89,7 @@ describe("CoverageV2 discovery and scope derivation", () => {
     {
       name: "mixed unavailable and outside with no accepted roots",
       discovery: discovery({
-        roots: [
-          root("unavailable", 0),
-          root("outside-project-root", 1)
-        ]
+        roots: [root("unavailable", 0), root("outside-project-root", 1)]
       }),
       expectedState: "insufficient",
       expectedRequested: { state: "known", count: 2 },
@@ -342,9 +339,7 @@ describe("CoverageV2 rule execution derivation", () => {
     },
     {
       name: "completed rule with unsettled read",
-      rules: [
-        completedRule({ readAttempts: [readAttempt("unsettled")] })
-      ],
+      rules: [completedRule({ readAttempts: [readAttempt("unsettled")] })],
       state: "complete",
       counts: { completedOccurrences: 1 }
     },
@@ -373,7 +368,10 @@ describe("CoverageV2 rule execution derivation", () => {
 
   it("preserves duplicate selected rule occurrences", () => {
     const duplicate = completedRule();
-    const coverage = derive(undefined, rules([duplicate, duplicate, duplicate]));
+    const coverage = derive(
+      undefined,
+      rules([duplicate, duplicate, duplicate])
+    );
 
     expect(coverage.ruleExecution.counts).toMatchObject({
       selectedOccurrences: 3,
@@ -394,9 +392,9 @@ describe("CoverageV2 rule execution derivation", () => {
       ])
     );
 
-    expect(
-      coverage.ruleExecution.counts.unrepresentableRuleOccurrences
-    ).toBe(2);
+    expect(coverage.ruleExecution.counts.unrepresentableRuleOccurrences).toBe(
+      2
+    );
     expect(JSON.stringify(coverage)).not.toContain("rule-id");
   });
 
@@ -492,42 +490,38 @@ describe("CoverageV2 validation", () => {
     ["array", []],
     ["non-plain object", new (class Coverage {})()]
   ])("rejects %s as a top-level value", (_name, value) => {
-    expect(() => validateCoverageV2(value)).toThrow(
-      ContractV2ValidationError
-    );
+    expect(() => validateCoverageV2(value)).toThrow(ContractV2ValidationError);
   });
 
-  const nestedClassCases: readonly [
-    string,
-    (coverage: CoverageV2) => void
-  ][] = [
-    ["scope", (value) => (value.scope = classInstance(value.scope))],
+  const nestedClassCases: readonly [string, (coverage: CoverageV2) => void][] =
     [
-      "scope roots",
-      (value) => (value.scope.roots = classInstance(value.scope.roots))
-    ],
-    [
-      "requested roots",
-      (value) =>
-        (value.scope.roots.requested = classInstance(
-          value.scope.roots.requested
-        ))
-    ],
-    [
-      "rule execution counts",
-      (value) =>
-        (value.ruleExecution.counts = classInstance(
-          value.ruleExecution.counts
-        ))
-    ],
-    [
-      "RuleContext read evidence",
-      (value) =>
-        (value.evidence.ruleContextReads = classInstance(
-          value.evidence.ruleContextReads
-        ))
-    ]
-  ];
+      ["scope", (value) => (value.scope = classInstance(value.scope))],
+      [
+        "scope roots",
+        (value) => (value.scope.roots = classInstance(value.scope.roots))
+      ],
+      [
+        "requested roots",
+        (value) =>
+          (value.scope.roots.requested = classInstance(
+            value.scope.roots.requested
+          ))
+      ],
+      [
+        "rule execution counts",
+        (value) =>
+          (value.ruleExecution.counts = classInstance(
+            value.ruleExecution.counts
+          ))
+      ],
+      [
+        "RuleContext read evidence",
+        (value) =>
+          (value.evidence.ruleContextReads = classInstance(
+            value.evidence.ruleContextReads
+          ))
+      ]
+    ];
 
   it.each(nestedClassCases)(
     "rejects a class instance at nested %s",
@@ -539,46 +533,48 @@ describe("CoverageV2 validation", () => {
     }
   );
 
-  const unknownFieldCases: readonly [
-    string,
-    (coverage: CoverageV2) => void
-  ][] = [
-    ["top level", (value) => Object.assign(value, { extra: true })],
-    ["scope", (value) => Object.assign(value.scope, { extra: true })],
-    ["roots", (value) => Object.assign(value.scope.roots, { extra: true })],
+  const unknownFieldCases: readonly [string, (coverage: CoverageV2) => void][] =
     [
-      "requested roots",
-      (value) => Object.assign(value.scope.roots.requested, { extra: true })
-    ],
-    ["entries", (value) => Object.assign(value.scope.entries, { extra: true })],
-    [
-      "discovery",
-      (value) => Object.assign(value.discovery, { extra: true })
-    ],
-    [
-      "rule execution",
-      (value) => Object.assign(value.ruleExecution, { extra: true })
-    ],
-    [
-      "rule counts",
-      (value) => Object.assign(value.ruleExecution.counts, { extra: true })
-    ],
-    ["analysis", (value) => Object.assign(value.analysis, { extra: true })],
-    ["evidence", (value) => Object.assign(value.evidence, { extra: true })],
-    [
-      "read evidence",
-      (value) => Object.assign(value.evidence.ruleContextReads, { extra: true })
-    ]
-  ];
+      ["top level", (value) => Object.assign(value, { extra: true })],
+      ["scope", (value) => Object.assign(value.scope, { extra: true })],
+      ["roots", (value) => Object.assign(value.scope.roots, { extra: true })],
+      [
+        "requested roots",
+        (value) => Object.assign(value.scope.roots.requested, { extra: true })
+      ],
+      [
+        "entries",
+        (value) => Object.assign(value.scope.entries, { extra: true })
+      ],
+      ["discovery", (value) => Object.assign(value.discovery, { extra: true })],
+      [
+        "rule execution",
+        (value) => Object.assign(value.ruleExecution, { extra: true })
+      ],
+      [
+        "rule counts",
+        (value) => Object.assign(value.ruleExecution.counts, { extra: true })
+      ],
+      ["analysis", (value) => Object.assign(value.analysis, { extra: true })],
+      ["evidence", (value) => Object.assign(value.evidence, { extra: true })],
+      [
+        "read evidence",
+        (value) =>
+          Object.assign(value.evidence.ruleContextReads, { extra: true })
+      ]
+    ];
 
-  it.each(unknownFieldCases)("rejects unknown fields at %s", (_name, mutate) => {
-    const coverage = validCoverage();
-    mutate(coverage);
+  it.each(unknownFieldCases)(
+    "rejects unknown fields at %s",
+    (_name, mutate) => {
+      const coverage = validCoverage();
+      mutate(coverage);
 
-    expect(() => validateCoverageV2(coverage)).toThrow(
-      ContractV2ValidationError
-    );
-  });
+      expect(() => validateCoverageV2(coverage)).toThrow(
+        ContractV2ValidationError
+      );
+    }
+  );
 
   it("rejects a wrong contract version", () => {
     const coverage = validCoverage();
@@ -660,7 +656,10 @@ describe("CoverageV2 validation", () => {
   });
 
   it.each([
-    ["complete", (value: CoverageV2) => (value.scope.roots.acceptedRootOutcomes = 0)],
+    [
+      "complete",
+      (value: CoverageV2) => (value.scope.roots.acceptedRootOutcomes = 0)
+    ],
     [
       "partial",
       (value: CoverageV2) => {
@@ -739,11 +738,13 @@ describe("CoverageV2 validation", () => {
   it.each([
     [
       "selected rule",
-      (value: CoverageV2) => (value.ruleExecution.counts.selectedOccurrences = 2)
+      (value: CoverageV2) =>
+        (value.ruleExecution.counts.selectedOccurrences = 2)
     ],
     [
       "scheduled rule",
-      (value: CoverageV2) => (value.ruleExecution.counts.scheduledOccurrences = 2)
+      (value: CoverageV2) =>
+        (value.ruleExecution.counts.scheduledOccurrences = 2)
     ],
     [
       "completed emission",
@@ -826,7 +827,10 @@ describe("CoverageV2 validation", () => {
   });
 
   it.each([
-    ["analysis state", (value: CoverageV2) => (value.analysis.state = "complete" as "unknown")],
+    [
+      "analysis state",
+      (value: CoverageV2) => (value.analysis.state = "complete" as "unknown")
+    ],
     [
       "applicability",
       (value: CoverageV2) =>
@@ -884,7 +888,9 @@ describe("CoverageV2 determinism and boundaries", () => {
     expect(serialized).not.toContain("private source content");
     expect(serialized).not.toContain("PRIVATE_ABSOLUTE_C_PATH");
     expect(serialized).not.toContain("private legacy finding");
-    expect(serialized).not.toMatch(/timestamp|duration|percentage|ratio|score/i);
+    expect(serialized).not.toMatch(
+      /timestamp|duration|percentage|ratio|score/i
+    );
     expect(serialized).not.toMatch(/overallStatus|compatible|passed/i);
   });
 
@@ -931,7 +937,10 @@ describe("CoverageV2 determinism and boundaries", () => {
 });
 
 function derive(
-  discoveryInstrumentation = discovery({ roots: [root("accepted")], entries: [entry()] }),
+  discoveryInstrumentation = discovery({
+    roots: [root("accepted")],
+    entries: [entry()]
+  }),
   ruleExecutionInstrumentation = rules([completedRule()])
 ): CoverageV2 {
   return deriveCoverageV2({
@@ -1059,9 +1068,7 @@ function readAttempt(
 function validCoverage(): CoverageV2 {
   return derive(
     discovery({ roots: [root("accepted")], entries: [entry()] }),
-    rules([
-      completedRule({ readAttempts: [readAttempt("succeeded")] })
-    ])
+    rules([completedRule({ readAttempts: [readAttempt("succeeded")] })])
   );
 }
 

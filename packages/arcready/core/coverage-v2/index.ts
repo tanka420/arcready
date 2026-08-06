@@ -115,7 +115,9 @@ function deriveDiscoveryCoverage(
 
   const requested = scope.roots.requested;
   if (requested.state !== "known") {
-    throw new Error("Complete discovery must have a known requested-root count.");
+    throw new Error(
+      "Complete discovery must have a known requested-root count."
+    );
   }
   if (requested.count === 0 || scope.roots.acceptedRootOutcomes === 0) {
     return { state: "insufficient" };

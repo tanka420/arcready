@@ -48,9 +48,9 @@ describe("createReviewBundle", () => {
     });
 
     expect(second.source).toBe("committed");
-    expect(
-      readFileSync(join(second.bundleRoot, "manifest.json"), "utf8")
-    ).toBe(firstManifest);
+    expect(readFileSync(join(second.bundleRoot, "manifest.json"), "utf8")).toBe(
+      firstManifest
+    );
     expect(readFileSync(join(second.bundleRoot, "SHA256SUMS"), "utf8")).toBe(
       firstSums
     );

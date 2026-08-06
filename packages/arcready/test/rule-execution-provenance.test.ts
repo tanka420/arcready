@@ -68,9 +68,9 @@ describe("structured rule execution provenance", () => {
         execution: "completed"
       });
       expect(occurrence?.detectorFindings).toHaveLength(findingCount);
-      expect(occurrence?.detectorFindings.map(({ message }) => message)).toEqual(
-        findings.map(({ message }) => message)
-      );
+      expect(
+        occurrence?.detectorFindings.map(({ message }) => message)
+      ).toEqual(findings.map(({ message }) => message));
     }
   );
 
@@ -81,11 +81,9 @@ describe("structured rule execution provenance", () => {
       createContext()
     );
 
-    expect(result.occurrences.map(({ selectionIndex }) => selectionIndex)).toEqual([
-      0,
-      1,
-      2
-    ]);
+    expect(
+      result.occurrences.map(({ selectionIndex }) => selectionIndex)
+    ).toEqual([0, 1, 2]);
     expect(result.occurrences.map(({ rule: identity }) => identity)).toEqual([
       { kind: "rule-id", id: rule.id },
       { kind: "rule-id", id: rule.id },
@@ -96,7 +94,10 @@ describe("structured rule execution provenance", () => {
   it("preserves distinct Rule objects with duplicate IDs", async () => {
     const first = createRule("wallet/duplicate-id", () => []);
     const second = createRule("wallet/duplicate-id", () => [createFinding()]);
-    const result = await executeRulesStructured([first, second], createContext());
+    const result = await executeRulesStructured(
+      [first, second],
+      createContext()
+    );
 
     expect(result.occurrences).toHaveLength(2);
     expect(result.occurrences[0]?.detectorFindings).toHaveLength(0);
@@ -106,10 +107,7 @@ describe("structured rule execution provenance", () => {
   it("uses safe and unrepresentable rule identities", async () => {
     const unsafeId = `unsafe${String.fromCodePoint(1)}`;
     const result = await executeRulesStructured(
-      [
-        createRule("wallet/safe", () => []),
-        createRule(unsafeId, () => [])
-      ],
+      [createRule("wallet/safe", () => []), createRule(unsafeId, () => [])],
       createContext()
     );
 
@@ -121,10 +119,22 @@ describe("structured rule execution provenance", () => {
 
   it("uses exact mutually exclusive branch keys", () => {
     expect(Object.keys(disabledOccurrence()).sort()).toEqual(
-      ["detectorFindings", "execution", "rule", "scheduling", "selectionIndex"].sort()
+      [
+        "detectorFindings",
+        "execution",
+        "rule",
+        "scheduling",
+        "selectionIndex"
+      ].sort()
     );
     expect(Object.keys(completedOccurrence()).sort()).toEqual(
-      ["detectorFindings", "execution", "rule", "scheduling", "selectionIndex"].sort()
+      [
+        "detectorFindings",
+        "execution",
+        "rule",
+        "scheduling",
+        "selectionIndex"
+      ].sort()
     );
     expect(Object.keys(failedOccurrence()).sort()).toEqual(
       [
@@ -180,14 +190,8 @@ describe("RuleExecutionResult validation", () => {
   });
 
   it.each([
-    [
-      "disabled/completed",
-      { ...disabledOccurrence(), execution: "completed" }
-    ],
-    [
-      "scheduled/not-run",
-      { ...completedOccurrence(), execution: "not-run" }
-    ],
+    ["disabled/completed", { ...disabledOccurrence(), execution: "completed" }],
+    ["scheduled/not-run", { ...completedOccurrence(), execution: "not-run" }],
     [
       "unsupported scheduling",
       { ...completedOccurrence(), scheduling: "queued" }
@@ -209,7 +213,9 @@ describe("RuleExecutionResult validation", () => {
     delete occurrence.fallbackFinding;
     expectInvalid({ occurrences: [occurrence] });
     expectInvalid({
-      occurrences: [{ ...failedOccurrence(), fallbackFinding: [createFinding()] }]
+      occurrences: [
+        { ...failedOccurrence(), fallbackFinding: [createFinding()] }
+      ]
     });
   });
 
@@ -401,18 +407,26 @@ describe("shared executor legacy parity", () => {
     );
 
     expect(invocationOrder).toEqual([0, 1, 2]);
-    expect(projectLegacyFindings(result).map(({ message }) => message)).toEqual([
-      "call 1",
-      "call 2",
-      "call 3"
-    ]);
+    expect(projectLegacyFindings(result).map(({ message }) => message)).toEqual(
+      ["call 1", "call 2", "call 3"]
+    );
   });
 });
 
 describe("rule failure and normalization atomicity", () => {
   it.each([
-    ["synchronous throw", () => { throw new Error("sync failure"); }],
-    ["asynchronous rejection", async () => { throw new Error("async failure"); }],
+    [
+      "synchronous throw",
+      () => {
+        throw new Error("sync failure");
+      }
+    ],
+    [
+      "asynchronous rejection",
+      async () => {
+        throw new Error("async failure");
+      }
+    ],
     ["malformed return", (() => ({ malformed: true })) as Rule["run"]]
   ])("creates one failed occurrence for %s", async (_label, run) => {
     const result = await executeRulesStructured(
@@ -454,9 +468,14 @@ describe("rule failure and normalization atomicity", () => {
       expect(occurrence?.execution).toBe("failed");
       expect(occurrence?.detectorFindings).toEqual([]);
       expect(projectLegacyFindings(result)).toHaveLength(1);
-      expect(projectLegacyFindings(result)[0]?.message).toContain(rawError.message);
-      expect(projectLegacyFindings(result).some(({ message }) => message === "temporary"))
-        .toBe(false);
+      expect(projectLegacyFindings(result)[0]?.message).toContain(
+        rawError.message
+      );
+      expect(
+        projectLegacyFindings(result).some(
+          ({ message }) => message === "temporary"
+        )
+      ).toBe(false);
     }
   );
 });
@@ -523,7 +542,11 @@ describe("instrumentation projection parity", () => {
 
   it("keeps fallback findings out of normalized detector counts", async () => {
     const result = await runRulesInstrumented(
-      [createRule("wallet/failure", () => { throw new Error("failure"); })],
+      [
+        createRule("wallet/failure", () => {
+          throw new Error("failure");
+        })
+      ],
       createContext()
     );
     expect(result.findings).toHaveLength(1);
@@ -534,16 +557,19 @@ describe("instrumentation projection parity", () => {
     const unsafeId = `unsafe${String.fromCodePoint(1)}`;
     const result = await runRulesInstrumented(
       [
-        createRule("wallet/first", () => { throw new Error("first private"); }),
-        createRule(unsafeId, () => { throw new Error("second private"); })
+        createRule("wallet/first", () => {
+          throw new Error("first private");
+        }),
+        createRule(unsafeId, () => {
+          throw new Error("second private");
+        })
       ],
       createContext()
     );
 
-    expect(result.instrumentation.diagnostics.map(({ ruleId }) => ruleId)).toEqual([
-      "wallet/first",
-      undefined
-    ]);
+    expect(
+      result.instrumentation.diagnostics.map(({ ruleId }) => ruleId)
+    ).toEqual(["wallet/first", undefined]);
     const serialized = JSON.stringify(result.instrumentation);
     expect(serialized).not.toContain("first private");
     expect(serialized).not.toContain("second private");
@@ -625,10 +651,17 @@ describe("provenance security and boundaries", () => {
   it("keeps diagnostics, reads, errors, stacks, timing, and origin markers out", async () => {
     const rawError = new Error("legacy private message");
     const result = await executeRulesStructured(
-      [createRule("wallet/failure", () => { throw rawError; })],
+      [
+        createRule("wallet/failure", () => {
+          throw rawError;
+        })
+      ],
       createContext()
     );
-    const occurrence = result.occurrences[0] as unknown as Record<string, unknown>;
+    const occurrence = result.occurrences[0] as unknown as Record<
+      string,
+      unknown
+    >;
 
     for (const field of [
       "diagnostic",
@@ -647,9 +680,13 @@ describe("provenance security and boundaries", () => {
   });
 
   it("does not create instrumentation records in legacy structured mode", async () => {
-    const context = createContext({}, resolve("legacy-no-instrumentation"), async () => {
-      throw new Error("read failure");
-    });
+    const context = createContext(
+      {},
+      resolve("legacy-no-instrumentation"),
+      async () => {
+        throw new Error("read failure");
+      }
+    );
     const rule = createRule("wallet/legacy", async (ruleContext) => {
       try {
         await ruleContext.readFile("unchanged-relative-path");

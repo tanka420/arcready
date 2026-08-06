@@ -4,13 +4,13 @@ ArcReady is being prepared for npm publishing as an installable CLI package.
 
 ## Current Package
 
-| Field | Value |
-| --- | --- |
+| Field        | Value      |
+| ------------ | ---------- |
 | Package name | `arcready` |
-| Version | `0.3.0` |
-| License | MIT |
-| Node.js | `>=22` |
-| CLI bin | `arcready` |
+| Version      | `0.3.0`    |
+| License      | MIT        |
+| Node.js      | `>=22`     |
+| CLI bin      | `arcready` |
 
 The npm package should include only:
 

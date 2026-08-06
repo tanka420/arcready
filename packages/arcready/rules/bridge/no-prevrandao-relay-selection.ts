@@ -48,7 +48,10 @@ function hasPrevrandaoRelaySelection(content: string): boolean {
   return content.split(/\r?\n/).some((line) => {
     if (
       isCommentOrDocumentationLine(line) ||
-      isGuidanceAgainstUsage(line, /\b(block\.prevrandao|PREVRANDAO|prevrandao|mixHash)\b/)
+      isGuidanceAgainstUsage(
+        line,
+        /\b(block\.prevrandao|PREVRANDAO|prevrandao|mixHash)\b/
+      )
     ) {
       return false;
     }

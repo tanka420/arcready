@@ -6,26 +6,26 @@ Do not run the real publish command until the maintainer explicitly approves.
 
 ## Package
 
-| Field | Value |
-| --- | --- |
+| Field        | Value      |
+| ------------ | ---------- |
 | Package name | `arcready` |
-| Version | `0.3.0` |
-| License | MIT |
-| Node.js | `>=22` |
-| CLI bin | `arcready` |
+| Version      | `0.3.0`    |
+| License      | MIT        |
+| Node.js      | `>=22`     |
+| CLI bin      | `arcready` |
 
 ## Gate Results
 
-| Check | Status |
-| --- | --- |
+| Check              | Status                                                                           |
+| ------------------ | -------------------------------------------------------------------------------- |
 | npm package status | `arcready@0.2.0` is already published; `0.3.0` is the next npm release candidate |
-| npm login | `npm whoami` returned `ENEEDAUTH`; npm login is required before real publish |
-| Build | Passed |
-| Test | Passed |
-| Lint | Passed |
-| Fixture validation | Passed |
-| Package smoke test | Passed |
-| Publish dry-run | Passed |
+| npm login          | `npm whoami` returned `ENEEDAUTH`; npm login is required before real publish     |
+| Build              | Passed                                                                           |
+| Test               | Passed                                                                           |
+| Lint               | Passed                                                                           |
+| Fixture validation | Passed                                                                           |
+| Package smoke test | Passed                                                                           |
+| Publish dry-run    | Passed                                                                           |
 
 ## Package Contents
 

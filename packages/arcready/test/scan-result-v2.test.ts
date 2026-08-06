@@ -159,9 +159,9 @@ describe("ScanResultV2 snapshot ownership", () => {
 
 describe("ScanResultV2 finding order and uniqueness", () => {
   it("keeps empty and one-item finding arrays canonical", () => {
-    expect(buildScanResultV2({ ...createInput(), findings: [] }).findings).toEqual(
-      []
-    );
+    expect(
+      buildScanResultV2({ ...createInput(), findings: [] }).findings
+    ).toEqual([]);
     expect(
       buildScanResultV2({ ...createInput(), findings: [createFinding("a")] })
         .findings[0]!.fingerprints.exact.value
@@ -261,20 +261,29 @@ describe("ScanResultV2 diagnostic order", () => {
 });
 
 describe("ScanResultV2 strict validation", () => {
-  it.each([null, [], "result", 3])("rejects non-record top-level value %j", (value) => {
-    expectInvalidResult(value);
-  });
+  it.each([null, [], "result", 3])(
+    "rejects non-record top-level value %j",
+    (value) => {
+      expectInvalidResult(value);
+    }
+  );
 
   it("rejects a top-level class instance", () => {
     expectInvalidResult(classInstance(validResult()));
   });
 
-  it.each(["extra", "legacyFindings", "instrumentation", "score", "status", "project", "timestamp", "duration"])(
-    "rejects the unsupported top-level field %s",
-    (field) => {
-      expectInvalidResult({ ...validResult(), [field]: true });
-    }
-  );
+  it.each([
+    "extra",
+    "legacyFindings",
+    "instrumentation",
+    "score",
+    "status",
+    "project",
+    "timestamp",
+    "duration"
+  ])("rejects the unsupported top-level field %s", (field) => {
+    expectInvalidResult({ ...validResult(), [field]: true });
+  });
 
   it.each(["coverage", "findings", "diagnostics"])(
     "rejects a missing %s field",
@@ -290,7 +299,10 @@ describe("ScanResultV2 strict validation", () => {
   });
 
   it("rejects a coverage version mismatch", () => {
-    const invalid = createCoverage("complete") as unknown as Record<string, unknown>;
+    const invalid = createCoverage("complete") as unknown as Record<
+      string,
+      unknown
+    >;
     invalid.contractVersion = "1.0";
     expectInvalidResult({ ...validResult(), coverage: invalid });
   });
@@ -301,9 +313,12 @@ describe("ScanResultV2 strict validation", () => {
     expectInvalidResult({ ...validResult(), coverage: invalid });
   });
 
-  it.each([null, {}, "findings"])("rejects non-array findings %j", (findings) => {
-    expectInvalidResult({ ...validResult(), findings });
-  });
+  it.each([null, {}, "findings"])(
+    "rejects non-array findings %j",
+    (findings) => {
+      expectInvalidResult({ ...validResult(), findings });
+    }
+  );
 
   it("rejects sparse and undefined finding elements", () => {
     expectInvalidResult({ ...validResult(), findings: Array(1) });
@@ -416,9 +431,7 @@ function validResult(): ScanResultV2 {
   return buildScanResultV2(createInput());
 }
 
-function createCoverage(
-  state: CoverageV2["discovery"]["state"]
-): CoverageV2 {
+function createCoverage(state: CoverageV2["discovery"]["state"]): CoverageV2 {
   const roots =
     state === "complete"
       ? {

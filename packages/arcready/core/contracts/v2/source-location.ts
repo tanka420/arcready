@@ -15,7 +15,9 @@ export function normalizeRepositoryRelativePath(input: string): string {
     fail("source path must not contain control characters");
   }
   if (input.length > MAX_REPOSITORY_PATH_LENGTH) {
-    fail(`source path must not exceed ${MAX_REPOSITORY_PATH_LENGTH} characters`);
+    fail(
+      `source path must not exceed ${MAX_REPOSITORY_PATH_LENGTH} characters`
+    );
   }
 
   const slashPath = input.replaceAll("\\", "/");
