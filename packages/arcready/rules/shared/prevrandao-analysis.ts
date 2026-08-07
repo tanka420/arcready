@@ -1,4 +1,5 @@
 import { createRequire } from "node:module";
+import { currentRuleExecutionScope } from "../../core/rules/execution-scope.js";
 
 type AstNode = Record<string, unknown> & {
   readonly type?: string;
@@ -36,6 +37,23 @@ export interface PrevrandaoSourceAnalysis {
   readonly sources: readonly PrevrandaoSourceRecord[];
 }
 
+export interface PrevrandaoFlowRecord extends PrevrandaoSourceRecord {
+  readonly sinkKind: "authorization" | "collection-selection";
+  readonly sinkOffset: number;
+  readonly shellOwner: "bridge-relay" | "wallet-compatibility";
+}
+
+export interface PrevrandaoFlowAnalysis {
+  readonly status: PrevrandaoSourceAnalysisStatus;
+  readonly records: readonly PrevrandaoFlowRecord[];
+}
+
+export interface PrevrandaoScanInput {
+  readonly files: readonly string[];
+  readFile(filePath: string): Promise<string>;
+  readonly parserLoader?: () => Promise<unknown>;
+}
+
 const DIRECT_CAST_NAMES = new Set(["uint", "uint256", "bytes32"]);
 const ASSIGNMENT_OPERATORS = new Set([
   "=",
@@ -51,6 +69,36 @@ const ASSIGNMENT_OPERATORS = new Set([
   ">>="
 ]);
 const MUTATION_OPERATORS = new Set(["++", "--", "delete"]);
+const AUTHORIZATION_COMPARISON_OPERATORS = new Set([
+  "==",
+  "!=",
+  "<",
+  ">",
+  "<=",
+  ">="
+]);
+const BRIDGE_OWNER_IDENTIFIERS = new Set([
+  "committee",
+  "committees",
+  "relay",
+  "relays",
+  "relayer",
+  "relayers",
+  "sequencer",
+  "sequencers",
+  "validator",
+  "validators"
+]);
+const WALLET_OWNER_IDENTIFIERS = new Set([
+  "allocation",
+  "allocations",
+  "eligibility",
+  "eligible",
+  "recipient",
+  "recipients",
+  "winner",
+  "winners"
+]);
 const KNOWN_DIRECT_SOURCE_CONTEXTS = new Set([
   "BinaryOperation",
   "Block",
@@ -79,6 +127,10 @@ const KNOWN_DIRECT_SOURCE_CONTEXTS = new Set([
 const EXCLUDED_DIRECTORIES =
   /(?:^|\/)(?:test|tests|__tests__|generated|vendor|node_modules|lib|out|cache|broadcast|dist|build|coverage)(?:\/|$)/i;
 const require = createRequire(import.meta.url);
+const flowRecordsByExecution = new WeakMap<
+  object,
+  Promise<readonly PrevrandaoFlowRecord[]>
+>();
 
 export function supportsPrevrandaoSourcePath(filePath: string): boolean {
   const normalized = filePath.replaceAll("\\", "/");
@@ -96,20 +148,101 @@ export async function analyzePrevrandaoSourceFile(
   parserLoader: () => Promise<unknown> = () =>
     Promise.resolve(require("@solidity-parser/parser"))
 ): Promise<PrevrandaoSourceAnalysis> {
+  return (
+    await analyzeParsedPrevrandaoSourceFile(filePath, source, parserLoader)
+  ).analysis;
+}
+
+export async function analyzePrevrandaoFlowFile(
+  filePath: string,
+  source: string,
+  parserLoader: () => Promise<unknown> = () =>
+    Promise.resolve(require("@solidity-parser/parser"))
+): Promise<PrevrandaoFlowAnalysis> {
+  const parsed = await analyzeParsedPrevrandaoSourceFile(
+    filePath,
+    source,
+    parserLoader
+  );
+  if (parsed.ast === undefined || parsed.analysis.status !== "analyzed") {
+    return { status: parsed.analysis.status, records: [] };
+  }
+  return {
+    status: "analyzed",
+    records: collectCollectionSelectionRecords(
+      parsed.ast,
+      parsed.analysis.sources,
+      source.length
+    )
+  };
+}
+
+export function requestPrevrandaoFlowRecords(
+  input: PrevrandaoScanInput
+): Promise<readonly PrevrandaoFlowRecord[]> {
+  const execution = currentRuleExecutionScope();
+  if (execution === undefined) return collectScanFlowRecords(input);
+
+  const cached = flowRecordsByExecution.get(execution);
+  if (cached !== undefined) return cached;
+
+  const requested = collectScanFlowRecords(input);
+  flowRecordsByExecution.set(execution, requested);
+  return requested;
+}
+
+async function collectScanFlowRecords(
+  input: PrevrandaoScanInput
+): Promise<readonly PrevrandaoFlowRecord[]> {
+  const records: PrevrandaoFlowRecord[] = [];
+  const files = [...new Set(input.files.filter(supportsPrevrandaoSourcePath))]
+    .slice()
+    .sort(compareText);
+
+  for (const filePath of files) {
+    let source: string;
+    try {
+      source = await input.readFile(filePath);
+    } catch {
+      continue;
+    }
+    const result =
+      input.parserLoader === undefined
+        ? await analyzePrevrandaoFlowFile(filePath, source)
+        : await analyzePrevrandaoFlowFile(filePath, source, input.parserLoader);
+    records.push(...result.records);
+  }
+  return records.sort(
+    (left, right) =>
+      compareText(left.sourceFile, right.sourceFile) ||
+      left.sourceOffset - right.sourceOffset ||
+      left.sinkOffset - right.sinkOffset
+  );
+}
+
+function compareText(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+async function analyzeParsedPrevrandaoSourceFile(
+  filePath: string,
+  source: string,
+  parserLoader: () => Promise<unknown>
+): Promise<{ analysis: PrevrandaoSourceAnalysis; ast?: AstNode }> {
   if (!supportsPrevrandaoSourcePath(filePath)) {
-    return { status: "unsupported-file", sources: [] };
+    return { analysis: { status: "unsupported-file", sources: [] } };
   }
 
   const parser = await loadParser(parserLoader);
   if (parser === null) {
-    return { status: "parser-unavailable", sources: [] };
+    return { analysis: { status: "parser-unavailable", sources: [] } };
   }
 
   let ast: unknown;
   try {
     ast = parser.parse(source, { loc: true, range: true, tolerant: false });
   } catch {
-    return { status: "malformed", sources: [] };
+    return { analysis: { status: "malformed", sources: [] } };
   }
 
   if (
@@ -118,21 +251,24 @@ export async function analyzePrevrandaoSourceFile(
     !hasRange(ast) ||
     exactNodeArray(ast.children) === null
   ) {
-    return { status: "unsupported-source", sources: [] };
+    return { analysis: { status: "unsupported-source", sources: [] } };
   }
   if (hasUnsupportedSolidityPragma(ast)) {
-    return { status: "unsupported-source", sources: [] };
+    return { analysis: { status: "unsupported-source", sources: [] } };
   }
 
   const result = collectSourceRecords(filePath, ast);
   if (result.unsupported) {
-    return { status: "unsupported-source", sources: [] };
+    return { analysis: { status: "unsupported-source", sources: [] } };
   }
   return {
-    status: "analyzed",
-    sources: result.sources.sort(
-      (left, right) => left.sourceOffset - right.sourceOffset
-    )
+    ast,
+    analysis: {
+      status: "analyzed",
+      sources: result.sources.sort(
+        (left, right) => left.sourceOffset - right.sourceOffset
+      )
+    }
   };
 }
 
@@ -236,6 +372,442 @@ function collectSourceRecords(
   }
 
   return { sources, unsupported };
+}
+
+function collectCollectionSelectionRecords(
+  ast: AstNode,
+  sources: readonly PrevrandaoSourceRecord[],
+  size: number
+): PrevrandaoFlowRecord[] {
+  const records: PrevrandaoFlowRecord[] = [];
+  const contracts = (exactNodeArray(ast.children) ?? []).filter(
+    (node) => node.type === "ContractDefinition"
+  );
+
+  for (const contract of contracts) {
+    const contractName = stringValue(contract.name);
+    const subNodes = exactNodeArray(contract.subNodes);
+    if (
+      contract.kind !== "contract" ||
+      contract.isAbstract === true ||
+      contractName === null ||
+      subNodes === null
+    ) {
+      continue;
+    }
+
+    for (const functionNode of subNodes) {
+      const functionName = stringValue(functionNode.name);
+      if (
+        functionNode.type !== "FunctionDefinition" ||
+        functionName === null ||
+        !isNode(functionNode.body)
+      ) {
+        continue;
+      }
+      const ownedSources = sources.filter(
+        (source) =>
+          source.contractName === contractName &&
+          source.functionName === functionName &&
+          nodeStart(functionNode) <= source.sourceOffset &&
+          source.sourceOffset <= nodeEnd(functionNode)
+      );
+      if (ownedSources.length === 0) continue;
+
+      const candidates: PrevrandaoFlowRecord[] = [];
+      let authCount = 0;
+      let ambiguousSelection = false;
+      const parents = parentIndex(functionNode);
+      for (const node of descendants(functionNode.body)) {
+        if (
+          isWithinUnsupportedSelectionControlFlow(node, parents, functionNode)
+        ) {
+          continue;
+        }
+        const selection = exactCollectionSelection(node, functionNode, parents);
+        if (selection !== null) {
+          const source = exactSelectionSource(
+            selection.dependency,
+            ownedSources
+          );
+          const shellOwner = classifySelectionShellOwner(
+            functionName,
+            selection.collectionName
+          );
+          if (source !== undefined && shellOwner === null) {
+            ambiguousSelection = true;
+          } else if (source !== undefined && shellOwner !== null) {
+            candidates.push({
+              ...source,
+              sinkKind: "collection-selection",
+              sinkOffset: nodeStart(node),
+              shellOwner
+            });
+          }
+        }
+
+        const authorization = exactAuthorization(
+          node,
+          functionNode,
+          parents,
+          ownedSources,
+          size
+        );
+        if (authorization !== null) {
+          authCount += 1;
+          candidates.push({
+            ...authorization.source,
+            sinkKind: "authorization",
+            sinkOffset: nodeStart(authorization.comparison),
+            shellOwner: "wallet-compatibility"
+          });
+        }
+      }
+      candidates.sort(
+        (left, right) =>
+          left.sinkOffset - right.sinkOffset ||
+          left.sourceOffset - right.sourceOffset
+      );
+      const routes = new Set(
+        candidates.map(
+          (candidate) => `${candidate.sinkKind}:${candidate.shellOwner}`
+        )
+      );
+      if (
+        candidates[0] !== undefined &&
+        (authCount === 0 || (!ambiguousSelection && routes.size === 1))
+      ) {
+        records.push(candidates[0]);
+      }
+    }
+  }
+
+  return records.sort(
+    (left, right) =>
+      left.sourceOffset - right.sourceOffset ||
+      left.sinkOffset - right.sinkOffset
+  );
+}
+
+function exactAuthorization(
+  node: AstNode,
+  functionNode: AstNode,
+  parents: ReadonlyMap<AstNode, AstNode>,
+  sources: readonly PrevrandaoSourceRecord[],
+  size: number
+): { comparison: AstNode; source: PrevrandaoSourceRecord } | null {
+  const comparison = isNode(node.expression) ? node.expression : undefined;
+  const leftExpression = isNode(comparison?.left) ? comparison.left : undefined;
+  const rightExpression = isNode(comparison?.right)
+    ? comparison.right
+    : undefined;
+  if (
+    node.type !== "ReturnStatement" ||
+    !validRange(functionNode, size) ||
+    !isNode(functionNode.body) ||
+    !validRange(functionNode.body, size, functionNode) ||
+    !validRange(node, size, functionNode.body) ||
+    parents.get(node) !== functionNode.body ||
+    comparison?.type !== "BinaryOperation" ||
+    !validRange(comparison, size, node) ||
+    !AUTHORIZATION_COMPARISON_OPERATORS.has(
+      stringValue(comparison.operator) ?? ""
+    ) ||
+    leftExpression === undefined ||
+    !validRange(leftExpression, size, comparison) ||
+    rightExpression === undefined ||
+    !validRange(rightExpression, size, comparison)
+  ) {
+    return null;
+  }
+
+  const left = exactAuthorizationSource(leftExpression, sources, size);
+  const right = exactAuthorizationSource(rightExpression, sources, size);
+  const directLeft = exactAuthorizationDirect(leftExpression, sources, size);
+  const directRight = exactAuthorizationDirect(rightExpression, sources, size);
+  if (
+    comparison.operator === "==" &&
+    ((directLeft !== undefined && isZeroLiteral(rightExpression)) ||
+      (directRight !== undefined && isZeroLiteral(leftExpression)))
+  ) {
+    return null;
+  }
+  if ((left === undefined) === (right === undefined)) return null;
+
+  const source = left ?? right;
+  const other = left === undefined ? leftExpression : rightExpression;
+  if (
+    source === undefined ||
+    !isAuthorizationCounterpart(other, size) ||
+    [other, ...descendants(other)].some(
+      (node) =>
+        node.type === "Identifier" &&
+        sources.some(
+          (record) =>
+            record.bindingName !== undefined && record.bindingName === node.name
+        )
+    )
+  ) {
+    return null;
+  }
+  return { comparison, source };
+}
+
+function exactAuthorizationSource(
+  expression: AstNode,
+  sources: readonly PrevrandaoSourceRecord[],
+  size: number
+): PrevrandaoSourceRecord | undefined {
+  const direct = exactAuthorizationDirect(expression, sources, size);
+  if (direct !== undefined) return direct;
+  if (
+    expression.type !== "BinaryOperation" ||
+    expression.operator !== "%" ||
+    !validTree(expression, size) ||
+    !isNode(expression.left) ||
+    !isNode(expression.right) ||
+    expression.right.type !== "NumberLiteral"
+  ) {
+    return undefined;
+  }
+  return exactAuthorizationDirect(expression.left, sources, size);
+}
+
+function exactAuthorizationDirect(
+  expression: AstNode,
+  sources: readonly PrevrandaoSourceRecord[],
+  size: number
+): PrevrandaoSourceRecord | undefined {
+  return validTree(expression, size)
+    ? exactDirectSource(expression, sources)
+    : undefined;
+}
+
+function isAuthorizationCounterpart(
+  expression: AstNode,
+  size: number
+): boolean {
+  if (!validTree(expression, size)) return false;
+  if (expression.type === "Identifier" || expression.type === "NumberLiteral") {
+    return true;
+  }
+  if (
+    expression.type !== "BinaryOperation" ||
+    expression.operator !== "%" ||
+    !isNode(expression.left) ||
+    !isNode(expression.right) ||
+    expression.right.type !== "NumberLiteral"
+  ) {
+    return false;
+  }
+  const call = expression.left;
+  const typeName = isNode(call.expression) ? call.expression : undefined;
+  const arguments_ = exactNodeArray(call.arguments);
+  return (
+    call.type === "FunctionCall" &&
+    typeName?.type === "ElementaryTypeName" &&
+    typeName.name === "uint160" &&
+    arguments_?.length === 1 &&
+    arguments_[0]?.type === "Identifier"
+  );
+}
+
+function exactDirectSource(
+  expression: AstNode,
+  sources: readonly PrevrandaoSourceRecord[]
+): PrevrandaoSourceRecord | undefined {
+  if (isBlockPrevrandao(expression) && hasRange(expression)) {
+    return sources.find(
+      (source) =>
+        source.bindingKind === "direct" &&
+        source.sourceKind === "block-prevrandao" &&
+        source.sourceOffset === nodeStart(expression)
+    );
+  }
+
+  const arguments_ = exactNodeArray(expression.arguments);
+  const directSource = arguments_?.length === 1 ? arguments_[0] : undefined;
+  if (
+    directSource === undefined ||
+    !isApprovedDirectCast(expression, directSource) ||
+    !hasRange(expression) ||
+    !hasRange(directSource)
+  ) {
+    return undefined;
+  }
+  return sources.find(
+    (source) =>
+      source.bindingKind === "direct" &&
+      source.sourceKind === "block-prevrandao-cast" &&
+      source.sourceOffset === nodeStart(directSource)
+  );
+}
+
+function isZeroLiteral(node: AstNode): boolean {
+  if (node.type !== "NumberLiteral" || !hasRange(node)) return false;
+  const value = node.number ?? node.value;
+  if (typeof value !== "string" && typeof value !== "number") return false;
+  const literal = String(value).replaceAll("_", "").toLowerCase();
+  const digits = literal.startsWith("0x")
+    ? literal.slice(2)
+    : (literal.split("e")[0] ?? "").replace(".", "");
+  return /^0+$/.test(digits);
+}
+
+function exactCollectionSelection(
+  node: AstNode,
+  functionNode: AstNode,
+  parents: ReadonlyMap<AstNode, AstNode>
+): { collectionName: string; dependency: AstNode } | null {
+  if (node.type !== "IndexAccess" || !hasRange(node)) return null;
+  const base = isNode(node.base) ? node.base : undefined;
+  const index = isNode(node.index) ? node.index : undefined;
+  const collectionName = base === undefined ? null : stringValue(base.name);
+  if (
+    base?.type !== "Identifier" ||
+    !hasRange(base) ||
+    collectionName === null ||
+    index === undefined ||
+    !hasRange(index)
+  ) {
+    return null;
+  }
+
+  if (index?.type === "BinaryOperation") {
+    return exactModuloDependency(index, collectionName);
+  }
+  if (index?.type !== "Identifier") return null;
+
+  const indexName = stringValue(index.name);
+  if (indexName === null) return null;
+  const declarations = descendants(functionNode).filter(
+    (candidate) =>
+      candidate.type === "VariableDeclarationStatement" &&
+      parents.get(candidate) === functionNode.body &&
+      (exactNodeArray(candidate.variables) ?? []).some(
+        (variable) =>
+          hasRange(variable) && stringValue(variable.name) === indexName
+      )
+  );
+  if (declarations.length !== 1) return null;
+  const declaration = declarations[0];
+  if (
+    !hasRange(declaration) ||
+    nodeEnd(declaration) >= nodeStart(node) ||
+    !isStableSingleAssignment(functionNode, declaration, indexName) ||
+    !isNode(declaration.initialValue) ||
+    declaration.initialValue.type !== "BinaryOperation"
+  ) {
+    return null;
+  }
+  return exactModuloDependency(declaration.initialValue, collectionName);
+}
+
+function exactModuloDependency(
+  modulo: AstNode,
+  collectionName: string
+): { collectionName: string; dependency: AstNode } | null {
+  if (
+    modulo.operator !== "%" ||
+    !hasRange(modulo) ||
+    !isNode(modulo.left) ||
+    !hasRange(modulo.left)
+  ) {
+    return null;
+  }
+  const length = isNode(modulo.right) ? modulo.right : undefined;
+  if (
+    length?.type !== "MemberAccess" ||
+    !hasRange(length) ||
+    length.memberName !== "length" ||
+    !isNode(length.expression) ||
+    !hasRange(length.expression) ||
+    !isIdentifierNamed(length.expression, collectionName)
+  ) {
+    return null;
+  }
+  return { collectionName, dependency: modulo.left };
+}
+
+function exactSelectionSource(
+  dependency: AstNode,
+  sources: readonly PrevrandaoSourceRecord[]
+): PrevrandaoSourceRecord | undefined {
+  if (dependency.type === "Identifier") {
+    const name = stringValue(dependency.name);
+    if (name === null) return undefined;
+    return sources.find(
+      (source) =>
+        source.bindingKind === "single-assignment" &&
+        source.bindingName === name &&
+        source.sourceOffset < nodeStart(dependency)
+    );
+  }
+
+  if (isBlockPrevrandao(dependency) && hasRange(dependency)) {
+    return exactDirectSource(dependency, sources);
+  }
+
+  const arguments_ = exactNodeArray(dependency.arguments);
+  const directSource = arguments_?.length === 1 ? arguments_[0] : undefined;
+  if (
+    directSource === undefined ||
+    !isApprovedDirectCast(dependency, directSource) ||
+    !hasRange(directSource)
+  ) {
+    return undefined;
+  }
+  return exactDirectSource(dependency, sources);
+}
+
+function classifySelectionShellOwner(
+  functionName: string,
+  collectionName: string
+): PrevrandaoFlowRecord["shellOwner"] | null {
+  const tokens = [
+    ...identifierTokens(functionName),
+    ...identifierTokens(collectionName)
+  ];
+  const bridge = tokens.some((token) => BRIDGE_OWNER_IDENTIFIERS.has(token));
+  const wallet = tokens.some((token) => WALLET_OWNER_IDENTIFIERS.has(token));
+  if (bridge && wallet) return null;
+  return bridge ? "bridge-relay" : "wallet-compatibility";
+}
+
+function isWithinUnsupportedSelectionControlFlow(
+  node: AstNode,
+  parents: ReadonlyMap<AstNode, AstNode>,
+  functionNode: AstNode
+): boolean {
+  let current = node;
+  while (current !== functionNode) {
+    const parent = parents.get(current);
+    if (parent === undefined) return true;
+    if (
+      parent.type === "ForStatement" ||
+      parent.type === "WhileStatement" ||
+      parent.type === "DoWhileStatement"
+    ) {
+      return true;
+    }
+    if (
+      parent !== functionNode &&
+      !KNOWN_DIRECT_SOURCE_CONTEXTS.has(parent.type ?? "")
+    ) {
+      return true;
+    }
+    current = parent;
+  }
+  return false;
+}
+
+function identifierTokens(value: string): string[] {
+  return value
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .split(/[^A-Za-z0-9]+/)
+    .filter((token) => token.length > 0)
+    .map((token) => token.toLowerCase());
 }
 
 function isWithinRanges(
@@ -611,8 +1183,26 @@ function hasRange(node: AstNode): boolean {
     Array.isArray(node.range) &&
     node.range.length === 2 &&
     Number.isInteger(node.range[0]) &&
-    Number.isInteger(node.range[1])
+    Number.isInteger(node.range[1]) &&
+    (node.range[0] as number) >= 0 &&
+    (node.range[0] as number) <= (node.range[1] as number)
   );
+}
+
+function validRange(node: AstNode, size: number, parent?: AstNode): boolean {
+  return (
+    hasRange(node) &&
+    nodeEnd(node) < size &&
+    (parent === undefined ||
+      (hasRange(parent) &&
+        nodeStart(parent) <= nodeStart(node) &&
+        nodeEnd(node) <= nodeEnd(parent)))
+  );
+}
+
+function validTree(root: AstNode, size: number, parent?: AstNode): boolean {
+  if (!validRange(root, size, parent)) return false;
+  return childrenOf(root).every((child) => validTree(child, size, root));
 }
 
 function nodeStart(node: AstNode): number {
