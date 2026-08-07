@@ -453,7 +453,13 @@ function exactCollectionSelection(
   const base = isNode(node.base) ? node.base : undefined;
   const index = isNode(node.index) ? node.index : undefined;
   const collectionName = base === undefined ? null : stringValue(base.name);
-  if (base?.type !== "Identifier" || collectionName === null) {
+  if (
+    base?.type !== "Identifier" ||
+    !hasRange(base) ||
+    collectionName === null ||
+    index === undefined ||
+    !hasRange(index)
+  ) {
     return null;
   }
 
@@ -469,7 +475,8 @@ function exactCollectionSelection(
       candidate.type === "VariableDeclarationStatement" &&
       parents.get(candidate) === functionNode.body &&
       (exactNodeArray(candidate.variables) ?? []).some(
-        (variable) => stringValue(variable.name) === indexName
+        (variable) =>
+          hasRange(variable) && stringValue(variable.name) === indexName
       )
   );
   if (declarations.length !== 1) return null;
@@ -490,11 +497,21 @@ function exactModuloDependency(
   modulo: AstNode,
   collectionName: string
 ): { collectionName: string; dependency: AstNode } | null {
-  if (modulo.operator !== "%" || !isNode(modulo.left)) return null;
+  if (
+    modulo.operator !== "%" ||
+    !hasRange(modulo) ||
+    !isNode(modulo.left) ||
+    !hasRange(modulo.left)
+  ) {
+    return null;
+  }
   const length = isNode(modulo.right) ? modulo.right : undefined;
   if (
     length?.type !== "MemberAccess" ||
+    !hasRange(length) ||
     length.memberName !== "length" ||
+    !isNode(length.expression) ||
+    !hasRange(length.expression) ||
     !isIdentifierNamed(length.expression, collectionName)
   ) {
     return null;
@@ -586,6 +603,7 @@ function isWithinUnsupportedSelectionControlFlow(
 
 function identifierTokens(value: string): string[] {
   return value
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
     .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
     .split(/[^A-Za-z0-9]+/)
     .filter((token) => token.length > 0)

@@ -146,7 +146,8 @@ describe("C09A-E2 collection-selection routing", () => {
   it.each([
     ["validator", "validators", "selectValidator"],
     ["sequencer", "sequencers", "selectSequencer"],
-    ["committee", "committees", "selectCommittee"]
+    ["committee", "committees", "selectCommittee"],
+    ["acronym-leading relayer", "VRFRelayers", "pick"]
   ])(
     "routes exact %s identifiers to the bridge shell",
     async (_label, collection, functionName) => {
@@ -186,6 +187,13 @@ describe("C09A-E2 collection-selection routing", () => {
         "selectRelay",
         "pick"
       )
+    ],
+    [
+      "acronym-leading bridge and wallet ownership",
+      DIRECT_BRIDGE_SELECTION.replaceAll(
+        "relayers",
+        "VRFRelayerWinners"
+      ).replace("selectRelay", "pick")
     ],
     [
       "loop-owned selection",
@@ -308,6 +316,45 @@ describe("C09A-E2 collection-selection routing", () => {
       )
     ).resolves.toEqual({ status: "analyzed", records: [] });
   });
+
+  it.each([
+    "selection",
+    "collection-base",
+    "modulo",
+    "dependency",
+    "length-member",
+    "length-collection"
+  ] as const)(
+    "fails closed when %s range evidence is missing",
+    async (target) => {
+      const parser = parserRemovingSelectionRange(target);
+      const result = await analyzePrevrandaoFlowFile(
+        "src/Selector.sol",
+        DIRECT_BRIDGE_SELECTION,
+        async () => parser
+      );
+
+      expect(result.records).toEqual([]);
+      if (target !== "dependency") expect(result.status).toBe("analyzed");
+    }
+  );
+
+  it.each(["selection-index", "index-declaration"] as const)(
+    "fails closed when %s range evidence is missing",
+    async (target) => {
+      const source = DIRECT_BRIDGE_SELECTION.replace(
+        "return relayers[block.prevrandao % relayers.length];",
+        "uint256 index = block.prevrandao % relayers.length; return relayers[index];"
+      );
+      const parser = parserRemovingSelectionRange(target);
+
+      await expect(
+        analyzePrevrandaoFlowFile("src/Selector.sol", source, async () =>
+          Promise.resolve(parser)
+        )
+      ).resolves.toEqual({ status: "analyzed", records: [] });
+    }
+  );
 
   it("does not combine a source and sink from sibling functions", async () => {
     const source = `
@@ -534,4 +581,97 @@ function createRequestRule(
       return [];
     }
   };
+}
+
+type RangeEvidenceTarget =
+  | "selection"
+  | "collection-base"
+  | "modulo"
+  | "dependency"
+  | "length-member"
+  | "length-collection"
+  | "selection-index"
+  | "index-declaration";
+
+type MutableAstNode = Record<string, unknown> & {
+  type: string;
+  range?: unknown;
+};
+
+function parserRemovingSelectionRange(target: RangeEvidenceTarget): {
+  parse(source: string, options: Record<string, unknown>): unknown;
+} {
+  return {
+    parse(source, options) {
+      const ast = parserModule.parse(source, options) as MutableAstNode;
+      const selection = findAstNode(ast, (node) => node.type === "IndexAccess");
+      const base = astNode(selection?.base);
+      const index = astNode(selection?.index);
+      const declaration = findAstNode(
+        ast,
+        (node) =>
+          node.type === "VariableDeclarationStatement" &&
+          astNode(node.initialValue)?.type === "BinaryOperation"
+      );
+      const modulo =
+        index?.type === "BinaryOperation"
+          ? index
+          : astNode(declaration?.initialValue);
+      const dependency = astNode(modulo?.left);
+      const length = astNode(modulo?.right);
+      const lengthCollection = astNode(length?.expression);
+      const declarationVariable = Array.isArray(declaration?.variables)
+        ? astNode(declaration.variables[0])
+        : undefined;
+      const evidence: Record<RangeEvidenceTarget, MutableAstNode | undefined> =
+        {
+          selection,
+          "collection-base": base,
+          modulo,
+          dependency,
+          "length-member": length,
+          "length-collection": lengthCollection,
+          "selection-index": index,
+          "index-declaration": declarationVariable
+        };
+      const node = evidence[target];
+      if (node === undefined) {
+        throw new Error(`Missing test AST evidence for ${target}`);
+      }
+      delete node.range;
+      return ast;
+    }
+  };
+}
+
+function findAstNode(
+  root: MutableAstNode,
+  predicate: (node: MutableAstNode) => boolean
+): MutableAstNode | undefined {
+  if (predicate(root)) return root;
+  for (const value of Object.values(root)) {
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        const child = astNode(item);
+        if (child === undefined) continue;
+        const found = findAstNode(child, predicate);
+        if (found !== undefined) return found;
+      }
+      continue;
+    }
+    const child = astNode(value);
+    if (child === undefined) continue;
+    const found = findAstNode(child, predicate);
+    if (found !== undefined) return found;
+  }
+  return undefined;
+}
+
+function astNode(value: unknown): MutableAstNode | undefined {
+  return typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    typeof (value as { type?: unknown }).type === "string"
+    ? (value as MutableAstNode)
+    : undefined;
 }
