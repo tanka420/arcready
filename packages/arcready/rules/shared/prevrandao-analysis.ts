@@ -77,24 +77,6 @@ const AUTHORIZATION_COMPARISON_OPERATORS = new Set([
   "<=",
   ">="
 ]);
-const KNOWN_AUTHORIZATION_EXPRESSION_TYPES = new Set([
-  "BinaryOperation",
-  "BooleanLiteral",
-  "Conditional",
-  "ElementaryTypeName",
-  "FunctionCall",
-  "FunctionCallOptions",
-  "HexLiteral",
-  "Identifier",
-  "IndexAccess",
-  "IndexRangeAccess",
-  "MemberAccess",
-  "NameValueExpression",
-  "NumberLiteral",
-  "StringLiteral",
-  "TupleExpression",
-  "UnaryOperation"
-]);
 const BRIDGE_OWNER_IDENTIFIERS = new Set([
   "committee",
   "committees",
@@ -189,7 +171,8 @@ export async function analyzePrevrandaoFlowFile(
     status: "analyzed",
     records: collectCollectionSelectionRecords(
       parsed.ast,
-      parsed.analysis.sources
+      parsed.analysis.sources,
+      source.length
     )
   };
 }
@@ -393,7 +376,8 @@ function collectSourceRecords(
 
 function collectCollectionSelectionRecords(
   ast: AstNode,
-  sources: readonly PrevrandaoSourceRecord[]
+  sources: readonly PrevrandaoSourceRecord[],
+  sourceLength: number
 ): PrevrandaoFlowRecord[] {
   const records: PrevrandaoFlowRecord[] = [];
   const contracts = (exactNodeArray(ast.children) ?? []).filter(
@@ -431,6 +415,8 @@ function collectCollectionSelectionRecords(
       if (ownedSources.length === 0) continue;
 
       const candidates: PrevrandaoFlowRecord[] = [];
+      let authorizationCount = 0;
+      let hasAmbiguousSelection = false;
       const parents = parentIndex(functionNode);
       for (const node of descendants(functionNode.body)) {
         if (
@@ -448,7 +434,9 @@ function collectCollectionSelectionRecords(
             functionName,
             selection.collectionName
           );
-          if (source !== undefined && shellOwner !== null) {
+          if (source !== undefined && shellOwner === null) {
+            hasAmbiguousSelection = true;
+          } else if (source !== undefined && shellOwner !== null) {
             candidates.push({
               ...source,
               sinkKind: "collection-selection",
@@ -462,9 +450,11 @@ function collectCollectionSelectionRecords(
           node,
           functionNode,
           parents,
-          ownedSources
+          ownedSources,
+          sourceLength
         );
         if (authorization !== null) {
+          authorizationCount += 1;
           candidates.push({
             ...authorization.source,
             sinkKind: "authorization",
@@ -483,7 +473,11 @@ function collectCollectionSelectionRecords(
           (candidate) => `${candidate.sinkKind}:${candidate.shellOwner}`
         )
       );
-      if (routes.size === 1 && candidates[0] !== undefined) {
+      if (
+        candidates[0] !== undefined &&
+        (authorizationCount === 0 ||
+          (!hasAmbiguousSelection && routes.size === 1))
+      ) {
         records.push(candidates[0]);
       }
     }
@@ -500,7 +494,8 @@ function exactReturnedAuthorization(
   node: AstNode,
   functionNode: AstNode,
   parents: ReadonlyMap<AstNode, AstNode>,
-  sources: readonly PrevrandaoSourceRecord[]
+  sources: readonly PrevrandaoSourceRecord[],
+  sourceLength: number
 ): { comparison: AstNode; source: PrevrandaoSourceRecord } | null {
   const comparison = isNode(node.expression) ? node.expression : undefined;
   const leftExpression = isNode(comparison?.left) ? comparison.left : undefined;
@@ -509,27 +504,40 @@ function exactReturnedAuthorization(
     : undefined;
   if (
     node.type !== "ReturnStatement" ||
-    !hasRange(node) ||
+    !hasValidRange(functionNode, sourceLength) ||
+    !isNode(functionNode.body) ||
+    !hasValidRange(functionNode.body, sourceLength, functionNode) ||
+    !hasValidRange(node, sourceLength, functionNode.body) ||
     parents.get(node) !== functionNode.body ||
     comparison?.type !== "BinaryOperation" ||
-    !hasRange(comparison) ||
+    !hasValidRange(comparison, sourceLength, node) ||
     !AUTHORIZATION_COMPARISON_OPERATORS.has(
       stringValue(comparison.operator) ?? ""
     ) ||
     leftExpression === undefined ||
-    !hasRange(leftExpression) ||
-    !hasKnownRangedAuthorizationExpression(leftExpression) ||
+    !hasValidRange(leftExpression, sourceLength, comparison) ||
     rightExpression === undefined ||
-    !hasRange(rightExpression) ||
-    !hasKnownRangedAuthorizationExpression(rightExpression)
+    !hasValidRange(rightExpression, sourceLength, comparison)
   ) {
     return null;
   }
 
-  const left = exactAuthorizationSource(leftExpression, sources);
-  const right = exactAuthorizationSource(rightExpression, sources);
-  const directLeft = exactDirectSource(leftExpression, sources);
-  const directRight = exactDirectSource(rightExpression, sources);
+  const left = exactAuthorizationSource(leftExpression, sources, sourceLength);
+  const right = exactAuthorizationSource(
+    rightExpression,
+    sources,
+    sourceLength
+  );
+  const directLeft = exactAuthorizationDirect(
+    leftExpression,
+    sources,
+    sourceLength
+  );
+  const directRight = exactAuthorizationDirect(
+    rightExpression,
+    sources,
+    sourceLength
+  );
   if (
     comparison.operator === "==" &&
     ((directLeft !== undefined && isZeroNumberLiteral(rightExpression)) ||
@@ -541,39 +549,72 @@ function exactReturnedAuthorization(
 
   const source = left ?? right;
   const other = left === undefined ? leftExpression : rightExpression;
-  if (source === undefined || containsOwnedSourceEvidence(other, sources)) {
+  if (
+    source === undefined ||
+    !isAuthorizationCounterpart(other, sourceLength)
+  ) {
     return null;
   }
   return { comparison, source };
 }
 
-function hasKnownRangedAuthorizationExpression(root: AstNode): boolean {
-  return [root, ...descendants(root)].every(
-    (node) =>
-      hasRange(node) &&
-      KNOWN_AUTHORIZATION_EXPRESSION_TYPES.has(node.type ?? "")
-  );
-}
-
 function exactAuthorizationSource(
   expression: AstNode,
-  sources: readonly PrevrandaoSourceRecord[]
+  sources: readonly PrevrandaoSourceRecord[],
+  sourceLength: number
 ): PrevrandaoSourceRecord | undefined {
-  const direct = exactDirectSource(expression, sources);
+  const direct = exactAuthorizationDirect(expression, sources, sourceLength);
   if (direct !== undefined) return direct;
   if (
     expression.type !== "BinaryOperation" ||
     expression.operator !== "%" ||
-    !hasRange(expression) ||
+    !validRangeTree(expression, sourceLength) ||
     !isNode(expression.left) ||
-    !hasRange(expression.left) ||
     !isNode(expression.right) ||
-    !hasRange(expression.right) ||
     expression.right.type !== "NumberLiteral"
   ) {
     return undefined;
   }
-  return exactDirectSource(expression.left, sources);
+  return exactAuthorizationDirect(expression.left, sources, sourceLength);
+}
+
+function exactAuthorizationDirect(
+  expression: AstNode,
+  sources: readonly PrevrandaoSourceRecord[],
+  sourceLength: number
+): PrevrandaoSourceRecord | undefined {
+  return validRangeTree(expression, sourceLength)
+    ? exactDirectSource(expression, sources)
+    : undefined;
+}
+
+function isAuthorizationCounterpart(
+  expression: AstNode,
+  sourceLength: number
+): boolean {
+  if (!validRangeTree(expression, sourceLength)) return false;
+  if (expression.type === "Identifier" || expression.type === "NumberLiteral") {
+    return true;
+  }
+  if (
+    expression.type !== "BinaryOperation" ||
+    expression.operator !== "%" ||
+    !isNode(expression.left) ||
+    !isNode(expression.right) ||
+    expression.right.type !== "NumberLiteral"
+  ) {
+    return false;
+  }
+  const call = expression.left;
+  const typeName = isNode(call.expression) ? call.expression : undefined;
+  const arguments_ = exactNodeArray(call.arguments);
+  return (
+    call.type === "FunctionCall" &&
+    typeName?.type === "ElementaryTypeName" &&
+    typeName.name === "uint160" &&
+    arguments_?.length === 1 &&
+    arguments_[0]?.type === "Identifier"
+  );
 }
 
 function exactDirectSource(
@@ -610,29 +651,8 @@ function exactDirectSource(
 function isZeroNumberLiteral(node: AstNode): boolean {
   if (node.type !== "NumberLiteral" || !hasRange(node)) return false;
   const value = node.number ?? node.value;
-  return typeof value === "string" || typeof value === "number"
-    ? String(value) === "0"
-    : false;
-}
-
-function containsOwnedSourceEvidence(
-  root: AstNode,
-  sources: readonly PrevrandaoSourceRecord[]
-): boolean {
-  const sourceOffsets = new Set(sources.map((source) => source.sourceOffset));
-  const bindingNames = new Set(
-    sources.flatMap((source) =>
-      source.bindingName === undefined ? [] : [source.bindingName]
-    )
-  );
-  return [root, ...descendants(root)].some(
-    (candidate) =>
-      (hasRange(candidate) &&
-        isRawPrevrandaoSource(candidate) &&
-        sourceOffsets.has(nodeStart(candidate))) ||
-      (candidate.type === "Identifier" &&
-        bindingNames.has(stringValue(candidate.name) ?? ""))
-  );
+  if (typeof value !== "string" && typeof value !== "number") return false;
+  return Number(String(value).replaceAll("_", "")) === 0;
 }
 
 function exactCollectionSelection(
@@ -1164,7 +1184,35 @@ function hasRange(node: AstNode): boolean {
     Array.isArray(node.range) &&
     node.range.length === 2 &&
     Number.isInteger(node.range[0]) &&
-    Number.isInteger(node.range[1])
+    Number.isInteger(node.range[1]) &&
+    (node.range[0] as number) >= 0 &&
+    (node.range[0] as number) <= (node.range[1] as number)
+  );
+}
+
+function hasValidRange(
+  node: AstNode,
+  sourceLength: number,
+  parent?: AstNode
+): boolean {
+  return (
+    hasRange(node) &&
+    nodeEnd(node) < sourceLength &&
+    (parent === undefined ||
+      (hasRange(parent) &&
+        nodeStart(parent) <= nodeStart(node) &&
+        nodeEnd(node) <= nodeEnd(parent)))
+  );
+}
+
+function validRangeTree(
+  root: AstNode,
+  sourceLength: number,
+  parent?: AstNode
+): boolean {
+  if (!hasValidRange(root, sourceLength, parent)) return false;
+  return childrenOf(root).every((child) =>
+    validRangeTree(child, sourceLength, root)
   );
 }
 

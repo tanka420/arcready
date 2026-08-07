@@ -245,6 +245,29 @@ describe("C09A-E2 collection-selection routing", () => {
     );
   });
 
+  it("preserves earliest selection routing when later selection ownership differs", async () => {
+    const source = `
+pragma solidity ^0.8.24;
+contract Selector {
+  address[] internal relayers;
+  address[] internal winners;
+  function select() external view returns (address) {
+    address relay = relayers[block.prevrandao % relayers.length];
+    relay;
+    return winners[block.prevrandao % winners.length];
+  }
+}`;
+
+    const result = await analyzePrevrandaoFlowFile("src/Selector.sol", source);
+
+    expect(result.records).toHaveLength(1);
+    expect(result.records[0]).toMatchObject({
+      sinkKind: "collection-selection",
+      sinkOffset: source.indexOf("relayers["),
+      shellOwner: "bridge-relay"
+    });
+  });
+
   it("fails closed for a fully ranged unknown sink-bearing wrapper", async () => {
     const sourceNode = {
       type: "MemberAccess",
@@ -463,6 +486,42 @@ contract Selector {
     ).resolves.toEqual({ status: "analyzed", records: [] });
   });
 
+  it.each(
+    ["00", "0_0", "0x0", "0x00", "0e0", "0.0"].flatMap((zero) => [
+      [`direct source equals ${zero}`, `block.prevrandao == ${zero}`],
+      [`${zero} equals direct source`, `${zero} == block.prevrandao`],
+      [`cast source equals ${zero}`, `uint256(block.prevrandao) == ${zero}`]
+    ])
+  )(
+    "keeps semantic zero form %s compatibility-safe",
+    async (_label, expression) => {
+      await expect(
+        analyzePrevrandaoFlowFile(
+          "src/Gate.sol",
+          authorizationSource(expression)
+        )
+      ).resolves.toEqual({ status: "analyzed", records: [] });
+    }
+  );
+
+  it.each([
+    "helper()",
+    "threshold + 1",
+    "threshold > 0 ? threshold : 1",
+    "thresholds[0]",
+    "config.threshold"
+  ])(
+    "rejects unsupported authorization counterpart %s",
+    async (counterpart) => {
+      await expect(
+        analyzePrevrandaoFlowFile(
+          "src/Gate.sol",
+          authorizationSource(`block.prevrandao < ${counterpart}`)
+        )
+      ).resolves.toEqual({ status: "analyzed", records: [] });
+    }
+  );
+
   it.each([
     [
       "source binding",
@@ -516,6 +575,23 @@ contract Mixed {
     ).resolves.toEqual({ status: "analyzed", records: [] });
   });
 
+  it("treats an ambiguous selection as conflict evidence beside authorization", async () => {
+    const source = `
+pragma solidity ^0.8.24;
+contract Mixed {
+  address[] internal relayerWinners;
+  function decide(uint256 threshold) external view returns (bool) {
+    address winner = relayerWinners[block.prevrandao % relayerWinners.length];
+    winner;
+    return block.prevrandao < threshold;
+  }
+}`;
+
+    await expect(
+      analyzePrevrandaoFlowFile("src/Mixed.sol", source)
+    ).resolves.toEqual({ status: "analyzed", records: [] });
+  });
+
   it.each([
     ["return", "block.prevrandao < threshold"],
     ["comparison", "block.prevrandao < threshold"],
@@ -524,7 +600,8 @@ contract Mixed {
     ["modulo", "block.prevrandao % 2 < threshold"],
     ["modulus", "block.prevrandao % 2 < threshold"],
     ["cast", "uint256(block.prevrandao) < threshold"],
-    ["cast-source", "uint256(block.prevrandao) < threshold"]
+    ["cast-source", "uint256(block.prevrandao) < threshold"],
+    ["function-body", "block.prevrandao < threshold"]
   ] as const)(
     "fails closed when authorization %s range evidence is missing",
     async (target, expression) => {
@@ -558,6 +635,20 @@ contract Mixed {
         authorizationSource("block.prevrandao < threshold"),
         async () => parser
       )
+    ).resolves.toEqual({ status: "analyzed", records: [] });
+  });
+
+  it.each([
+    ["inverted comparison", [200, 100]],
+    ["negative comparison", [-1, 100]],
+    ["out-of-bounds comparison", [0, Number.MAX_SAFE_INTEGER]],
+    ["comparison outside its return", [0, 20]]
+  ] as const)("fails closed for %s range evidence", async (_label, range) => {
+    const source = authorizationSource("block.prevrandao < threshold");
+    const parser = parserReplacingAuthorizationRange("comparison", range);
+
+    await expect(
+      analyzePrevrandaoFlowFile("src/Gate.sol", source, async () => parser)
     ).resolves.toEqual({ status: "analyzed", records: [] });
   });
 
@@ -785,6 +876,7 @@ type RangeEvidenceTarget =
   | "index-declaration";
 
 type AuthorizationRangeTarget =
+  | "function-body"
   | "return"
   | "comparison"
   | "source-expression"
@@ -852,6 +944,11 @@ function parserRemovingAuthorizationRange(target: AuthorizationRangeTarget): {
   return {
     parse(source, options) {
       const ast = parserModule.parse(source, options) as MutableAstNode;
+      const functionNode = findAstNode(
+        ast,
+        (node) => node.type === "FunctionDefinition"
+      );
+      const functionBody = astNode(functionNode?.body);
       const returnNode = findAstNode(
         ast,
         (node) => node.type === "ReturnStatement"
@@ -891,6 +988,7 @@ function parserRemovingAuthorizationRange(target: AuthorizationRangeTarget): {
         AuthorizationRangeTarget,
         MutableAstNode | undefined
       > = {
+        "function-body": functionBody,
         return: returnNode,
         comparison,
         "source-expression": sourceExpression,
@@ -906,6 +1004,29 @@ function parserRemovingAuthorizationRange(target: AuthorizationRangeTarget): {
         throw new Error(`Missing authorization AST evidence for ${target}`);
       }
       delete node.range;
+      return ast;
+    }
+  };
+}
+
+function parserReplacingAuthorizationRange(
+  target: "comparison",
+  range: readonly [number, number]
+): {
+  parse(source: string, options: Record<string, unknown>): unknown;
+} {
+  return {
+    parse(source, options) {
+      const ast = parserModule.parse(source, options) as MutableAstNode;
+      const returnNode = findAstNode(
+        ast,
+        (node) => node.type === "ReturnStatement"
+      );
+      const comparison = astNode(returnNode?.expression);
+      if (target !== "comparison" || comparison === undefined) {
+        throw new Error(`Missing authorization AST evidence for ${target}`);
+      }
+      comparison.range = [...range];
       return ast;
     }
   };
