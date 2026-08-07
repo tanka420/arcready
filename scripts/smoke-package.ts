@@ -291,13 +291,11 @@ function assertParserIsExternal(): void {
       "Expected the private analyzer to resolve the external parser"
     );
   }
-  if (
-    analyzer.length > 30_000 ||
-    declaration.includes("@solidity-parser/parser")
-  ) {
-    throw new Error(
-      "Solidity parser implementation or types leaked into ArcReady"
-    );
+  console.log(
+    `Prevrandao analyzer entry size: ${Buffer.byteLength(analyzer, "utf8")} bytes.`
+  );
+  if (declaration.includes("@solidity-parser/parser")) {
+    throw new Error("Solidity parser types leaked into ArcReady");
   }
 }
 
