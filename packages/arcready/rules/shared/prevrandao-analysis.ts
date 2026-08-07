@@ -38,7 +38,7 @@ export interface PrevrandaoSourceAnalysis {
 }
 
 export interface PrevrandaoFlowRecord extends PrevrandaoSourceRecord {
-  readonly sinkKind: "collection-selection";
+  readonly sinkKind: "authorization" | "collection-selection";
   readonly sinkOffset: number;
   readonly shellOwner: "bridge-relay" | "wallet-compatibility";
 }
@@ -69,6 +69,32 @@ const ASSIGNMENT_OPERATORS = new Set([
   ">>="
 ]);
 const MUTATION_OPERATORS = new Set(["++", "--", "delete"]);
+const AUTHORIZATION_COMPARISON_OPERATORS = new Set([
+  "==",
+  "!=",
+  "<",
+  ">",
+  "<=",
+  ">="
+]);
+const KNOWN_AUTHORIZATION_EXPRESSION_TYPES = new Set([
+  "BinaryOperation",
+  "BooleanLiteral",
+  "Conditional",
+  "ElementaryTypeName",
+  "FunctionCall",
+  "FunctionCallOptions",
+  "HexLiteral",
+  "Identifier",
+  "IndexAccess",
+  "IndexRangeAccess",
+  "MemberAccess",
+  "NameValueExpression",
+  "NumberLiteral",
+  "StringLiteral",
+  "TupleExpression",
+  "UnaryOperation"
+]);
 const BRIDGE_OWNER_IDENTIFIERS = new Set([
   "committee",
   "committees",
@@ -413,27 +439,53 @@ function collectCollectionSelectionRecords(
           continue;
         }
         const selection = exactCollectionSelection(node, functionNode, parents);
-        if (selection === null) continue;
-        const source = exactSelectionSource(selection.dependency, ownedSources);
-        if (source === undefined) continue;
-        const shellOwner = classifySelectionShellOwner(
-          functionName,
-          selection.collectionName
+        if (selection !== null) {
+          const source = exactSelectionSource(
+            selection.dependency,
+            ownedSources
+          );
+          const shellOwner = classifySelectionShellOwner(
+            functionName,
+            selection.collectionName
+          );
+          if (source !== undefined && shellOwner !== null) {
+            candidates.push({
+              ...source,
+              sinkKind: "collection-selection",
+              sinkOffset: nodeStart(node),
+              shellOwner
+            });
+          }
+        }
+
+        const authorization = exactReturnedAuthorization(
+          node,
+          functionNode,
+          parents,
+          ownedSources
         );
-        if (shellOwner === null) continue;
-        candidates.push({
-          ...source,
-          sinkKind: "collection-selection",
-          sinkOffset: nodeStart(node),
-          shellOwner
-        });
+        if (authorization !== null) {
+          candidates.push({
+            ...authorization.source,
+            sinkKind: "authorization",
+            sinkOffset: nodeStart(authorization.comparison),
+            shellOwner: "wallet-compatibility"
+          });
+        }
       }
       candidates.sort(
         (left, right) =>
           left.sinkOffset - right.sinkOffset ||
           left.sourceOffset - right.sourceOffset
       );
-      if (candidates[0] !== undefined) records.push(candidates[0]);
+      const routes = new Set(
+        candidates.map(
+          (candidate) => `${candidate.sinkKind}:${candidate.shellOwner}`
+        )
+      );
+      if (routes.size === 1 && candidates[0] !== undefined) {
+        records.push(candidates[0]);
+      }
     }
   }
 
@@ -441,6 +493,145 @@ function collectCollectionSelectionRecords(
     (left, right) =>
       left.sourceOffset - right.sourceOffset ||
       left.sinkOffset - right.sinkOffset
+  );
+}
+
+function exactReturnedAuthorization(
+  node: AstNode,
+  functionNode: AstNode,
+  parents: ReadonlyMap<AstNode, AstNode>,
+  sources: readonly PrevrandaoSourceRecord[]
+): { comparison: AstNode; source: PrevrandaoSourceRecord } | null {
+  const comparison = isNode(node.expression) ? node.expression : undefined;
+  const leftExpression = isNode(comparison?.left) ? comparison.left : undefined;
+  const rightExpression = isNode(comparison?.right)
+    ? comparison.right
+    : undefined;
+  if (
+    node.type !== "ReturnStatement" ||
+    !hasRange(node) ||
+    parents.get(node) !== functionNode.body ||
+    comparison?.type !== "BinaryOperation" ||
+    !hasRange(comparison) ||
+    !AUTHORIZATION_COMPARISON_OPERATORS.has(
+      stringValue(comparison.operator) ?? ""
+    ) ||
+    leftExpression === undefined ||
+    !hasRange(leftExpression) ||
+    !hasKnownRangedAuthorizationExpression(leftExpression) ||
+    rightExpression === undefined ||
+    !hasRange(rightExpression) ||
+    !hasKnownRangedAuthorizationExpression(rightExpression)
+  ) {
+    return null;
+  }
+
+  const left = exactAuthorizationSource(leftExpression, sources);
+  const right = exactAuthorizationSource(rightExpression, sources);
+  const directLeft = exactDirectSource(leftExpression, sources);
+  const directRight = exactDirectSource(rightExpression, sources);
+  if (
+    comparison.operator === "==" &&
+    ((directLeft !== undefined && isZeroNumberLiteral(rightExpression)) ||
+      (directRight !== undefined && isZeroNumberLiteral(leftExpression)))
+  ) {
+    return null;
+  }
+  if ((left === undefined) === (right === undefined)) return null;
+
+  const source = left ?? right;
+  const other = left === undefined ? leftExpression : rightExpression;
+  if (source === undefined || containsOwnedSourceEvidence(other, sources)) {
+    return null;
+  }
+  return { comparison, source };
+}
+
+function hasKnownRangedAuthorizationExpression(root: AstNode): boolean {
+  return [root, ...descendants(root)].every(
+    (node) =>
+      hasRange(node) &&
+      KNOWN_AUTHORIZATION_EXPRESSION_TYPES.has(node.type ?? "")
+  );
+}
+
+function exactAuthorizationSource(
+  expression: AstNode,
+  sources: readonly PrevrandaoSourceRecord[]
+): PrevrandaoSourceRecord | undefined {
+  const direct = exactDirectSource(expression, sources);
+  if (direct !== undefined) return direct;
+  if (
+    expression.type !== "BinaryOperation" ||
+    expression.operator !== "%" ||
+    !hasRange(expression) ||
+    !isNode(expression.left) ||
+    !hasRange(expression.left) ||
+    !isNode(expression.right) ||
+    !hasRange(expression.right) ||
+    expression.right.type !== "NumberLiteral"
+  ) {
+    return undefined;
+  }
+  return exactDirectSource(expression.left, sources);
+}
+
+function exactDirectSource(
+  expression: AstNode,
+  sources: readonly PrevrandaoSourceRecord[]
+): PrevrandaoSourceRecord | undefined {
+  if (isBlockPrevrandao(expression) && hasRange(expression)) {
+    return sources.find(
+      (source) =>
+        source.bindingKind === "direct" &&
+        source.sourceKind === "block-prevrandao" &&
+        source.sourceOffset === nodeStart(expression)
+    );
+  }
+
+  const arguments_ = exactNodeArray(expression.arguments);
+  const directSource = arguments_?.length === 1 ? arguments_[0] : undefined;
+  if (
+    directSource === undefined ||
+    !isApprovedDirectCast(expression, directSource) ||
+    !hasRange(expression) ||
+    !hasRange(directSource)
+  ) {
+    return undefined;
+  }
+  return sources.find(
+    (source) =>
+      source.bindingKind === "direct" &&
+      source.sourceKind === "block-prevrandao-cast" &&
+      source.sourceOffset === nodeStart(directSource)
+  );
+}
+
+function isZeroNumberLiteral(node: AstNode): boolean {
+  if (node.type !== "NumberLiteral" || !hasRange(node)) return false;
+  const value = node.number ?? node.value;
+  return typeof value === "string" || typeof value === "number"
+    ? String(value) === "0"
+    : false;
+}
+
+function containsOwnedSourceEvidence(
+  root: AstNode,
+  sources: readonly PrevrandaoSourceRecord[]
+): boolean {
+  const sourceOffsets = new Set(sources.map((source) => source.sourceOffset));
+  const bindingNames = new Set(
+    sources.flatMap((source) =>
+      source.bindingName === undefined ? [] : [source.bindingName]
+    )
+  );
+  return [root, ...descendants(root)].some(
+    (candidate) =>
+      (hasRange(candidate) &&
+        isRawPrevrandaoSource(candidate) &&
+        sourceOffsets.has(nodeStart(candidate))) ||
+      (candidate.type === "Identifier" &&
+        bindingNames.has(stringValue(candidate.name) ?? ""))
   );
 }
 
@@ -535,12 +726,7 @@ function exactSelectionSource(
   }
 
   if (isBlockPrevrandao(dependency) && hasRange(dependency)) {
-    return sources.find(
-      (source) =>
-        source.bindingKind === "direct" &&
-        source.sourceKind === "block-prevrandao" &&
-        source.sourceOffset === nodeStart(dependency)
-    );
+    return exactDirectSource(dependency, sources);
   }
 
   const arguments_ = exactNodeArray(dependency.arguments);
@@ -552,12 +738,7 @@ function exactSelectionSource(
   ) {
     return undefined;
   }
-  return sources.find(
-    (source) =>
-      source.bindingKind === "direct" &&
-      source.sourceKind === "block-prevrandao-cast" &&
-      source.sourceOffset === nodeStart(directSource)
-  );
+  return exactDirectSource(dependency, sources);
 }
 
 function classifySelectionShellOwner(

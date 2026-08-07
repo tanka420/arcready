@@ -18,6 +18,14 @@ contract Selector {
   }
 }`;
 
+const AUTHORIZATION_TEMPLATE = `
+pragma solidity ^0.8.24;
+contract Gate {
+  function eligible(uint256 threshold) external view returns (bool) {
+    return AUTHORIZATION_EXPRESSION;
+  }
+}`;
+
 describe("C09A-E2 collection-selection routing", () => {
   it("records one exact same-function modulo/index sink for the bridge shell", async () => {
     const result = await analyzePrevrandaoFlowFile(
@@ -374,6 +382,185 @@ contract Selector {
     ).resolves.toEqual({ status: "analyzed", records: [] });
   });
 
+  it.each(
+    ["==", "!=", "<", ">", "<=", ">="].flatMap((operator) => [
+      [operator, `block.prevrandao ${operator} threshold`],
+      [operator, `threshold ${operator} block.prevrandao`]
+    ])
+  )(
+    "routes returned %s authorization with the source on either side",
+    async (_operator, expression) => {
+      const source = authorizationSource(expression);
+      const result = await analyzePrevrandaoFlowFile("src/Gate.sol", source);
+
+      expect(result).toEqual({
+        status: "analyzed",
+        records: [
+          {
+            sourceFile: "src/Gate.sol",
+            contractName: "Gate",
+            functionName: "eligible",
+            sourceKind: "block-prevrandao",
+            sourceOffset: source.indexOf("block.prevrandao"),
+            bindingKind: "direct",
+            sinkKind: "authorization",
+            sinkOffset: source.indexOf(expression),
+            shellOwner: "wallet-compatibility"
+          }
+        ]
+      });
+    }
+  );
+
+  it.each([
+    ["approved direct cast", "uint256(block.prevrandao) < threshold"],
+    ["source modulo literal", "block.prevrandao % 2 < threshold"],
+    ["source modulo zero equality", "block.prevrandao % 2 == 0"],
+    ["non-zero equality", "block.prevrandao == 1"],
+    ["zero inequality", "block.prevrandao != 0"]
+  ])("routes exact %s authorization", async (_label, expression) => {
+    const result = await analyzePrevrandaoFlowFile(
+      "src/Gate.sol",
+      authorizationSource(expression)
+    );
+
+    expect(result.status).toBe("analyzed");
+    expect(result.records).toHaveLength(1);
+    expect(result.records[0]).toMatchObject({
+      sinkKind: "authorization",
+      shellOwner: "wallet-compatibility"
+    });
+  });
+
+  it("routes the reviewed eligibility corpus comparison", async () => {
+    const source = AUTHORIZATION_TEMPLATE.replace(
+      "function eligible(uint256 threshold)",
+      "function eligible(address account)"
+    ).replace(
+      "AUTHORIZATION_EXPRESSION",
+      "uint160(account) % 2 == block.prevrandao % 2"
+    );
+    const result = await analyzePrevrandaoFlowFile("src/Gate.sol", source);
+
+    expect(result.records).toHaveLength(1);
+    expect(result.records[0]).toMatchObject({
+      sourceOffset: source.indexOf("block.prevrandao"),
+      sinkKind: "authorization",
+      sinkOffset: source.indexOf("uint160(account)"),
+      shellOwner: "wallet-compatibility"
+    });
+  });
+
+  it.each([
+    ["direct zero equality", "block.prevrandao == 0"],
+    ["symmetric direct zero equality", "0 == block.prevrandao"],
+    ["cast zero equality", "uint256(block.prevrandao) == 0"],
+    ["transformed source", "(block.prevrandao + 1) < threshold"],
+    ["source on both sides", "block.prevrandao < uint256(block.prevrandao)"]
+  ])("does not route %s as authorization", async (_label, expression) => {
+    await expect(
+      analyzePrevrandaoFlowFile("src/Gate.sol", authorizationSource(expression))
+    ).resolves.toEqual({ status: "analyzed", records: [] });
+  });
+
+  it.each([
+    [
+      "source binding",
+      "uint256 seed = block.prevrandao; return seed < threshold;"
+    ],
+    [
+      "assembly binding",
+      "uint256 seed; assembly { seed := prevrandao() } return seed < threshold;"
+    ],
+    ["require context", "require(block.prevrandao < threshold); return true;"],
+    [
+      "nested return",
+      "if (threshold > 0) { return block.prevrandao < threshold; } return false;"
+    ]
+  ])("keeps %s outside authorization grammar", async (_label, body) => {
+    const source = AUTHORIZATION_TEMPLATE.replace(
+      "return AUTHORIZATION_EXPRESSION;",
+      body
+    );
+
+    await expect(
+      analyzePrevrandaoFlowFile("src/Gate.sol", source)
+    ).resolves.toEqual({ status: "analyzed", records: [] });
+  });
+
+  it("routes authorization to wallet even when function identifiers are bridge-like", async () => {
+    const source = authorizationSource("block.prevrandao < threshold").replace(
+      "eligible",
+      "authorizeValidator"
+    );
+    const result = await analyzePrevrandaoFlowFile("src/Gate.sol", source);
+
+    expect(result.records).toHaveLength(1);
+    expect(result.records[0]?.shellOwner).toBe("wallet-compatibility");
+  });
+
+  it("fails closed when one function has conflicting sink routes", async () => {
+    const source = `
+pragma solidity ^0.8.24;
+contract Mixed {
+  address[] internal relayers;
+  function decide(uint256 threshold) external view returns (bool) {
+    address relay = relayers[block.prevrandao % relayers.length];
+    relay;
+    return block.prevrandao < threshold;
+  }
+}`;
+
+    await expect(
+      analyzePrevrandaoFlowFile("src/Mixed.sol", source)
+    ).resolves.toEqual({ status: "analyzed", records: [] });
+  });
+
+  it.each([
+    ["return", "block.prevrandao < threshold"],
+    ["comparison", "block.prevrandao < threshold"],
+    ["source-expression", "block.prevrandao < threshold"],
+    ["other-operand", "block.prevrandao < threshold"],
+    ["modulo", "block.prevrandao % 2 < threshold"],
+    ["modulus", "block.prevrandao % 2 < threshold"],
+    ["cast", "uint256(block.prevrandao) < threshold"],
+    ["cast-source", "uint256(block.prevrandao) < threshold"]
+  ] as const)(
+    "fails closed when authorization %s range evidence is missing",
+    async (target, expression) => {
+      const source = authorizationSource(expression);
+      const parser = parserRemovingAuthorizationRange(target);
+      const result = await analyzePrevrandaoFlowFile(
+        "src/Gate.sol",
+        source,
+        async () => parser
+      );
+
+      expect(result.records).toEqual([]);
+    }
+  );
+
+  it("fails closed when nested non-source operand range evidence is missing", async () => {
+    const source = authorizationSource("block.prevrandao < uint256(threshold)");
+    const parser = parserRemovingAuthorizationRange("nested-other");
+
+    await expect(
+      analyzePrevrandaoFlowFile("src/Gate.sol", source, async () => parser)
+    ).resolves.toEqual({ status: "analyzed", records: [] });
+  });
+
+  it("fails closed for a fully ranged unknown authorization operand", async () => {
+    const parser = parserWrappingAuthorizationOperand();
+
+    await expect(
+      analyzePrevrandaoFlowFile(
+        "src/Gate.sol",
+        authorizationSource("block.prevrandao < threshold"),
+        async () => parser
+      )
+    ).resolves.toEqual({ status: "analyzed", records: [] });
+  });
+
   it("reuses one private analysis within one rule execution", async () => {
     const parse = vi.fn(parserModule.parse.bind(parserModule));
     const parserLoader = vi.fn(async () => ({ parse }));
@@ -565,6 +752,10 @@ function createContext(
   };
 }
 
+function authorizationSource(expression: string): string {
+  return AUTHORIZATION_TEMPLATE.replace("AUTHORIZATION_EXPRESSION", expression);
+}
+
 function createRequestRule(
   id: string,
   request: (context: RuleContext) => Promise<readonly unknown[]>
@@ -592,6 +783,17 @@ type RangeEvidenceTarget =
   | "length-collection"
   | "selection-index"
   | "index-declaration";
+
+type AuthorizationRangeTarget =
+  | "return"
+  | "comparison"
+  | "source-expression"
+  | "other-operand"
+  | "modulo"
+  | "modulus"
+  | "cast"
+  | "cast-source"
+  | "nested-other";
 
 type MutableAstNode = Record<string, unknown> & {
   type: string;
@@ -642,6 +844,105 @@ function parserRemovingSelectionRange(target: RangeEvidenceTarget): {
       return ast;
     }
   };
+}
+
+function parserRemovingAuthorizationRange(target: AuthorizationRangeTarget): {
+  parse(source: string, options: Record<string, unknown>): unknown;
+} {
+  return {
+    parse(source, options) {
+      const ast = parserModule.parse(source, options) as MutableAstNode;
+      const returnNode = findAstNode(
+        ast,
+        (node) => node.type === "ReturnStatement"
+      );
+      const comparison = astNode(returnNode?.expression);
+      const left = astNode(comparison?.left);
+      const right = astNode(comparison?.right);
+      const sourceExpression =
+        left !== undefined && containsPrevrandaoNode(left) ? left : right;
+      const otherOperand = sourceExpression === left ? right : left;
+      const modulo =
+        sourceExpression?.type === "BinaryOperation"
+          ? sourceExpression
+          : undefined;
+      const cast =
+        sourceExpression?.type === "FunctionCall"
+          ? sourceExpression
+          : undefined;
+      const rawSource =
+        sourceExpression === undefined
+          ? undefined
+          : findAstNode(
+              sourceExpression,
+              (node) =>
+                node.type === "MemberAccess" && node.memberName === "prevrandao"
+            );
+      const nestedOther =
+        otherOperand === undefined
+          ? undefined
+          : findAstNode(
+              otherOperand,
+              (node) =>
+                node !== otherOperand &&
+                (node.type === "Identifier" || node.type === "FunctionCall")
+            );
+      const evidence: Record<
+        AuthorizationRangeTarget,
+        MutableAstNode | undefined
+      > = {
+        return: returnNode,
+        comparison,
+        "source-expression": sourceExpression,
+        "other-operand": otherOperand,
+        modulo,
+        modulus: astNode(modulo?.right),
+        cast,
+        "cast-source": rawSource,
+        "nested-other": nestedOther
+      };
+      const node = evidence[target];
+      if (node === undefined) {
+        throw new Error(`Missing authorization AST evidence for ${target}`);
+      }
+      delete node.range;
+      return ast;
+    }
+  };
+}
+
+function parserWrappingAuthorizationOperand(): {
+  parse(source: string, options: Record<string, unknown>): unknown;
+} {
+  return {
+    parse(source, options) {
+      const ast = parserModule.parse(source, options) as MutableAstNode;
+      const returnNode = findAstNode(
+        ast,
+        (node) => node.type === "ReturnStatement"
+      );
+      const comparison = astNode(returnNode?.expression);
+      const operand = astNode(comparison?.right);
+      if (comparison === undefined || operand === undefined) {
+        throw new Error("Missing authorization operand test evidence");
+      }
+      comparison.right = {
+        type: "MysteryExpression",
+        range: operand.range,
+        expression: operand
+      } satisfies MutableAstNode;
+      return ast;
+    }
+  };
+}
+
+function containsPrevrandaoNode(root: MutableAstNode): boolean {
+  return (
+    findAstNode(
+      root,
+      (node) => node.type === "MemberAccess" && node.memberName === "prevrandao"
+    ) !== undefined
+  );
 }
 
 function findAstNode(

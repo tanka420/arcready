@@ -3,23 +3,24 @@ import { describe, expect, it } from "vitest";
 import { sourceCases } from "../../../docs/research/fixtures/c09-r2-corpus.mjs";
 import { analyzePrevrandaoFlowFile } from "../rules/shared/prevrandao-analysis.ts";
 
-const EXPECTED_SELECTION_OWNERS = new Map([
-  ["C09-S01", "bridge-relay"],
-  ["C09-S02", "wallet-compatibility"],
-  ["C09-S03", "bridge-relay"],
-  ["C09-S06", "bridge-relay"],
-  ["C09-S08", "bridge-relay"],
-  ["C09-A06", "bridge-relay"]
+const EXPECTED_FLOWS = new Map([
+  ["C09-S01", ["collection-selection", "bridge-relay"]],
+  ["C09-S02", ["collection-selection", "wallet-compatibility"]],
+  ["C09-S03", ["collection-selection", "bridge-relay"]],
+  ["C09-S04", ["authorization", "wallet-compatibility"]],
+  ["C09-S06", ["collection-selection", "bridge-relay"]],
+  ["C09-S08", ["collection-selection", "bridge-relay"]],
+  ["C09-A06", ["collection-selection", "bridge-relay"]]
 ]);
 
-describe("C09A-E2 R3-A collection-selection corpus", () => {
+describe("C09A-E2 R3-A private flow corpus", () => {
   for (const corpusCase of sourceCases) {
-    it(`${corpusCase.id} preserves the reviewed selection boundary`, async () => {
+    it(`${corpusCase.id} preserves the reviewed flow boundary`, async () => {
       const [filePath, source] = Object.entries(corpusCase.files)[0];
       const result = await analyzePrevrandaoFlowFile(filePath, source);
-      const expectedOwner = EXPECTED_SELECTION_OWNERS.get(corpusCase.id);
+      const expected = EXPECTED_FLOWS.get(corpusCase.id);
 
-      if (expectedOwner === undefined) {
+      if (expected === undefined) {
         expect(result.records).toEqual([]);
         return;
       }
@@ -28,8 +29,8 @@ describe("C09A-E2 R3-A collection-selection corpus", () => {
       expect(result.records).toHaveLength(1);
       expect(result.records[0]).toMatchObject({
         sourceFile: filePath,
-        sinkKind: "collection-selection",
-        shellOwner: expectedOwner
+        sinkKind: expected[0],
+        shellOwner: expected[1]
       });
       if (corpusCase.id === "C09-A06") {
         expect(result.records[0].sourceOffset).toBe(
