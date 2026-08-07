@@ -377,7 +377,7 @@ function collectSourceRecords(
 function collectCollectionSelectionRecords(
   ast: AstNode,
   sources: readonly PrevrandaoSourceRecord[],
-  sourceLength: number
+  size: number
 ): PrevrandaoFlowRecord[] {
   const records: PrevrandaoFlowRecord[] = [];
   const contracts = (exactNodeArray(ast.children) ?? []).filter(
@@ -415,8 +415,8 @@ function collectCollectionSelectionRecords(
       if (ownedSources.length === 0) continue;
 
       const candidates: PrevrandaoFlowRecord[] = [];
-      let authorizationCount = 0;
-      let hasAmbiguousSelection = false;
+      let authCount = 0;
+      let ambiguousSelection = false;
       const parents = parentIndex(functionNode);
       for (const node of descendants(functionNode.body)) {
         if (
@@ -435,7 +435,7 @@ function collectCollectionSelectionRecords(
             selection.collectionName
           );
           if (source !== undefined && shellOwner === null) {
-            hasAmbiguousSelection = true;
+            ambiguousSelection = true;
           } else if (source !== undefined && shellOwner !== null) {
             candidates.push({
               ...source,
@@ -446,15 +446,15 @@ function collectCollectionSelectionRecords(
           }
         }
 
-        const authorization = exactReturnedAuthorization(
+        const authorization = exactAuthorization(
           node,
           functionNode,
           parents,
           ownedSources,
-          sourceLength
+          size
         );
         if (authorization !== null) {
-          authorizationCount += 1;
+          authCount += 1;
           candidates.push({
             ...authorization.source,
             sinkKind: "authorization",
@@ -475,8 +475,7 @@ function collectCollectionSelectionRecords(
       );
       if (
         candidates[0] !== undefined &&
-        (authorizationCount === 0 ||
-          (!hasAmbiguousSelection && routes.size === 1))
+        (authCount === 0 || (!ambiguousSelection && routes.size === 1))
       ) {
         records.push(candidates[0]);
       }
@@ -490,12 +489,12 @@ function collectCollectionSelectionRecords(
   );
 }
 
-function exactReturnedAuthorization(
+function exactAuthorization(
   node: AstNode,
   functionNode: AstNode,
   parents: ReadonlyMap<AstNode, AstNode>,
   sources: readonly PrevrandaoSourceRecord[],
-  sourceLength: number
+  size: number
 ): { comparison: AstNode; source: PrevrandaoSourceRecord } | null {
   const comparison = isNode(node.expression) ? node.expression : undefined;
   const leftExpression = isNode(comparison?.left) ? comparison.left : undefined;
@@ -504,44 +503,32 @@ function exactReturnedAuthorization(
     : undefined;
   if (
     node.type !== "ReturnStatement" ||
-    !hasValidRange(functionNode, sourceLength) ||
+    !validRange(functionNode, size) ||
     !isNode(functionNode.body) ||
-    !hasValidRange(functionNode.body, sourceLength, functionNode) ||
-    !hasValidRange(node, sourceLength, functionNode.body) ||
+    !validRange(functionNode.body, size, functionNode) ||
+    !validRange(node, size, functionNode.body) ||
     parents.get(node) !== functionNode.body ||
     comparison?.type !== "BinaryOperation" ||
-    !hasValidRange(comparison, sourceLength, node) ||
+    !validRange(comparison, size, node) ||
     !AUTHORIZATION_COMPARISON_OPERATORS.has(
       stringValue(comparison.operator) ?? ""
     ) ||
     leftExpression === undefined ||
-    !hasValidRange(leftExpression, sourceLength, comparison) ||
+    !validRange(leftExpression, size, comparison) ||
     rightExpression === undefined ||
-    !hasValidRange(rightExpression, sourceLength, comparison)
+    !validRange(rightExpression, size, comparison)
   ) {
     return null;
   }
 
-  const left = exactAuthorizationSource(leftExpression, sources, sourceLength);
-  const right = exactAuthorizationSource(
-    rightExpression,
-    sources,
-    sourceLength
-  );
-  const directLeft = exactAuthorizationDirect(
-    leftExpression,
-    sources,
-    sourceLength
-  );
-  const directRight = exactAuthorizationDirect(
-    rightExpression,
-    sources,
-    sourceLength
-  );
+  const left = exactAuthorizationSource(leftExpression, sources, size);
+  const right = exactAuthorizationSource(rightExpression, sources, size);
+  const directLeft = exactAuthorizationDirect(leftExpression, sources, size);
+  const directRight = exactAuthorizationDirect(rightExpression, sources, size);
   if (
     comparison.operator === "==" &&
-    ((directLeft !== undefined && isZeroNumberLiteral(rightExpression)) ||
-      (directRight !== undefined && isZeroNumberLiteral(leftExpression)))
+    ((directLeft !== undefined && isZeroLiteral(rightExpression)) ||
+      (directRight !== undefined && isZeroLiteral(leftExpression)))
   ) {
     return null;
   }
@@ -551,7 +538,15 @@ function exactReturnedAuthorization(
   const other = left === undefined ? leftExpression : rightExpression;
   if (
     source === undefined ||
-    !isAuthorizationCounterpart(other, sourceLength)
+    !isAuthorizationCounterpart(other, size) ||
+    [other, ...descendants(other)].some(
+      (node) =>
+        node.type === "Identifier" &&
+        sources.some(
+          (record) =>
+            record.bindingName !== undefined && record.bindingName === node.name
+        )
+    )
   ) {
     return null;
   }
@@ -561,38 +556,38 @@ function exactReturnedAuthorization(
 function exactAuthorizationSource(
   expression: AstNode,
   sources: readonly PrevrandaoSourceRecord[],
-  sourceLength: number
+  size: number
 ): PrevrandaoSourceRecord | undefined {
-  const direct = exactAuthorizationDirect(expression, sources, sourceLength);
+  const direct = exactAuthorizationDirect(expression, sources, size);
   if (direct !== undefined) return direct;
   if (
     expression.type !== "BinaryOperation" ||
     expression.operator !== "%" ||
-    !validRangeTree(expression, sourceLength) ||
+    !validTree(expression, size) ||
     !isNode(expression.left) ||
     !isNode(expression.right) ||
     expression.right.type !== "NumberLiteral"
   ) {
     return undefined;
   }
-  return exactAuthorizationDirect(expression.left, sources, sourceLength);
+  return exactAuthorizationDirect(expression.left, sources, size);
 }
 
 function exactAuthorizationDirect(
   expression: AstNode,
   sources: readonly PrevrandaoSourceRecord[],
-  sourceLength: number
+  size: number
 ): PrevrandaoSourceRecord | undefined {
-  return validRangeTree(expression, sourceLength)
+  return validTree(expression, size)
     ? exactDirectSource(expression, sources)
     : undefined;
 }
 
 function isAuthorizationCounterpart(
   expression: AstNode,
-  sourceLength: number
+  size: number
 ): boolean {
-  if (!validRangeTree(expression, sourceLength)) return false;
+  if (!validTree(expression, size)) return false;
   if (expression.type === "Identifier" || expression.type === "NumberLiteral") {
     return true;
   }
@@ -648,11 +643,15 @@ function exactDirectSource(
   );
 }
 
-function isZeroNumberLiteral(node: AstNode): boolean {
+function isZeroLiteral(node: AstNode): boolean {
   if (node.type !== "NumberLiteral" || !hasRange(node)) return false;
   const value = node.number ?? node.value;
   if (typeof value !== "string" && typeof value !== "number") return false;
-  return Number(String(value).replaceAll("_", "")) === 0;
+  const literal = String(value).replaceAll("_", "").toLowerCase();
+  const digits = literal.startsWith("0x")
+    ? literal.slice(2)
+    : (literal.split("e")[0] ?? "").replace(".", "");
+  return /^0+$/.test(digits);
 }
 
 function exactCollectionSelection(
@@ -1190,14 +1189,10 @@ function hasRange(node: AstNode): boolean {
   );
 }
 
-function hasValidRange(
-  node: AstNode,
-  sourceLength: number,
-  parent?: AstNode
-): boolean {
+function validRange(node: AstNode, size: number, parent?: AstNode): boolean {
   return (
     hasRange(node) &&
-    nodeEnd(node) < sourceLength &&
+    nodeEnd(node) < size &&
     (parent === undefined ||
       (hasRange(parent) &&
         nodeStart(parent) <= nodeStart(node) &&
@@ -1205,15 +1200,9 @@ function hasValidRange(
   );
 }
 
-function validRangeTree(
-  root: AstNode,
-  sourceLength: number,
-  parent?: AstNode
-): boolean {
-  if (!hasValidRange(root, sourceLength, parent)) return false;
-  return childrenOf(root).every((child) =>
-    validRangeTree(child, sourceLength, root)
-  );
+function validTree(root: AstNode, size: number, parent?: AstNode): boolean {
+  if (!validRange(root, size, parent)) return false;
+  return childrenOf(root).every((child) => validTree(child, size, root));
 }
 
 function nodeStart(node: AstNode): number {

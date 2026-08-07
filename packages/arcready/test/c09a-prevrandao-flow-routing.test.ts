@@ -440,6 +440,11 @@ contract Selector {
     ["source modulo literal", "block.prevrandao % 2 < threshold"],
     ["source modulo zero equality", "block.prevrandao % 2 == 0"],
     ["non-zero equality", "block.prevrandao == 1"],
+    ["non-zero exponent equality", "block.prevrandao == 1e-10000"],
+    [
+      "non-zero long-decimal equality",
+      `block.prevrandao == 0.${"0".repeat(400)}1`
+    ],
     ["zero inequality", "block.prevrandao != 0"]
   ])("routes exact %s authorization", async (_label, expression) => {
     const result = await analyzePrevrandaoFlowFile(
@@ -526,6 +531,14 @@ contract Selector {
     [
       "source binding",
       "uint256 seed = block.prevrandao; return seed < threshold;"
+    ],
+    [
+      "source-derived counterpart on the right",
+      "uint256 seed = block.prevrandao; return block.prevrandao < seed;"
+    ],
+    [
+      "source-derived counterpart on the left",
+      "uint256 seed = block.prevrandao; return seed > block.prevrandao;"
     ],
     [
       "assembly binding",
