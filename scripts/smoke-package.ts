@@ -5,6 +5,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   readdirSync,
   renameSync,
   rmSync,
@@ -13,7 +14,7 @@ import {
 } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 interface PackageJson {
@@ -22,6 +23,16 @@ interface PackageJson {
   dependencies?: Record<string, string>;
   license?: string;
   engines?: Record<string, string>;
+}
+
+interface SourceMap {
+  sourceRoot?: string;
+  sources?: unknown[];
+}
+
+interface ParserArtifactInventory {
+  declarations: Set<string>;
+  javascript: Set<string>;
 }
 
 const require = createRequire(import.meta.url);
@@ -45,7 +56,7 @@ try {
   assertDependencyBoundary();
   run("corepack", ["pnpm", "--filter", "arcready", "build"], repoRoot);
   assertCompilerIsExternal();
-  assertParserIsExternal();
+  const parserArtifacts = assertParserIsExternal();
 
   cliFixtureRoot = createJsonV2Fixture();
   validateJsonV2Execution(
@@ -66,6 +77,7 @@ try {
   if (!existsSync(tarballPath)) {
     throw new Error(`Expected package tarball was not created: ${tarballPath}`);
   }
+  assertPackedParserBoundary(parserArtifacts);
   const candidatePackedSize = statSync(tarballPath).size;
   const packedSizeDelta = candidatePackedSize - C09_PRE_E1_PACKED_SIZE;
   if (packedSizeDelta <= 0 || packedSizeDelta > MAX_C09_E1_PACKED_DELTA) {
@@ -278,14 +290,13 @@ function assertCompilerIsExternal(): void {
   }
 }
 
-function assertParserIsExternal(): void {
+function assertParserIsExternal(): ParserArtifactInventory {
+  const distRoot = join(packageRoot, "dist");
   const analyzerPath = join(packageRoot, "dist", "prevrandao-analysis.js");
-  const declarationPath = join(packageRoot, "dist", "prevrandao-analysis.d.ts");
-  if (!existsSync(analyzerPath) || !existsSync(declarationPath)) {
+  if (!existsSync(analyzerPath)) {
     throw new Error("Expected private prevrandao analyzer package entries");
   }
   const analyzer = readFileSync(analyzerPath, "utf8");
-  const declaration = readFileSync(declarationPath, "utf8");
   if (!analyzer.includes("@solidity-parser/parser")) {
     throw new Error(
       "Expected the private analyzer to resolve the external parser"
@@ -294,9 +305,112 @@ function assertParserIsExternal(): void {
   console.log(
     `Prevrandao analyzer entry size: ${Buffer.byteLength(analyzer, "utf8")} bytes.`
   );
-  if (declaration.includes("@solidity-parser/parser")) {
-    throw new Error("Solidity parser types leaked into ArcReady");
+
+  const parserRoot = realpathSync(
+    dirname(require.resolve("@solidity-parser/parser/package.json"))
+  );
+  const inventory: ParserArtifactInventory = {
+    declarations: new Set<string>(),
+    javascript: new Set<string>()
+  };
+  for (const fileName of listArtifactFiles(distRoot)) {
+    const artifactPath = join(distRoot, ...fileName.split("/"));
+    if (fileName.endsWith(".d.ts")) {
+      inventory.declarations.add(fileName);
+      if (
+        readFileSync(artifactPath, "utf8").includes("@solidity-parser/parser")
+      ) {
+        throw new Error(`Solidity parser types leaked into ${fileName}`);
+      }
+      continue;
+    }
+    if (!fileName.endsWith(".js")) continue;
+
+    inventory.javascript.add(fileName);
+    const mapPath = `${artifactPath}.map`;
+    if (!existsSync(mapPath)) {
+      throw new Error(`Missing parser provenance source map for ${fileName}`);
+    }
+    const sourceMap = JSON.parse(readFileSync(mapPath, "utf8")) as SourceMap;
+    if (!Array.isArray(sourceMap.sources)) {
+      throw new Error(`Invalid parser provenance source map for ${fileName}`);
+    }
+    for (const source of sourceMap.sources) {
+      if (typeof source !== "string") {
+        throw new Error(`Invalid source input in ${fileName}.map`);
+      }
+      const sourcePath = resolve(
+        dirname(mapPath),
+        sourceMap.sourceRoot ?? "",
+        source
+      );
+      if (!existsSync(sourcePath)) {
+        throw new Error(
+          `Cannot resolve provenance input ${source} from ${fileName}.map`
+        );
+      }
+      if (isPathWithin(parserRoot, realpathSync(sourcePath))) {
+        throw new Error(
+          `Solidity parser implementation was bundled into ${fileName}`
+        );
+      }
+    }
   }
+  return inventory;
+}
+
+function assertPackedParserBoundary(inventory: ParserArtifactInventory): void {
+  const members = run("tar", ["-tf", tarballPath], repoRoot)
+    .split(/\r?\n/)
+    .map((member) => member.trim().replaceAll("\\", "/"))
+    .filter(Boolean);
+  if (members.length === 0) {
+    throw new Error("Expected packed ArcReady artifact members");
+  }
+
+  for (const member of members) {
+    if (member.includes("@solidity-parser/parser")) {
+      throw new Error(`Solidity parser package leaked into ${member}`);
+    }
+    const packagePath = member.replace(/^(?:\.\/)?package\//, "");
+    const fileName = packagePath.startsWith("dist/")
+      ? packagePath.slice("dist/".length)
+      : undefined;
+    if (
+      (member.endsWith(".js") &&
+        (fileName === undefined || !inventory.javascript.has(fileName))) ||
+      (member.endsWith(".d.ts") &&
+        (fileName === undefined || !inventory.declarations.has(fileName)))
+    ) {
+      throw new Error(`Packed artifact escaped parser inspection: ${member}`);
+    }
+  }
+}
+
+function listArtifactFiles(root: string, prefix = ""): string[] {
+  const files: string[] = [];
+  for (const entry of readdirSync(
+    join(root, ...prefix.split("/").filter(Boolean)),
+    {
+      withFileTypes: true
+    }
+  )) {
+    const relativePath = prefix ? `${prefix}/${entry.name}` : entry.name;
+    if (entry.isDirectory()) {
+      files.push(...listArtifactFiles(root, relativePath));
+    } else if (entry.isFile()) {
+      files.push(relativePath);
+    }
+  }
+  return files;
+}
+
+function isPathWithin(root: string, candidate: string): boolean {
+  const pathFromRoot = relative(root, candidate);
+  return (
+    pathFromRoot === "" ||
+    (!pathFromRoot.startsWith("..") && !isAbsolute(pathFromRoot))
+  );
 }
 
 function assertInstalledTypeScript(root: string): void {
