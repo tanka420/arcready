@@ -1,7 +1,7 @@
 # ArcReady Rule Development Backlog
 
 **Status:** Active decision record
-**Last reviewed:** 2026-08-06
+**Last reviewed:** 2026-08-17
 **Applies to:** Active and proposed ArcReady static-analysis rules
 
 ## Purpose
@@ -125,13 +125,14 @@ The private canonical runtime remains exactly four rules.
 
 ### `wallet/PREVRANDAO_NOT_SUPPORTED`
 
-- Decision: C09A compatibility-shell migration implemented; closeout pending.
+- Decision: Complete under C09A; retain as a compatibility shell.
 - Priority: P1.
 - Impact: Required change.
-- Retain as a temporary compatibility shell over one shared private analyzer.
-- Emit only exact owned non-bridge records when this shell is selected.
-- Remove the current keyword detector and all blanket `mixHash` equivalence.
-- Preserve non-canonical status and inventory during the compatibility period.
+- Retains a temporary compatibility shell over one shared private analyzer.
+- Emits only exact owned non-bridge records when this shell is selected.
+- The keyword detector and blanket `mixHash` equivalence are removed.
+- Preserve non-canonical status and inventory during the compatibility period;
+  consolidate or retire only through a separately reviewed adoption decision.
 
 ### `wallet/NO_ETH_GAS_LABEL`
 
@@ -196,14 +197,15 @@ It must not be used as an implementation base.
 
 ### `bridge/NO_PREVRANDAO_RELAY_SELECTION`
 
-- Decision: C09A compatibility-shell migration implemented; closeout pending.
+- Decision: Complete under C09A; retain as a compatibility shell.
 - Priority: P1.
 - Impact: Required change.
-- Retain as a temporary relay/validator/sequencer compatibility shell over the
+- Retains a temporary relay/validator/sequencer compatibility shell over the
   shared private analyzer.
-- Emit only exact owned bridge-relay records when this shell is selected.
-- Remove the current keyword detector and prevent cross-shell duplication.
-- Preserve non-canonical status and inventory during the compatibility period.
+- Emits only exact owned bridge-relay records when this shell is selected.
+- The keyword detector is removed and cross-shell duplication is prevented.
+- Preserve non-canonical status and inventory during the compatibility period;
+  consolidate or retire only through a separately reviewed adoption decision.
 
 ### `bridge/BRIDGE_CONFIRMATIONS_ONE`
 
@@ -277,15 +279,15 @@ C06B2  Complete: exact direct viem parseEther write MVP; native remains blocked
 C08-D  Complete: Advice-only disposition selected
 C08A   Complete: default-excluded deprecated attestation advice
 C09-D  Complete: bounded Build disposition selected
-C09A   Next: implement private analyzer and compatibility shells
-C10    Then: add versioned App Kit compatibility analysis
+C09A   Complete: bounded analyzer and compatibility-shell migration
+C10    Next: add versioned App Kit compatibility analysis
 ```
 
-C09-R1, C09-R2, C09-R3-A, and C09-R3-B are complete. C09-D selects Build, and
-C09A is the next approved sequencing target. Production remains blocked until
-the decision and implementation plan merge. The compatibility inventory target
-remains `19 known / 16 default / 7 wallet / 4 canonical`. Other analyzer
-expansion should not interrupt this sequence without real user evidence.
+C09-R1, C09-R2, C09-R3-A, C09-R3-B, C09-D, and C09A are complete. C10 is the
+next approved sequencing target unless new product evidence changes priority.
+The compatibility inventory remains `19 known / 16 default / 7 wallet / 4
+canonical`. C09A grammar, artifact, or shell expansion requires real user or
+repository evidence and a separately reviewed milestone.
 
 ## Expansion triggers
 

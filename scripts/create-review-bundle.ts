@@ -68,19 +68,23 @@ export function createReviewBundle(
   const mergeBaseSha = git(repoRoot, ["merge-base", options.baseRef, "HEAD"]);
   const branch = git(repoRoot, ["branch", "--show-current"]) || "DETACHED";
 
-  const committedPatch = git(repoRoot, [
+  const committedPatch = gitPatch(repoRoot, [
     "diff",
     "--binary",
     "--full-index",
     `${mergeBaseSha}..HEAD`
   ]);
-  const stagedPatch = git(repoRoot, [
+  const stagedPatch = gitPatch(repoRoot, [
     "diff",
     "--cached",
     "--binary",
     "--full-index"
   ]);
-  const unstagedPatch = git(repoRoot, ["diff", "--binary", "--full-index"]);
+  const unstagedPatch = gitPatch(repoRoot, [
+    "diff",
+    "--binary",
+    "--full-index"
+  ]);
   const untrackedFiles = git(repoRoot, [
     "ls-files",
     "--others",
@@ -290,6 +294,14 @@ function sha256(filePath: string): string {
 
 function git(repoRoot: string, args: string[]): string {
   return run(repoRoot, "git", args);
+}
+
+function gitPatch(repoRoot: string, args: string[]): string {
+  return execFileSync("git", args, {
+    cwd: repoRoot,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"]
+  });
 }
 
 function tryCommand(repoRoot: string, command: string, args: string[]): string {
