@@ -6,7 +6,8 @@ import { runRules, type Rule, type RuleContext } from "../core/rules/index.js";
 import {
   analyzePrevrandaoFlowFile,
   analyzePrevrandaoSourceFile,
-  requestPrevrandaoFlowRecords
+  requestPrevrandaoFlowRecords,
+  selectPrevrandaoFlowRecordsForShells
 } from "../rules/shared/prevrandao-analysis.js";
 
 const DIRECT_BRIDGE_SELECTION = `
@@ -57,6 +58,41 @@ describe("C09A-E2 collection-selection routing", () => {
         }
       ]
     });
+  });
+
+  it("routes private records only to their selected owner shells", async () => {
+    const bridge = await analyzePrevrandaoFlowFile(
+      "src/BridgeSelector.sol",
+      DIRECT_BRIDGE_SELECTION
+    );
+    const wallet = await analyzePrevrandaoFlowFile(
+      "src/WalletSelector.sol",
+      DIRECT_BRIDGE_SELECTION.replaceAll("relayers", "winners").replace(
+        "selectRelay",
+        "selectWinner"
+      )
+    );
+    const records = [...bridge.records, ...wallet.records];
+
+    expect(
+      selectPrevrandaoFlowRecordsForShells(records, ["wallet-compatibility"])
+    ).toEqual(wallet.records);
+    expect(
+      selectPrevrandaoFlowRecordsForShells(records, ["bridge-relay"])
+    ).toEqual(bridge.records);
+    expect(
+      selectPrevrandaoFlowRecordsForShells(records, [
+        "wallet-compatibility",
+        "bridge-relay"
+      ])
+    ).toEqual(records);
+    expect(selectPrevrandaoFlowRecordsForShells(records, [])).toEqual([]);
+    expect(
+      selectPrevrandaoFlowRecordsForShells(records, [
+        "bridge-relay",
+        "bridge-relay"
+      ])
+    ).toEqual(bridge.records);
   });
 
   it.each([
@@ -181,6 +217,124 @@ describe("C09A-E2 collection-selection routing", () => {
       expect(result.records[0]?.shellOwner).toBe("bridge-relay");
     }
   );
+
+  it("uses an exact selected-entity identifier for bridge routing", async () => {
+    const source = DIRECT_BRIDGE_SELECTION.replaceAll("relayers", "members")
+      .replace("selectRelay", "pick")
+      .replace(
+        "return members[block.prevrandao % members.length];",
+        "address relayer = members[block.prevrandao % members.length]; return relayer;"
+      );
+
+    const result = await analyzePrevrandaoFlowFile("src/Selector.sol", source);
+
+    expect(result.records).toHaveLength(1);
+    expect(result.records[0]?.shellOwner).toBe("bridge-relay");
+  });
+
+  it("fails closed for ambiguous selected-entity ownership", async () => {
+    const source = DIRECT_BRIDGE_SELECTION.replaceAll("relayers", "members")
+      .replace("selectRelay", "pick")
+      .replace(
+        "return members[block.prevrandao % members.length];",
+        "address relayerWinner = members[block.prevrandao % members.length]; return relayerWinner;"
+      );
+
+    await expect(
+      analyzePrevrandaoFlowFile("src/Selector.sol", source)
+    ).resolves.toEqual({ status: "analyzed", records: [] });
+  });
+
+  it("keeps event-only collection observation non-reportable", async () => {
+    const source = DIRECT_BRIDGE_SELECTION.replace(
+      "return relayers[block.prevrandao % relayers.length];",
+      "emit Selected(relayers[block.prevrandao % relayers.length]); return address(0);"
+    ).replace(
+      "address[] internal relayers;",
+      "address[] internal relayers; event Selected(address selected);"
+    );
+
+    await expect(
+      analyzePrevrandaoFlowFile("src/Selector.sol", source)
+    ).resolves.toEqual({ status: "analyzed", records: [] });
+  });
+
+  it("does not route an undeclared collection receiver", async () => {
+    const source = DIRECT_BRIDGE_SELECTION.replace(
+      "address[] internal relayers;",
+      ""
+    );
+
+    await expect(
+      analyzePrevrandaoFlowFile("src/Selector.sol", source)
+    ).resolves.toEqual({ status: "analyzed", records: [] });
+  });
+
+  it("does not borrow a shadowed state collection declaration", async () => {
+    const source = DIRECT_BRIDGE_SELECTION.replace(
+      "return relayers[block.prevrandao % relayers.length];",
+      "address[] memory relayers; return relayers[block.prevrandao % relayers.length];"
+    );
+
+    await expect(
+      analyzePrevrandaoFlowFile("src/Selector.sol", source)
+    ).resolves.toEqual({ status: "analyzed", records: [] });
+  });
+
+  it.each([
+    [
+      "contract-owned block",
+      DIRECT_BRIDGE_SELECTION.replace(
+        "address[] internal relayers;",
+        "struct FakeBlock { uint256 prevrandao; } FakeBlock internal block; address[] internal relayers;"
+      )
+    ],
+    [
+      "local block",
+      DIRECT_BRIDGE_SELECTION.replace(
+        "return relayers[block.prevrandao % relayers.length];",
+        "FakeBlock memory block; return relayers[block.prevrandao % relayers.length];"
+      ).replace(
+        "address[] internal relayers;",
+        "struct FakeBlock { uint256 prevrandao; } address[] internal relayers;"
+      )
+    ],
+    [
+      "parameter block",
+      DIRECT_BRIDGE_SELECTION.replace(
+        "function selectRelay()",
+        "function selectRelay(FakeBlock memory block)"
+      ).replace(
+        "address[] internal relayers;",
+        "struct FakeBlock { uint256 prevrandao; } address[] internal relayers;"
+      )
+    ],
+    [
+      "inherited block",
+      DIRECT_BRIDGE_SELECTION.replace(
+        "contract Selector",
+        "contract Selector is FakeBase"
+      ).replace(
+        "pragma solidity ^0.8.24;",
+        "pragma solidity ^0.8.24; struct FakeBlock { uint256 prevrandao; } contract FakeBase { FakeBlock internal block; }"
+      )
+    ]
+  ])("does not treat %s as the EVM source", async (_label, source) => {
+    await expect(
+      analyzePrevrandaoFlowFile("src/Selector.sol", source)
+    ).resolves.toEqual({ status: "analyzed", records: [] });
+  });
+
+  it("fails closed when source identity depends on an import", async () => {
+    const source = DIRECT_BRIDGE_SELECTION.replace(
+      "contract Selector",
+      'import "./Identity.sol"; contract Selector'
+    );
+
+    await expect(
+      analyzePrevrandaoFlowFile("src/Selector.sol", source)
+    ).resolves.toEqual({ status: "analyzed", records: [] });
+  });
 
   it.each([
     [
@@ -525,8 +679,46 @@ contract Selector {
         "function orderingKey",
         "function keccak256(bytes memory value) internal pure returns (bytes32) { value; return bytes32(0); } function orderingKey"
       )
+    ],
+    [
+      "a source-unit keccak256 declaration",
+      orderingSource(
+        "uint256(keccak256(abi.encode(item, block.prevrandao)))"
+      ).replace(
+        "contract Ordering",
+        "function keccak256(bytes memory value) pure returns (bytes32) { value; return bytes32(0); } contract Ordering"
+      )
+    ],
+    [
+      "a sibling abi library",
+      orderingSource(
+        "uint256(keccak256(abi.encode(item, block.prevrandao)))"
+      ).replace(
+        "contract Ordering",
+        "library abi { function encode(uint256 value) internal pure returns (bytes memory) { return bytes.concat(bytes32(value)); } } contract Ordering"
+      )
     ]
   ])("does not route ordering with %s", async (_label, source) => {
+    await expect(
+      analyzePrevrandaoFlowFile("src/Ordering.sol", source)
+    ).resolves.toEqual({ status: "analyzed", records: [] });
+  });
+
+  it("does not route ordering with an undeclared non-source input", async () => {
+    const source = orderingSource(
+      "uint256(keccak256(abi.encode(other, block.prevrandao)))"
+    );
+
+    await expect(
+      analyzePrevrandaoFlowFile("src/Ordering.sol", source)
+    ).resolves.toEqual({ status: "analyzed", records: [] });
+  });
+
+  it("does not borrow a shadowed ordering input declaration", async () => {
+    const source = orderingSource(
+      "uint256(keccak256(abi.encode(item, block.prevrandao)))"
+    ).replace("contract Ordering {", "contract Ordering { uint256 item;");
+
     await expect(
       analyzePrevrandaoFlowFile("src/Ordering.sol", source)
     ).resolves.toEqual({ status: "analyzed", records: [] });
@@ -588,11 +780,6 @@ contract Selector {
     ["source modulo literal", "block.prevrandao % 2 < threshold"],
     ["source modulo zero equality", "block.prevrandao % 2 == 0"],
     ["non-zero equality", "block.prevrandao == 1"],
-    ["non-zero exponent equality", "block.prevrandao == 1e-10000"],
-    [
-      "non-zero long-decimal equality",
-      `block.prevrandao == 0.${"0".repeat(400)}1`
-    ],
     ["zero inequality", "block.prevrandao != 0"]
   ])("routes exact %s authorization", async (_label, expression) => {
     const result = await analyzePrevrandaoFlowFile(
@@ -635,6 +822,10 @@ contract Selector {
     ["hex zero modulo", "block.prevrandao % 0x0 < threshold"],
     ["fractional modulo", "block.prevrandao % 1.5 < threshold"],
     ["exponent modulo", "block.prevrandao % 1e2 < threshold"],
+    ["fractional comparison", "block.prevrandao < 0.1"],
+    ["exponent comparison", "block.prevrandao == 1e-10000"],
+    ["long-decimal comparison", `block.prevrandao == 0.${"0".repeat(400)}1`],
+    ["unbound comparison identifier", "block.prevrandao < missing"],
     ["transformed source", "(block.prevrandao + 1) < threshold"],
     ["source on both sides", "block.prevrandao < uint256(block.prevrandao)"]
   ])("does not route %s as authorization", async (_label, expression) => {
@@ -686,6 +877,31 @@ contract Selector {
     ).replace(
       "AUTHORIZATION_EXPRESSION",
       "uint160(account) % 0 == block.prevrandao % 2"
+    );
+
+    await expect(
+      analyzePrevrandaoFlowFile("src/Gate.sol", source)
+    ).resolves.toEqual({ status: "analyzed", records: [] });
+  });
+
+  it("rejects an unbound identifier in the reviewed modulo counterpart", async () => {
+    const source = AUTHORIZATION_TEMPLATE.replace(
+      "function eligible(uint256 threshold)",
+      "function eligible(address user)"
+    ).replace(
+      "AUTHORIZATION_EXPRESSION",
+      "uint160(account) % 2 == block.prevrandao % 2"
+    );
+
+    await expect(
+      analyzePrevrandaoFlowFile("src/Gate.sol", source)
+    ).resolves.toEqual({ status: "analyzed", records: [] });
+  });
+
+  it("does not borrow a shadowed authorization parameter declaration", async () => {
+    const source = authorizationSource("block.prevrandao < threshold").replace(
+      "contract Gate {",
+      "contract Gate { uint256 threshold;"
     );
 
     await expect(
