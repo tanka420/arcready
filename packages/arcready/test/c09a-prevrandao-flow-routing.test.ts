@@ -19,6 +19,11 @@ contract Selector {
   }
 }`;
 
+const BOUND_BRIDGE_SELECTION = DIRECT_BRIDGE_SELECTION.replace(
+  "return relayers[block.prevrandao % relayers.length];",
+  "uint256 seed = block.prevrandao; return relayers[seed % relayers.length];"
+);
+
 const AUTHORIZATION_TEMPLATE = `
 pragma solidity ^0.8.24;
 contract Gate {
@@ -34,6 +39,10 @@ contract Ordering {
     return ORDERING_EXPRESSION;
   }
 }`;
+
+const SYNTHETIC_DECLARATION_EXPRESSION = Symbol(
+  "synthetic declaration expression"
+);
 
 describe("C09A-E2 collection-selection routing", () => {
   it("records one exact same-function modulo/index sink for the bridge shell", async () => {
@@ -192,6 +201,100 @@ describe("C09A-E2 collection-selection routing", () => {
       expect(source.slice(record?.sourceOffset)).toMatch(
         /^(?:block\.prevrandao|prevrandao\(\))/
       );
+    }
+  );
+
+  it.each(["memory", "storage", "calldata"])(
+    "rejects a value-type source binding with compiler-invalid %s location",
+    async (storageLocation) => {
+      const source = DIRECT_BRIDGE_SELECTION.replace(
+        "return relayers[block.prevrandao % relayers.length];",
+        `uint256 ${storageLocation} seed = block.prevrandao; return relayers[seed % relayers.length];`
+      );
+
+      const result = await analyzePrevrandaoFlowFile(
+        "src/Selector.sol",
+        source
+      );
+
+      expect(result.records).toEqual([]);
+    }
+  );
+
+  it.each(["memory", "storage", "calldata"])(
+    "rejects a value-type authorization parameter with compiler-invalid %s location",
+    async (storageLocation) => {
+      const source = authorizationSource(
+        "block.prevrandao < threshold"
+      ).replace("uint256 threshold", `uint256 ${storageLocation} threshold`);
+
+      await expect(
+        analyzePrevrandaoFlowFile("src/Gate.sol", source)
+      ).resolves.toEqual({ status: "analyzed", records: [] });
+    }
+  );
+
+  it.each([
+    ["state", DIRECT_BRIDGE_SELECTION, "relayers", "isStateVar", false],
+    ["state", DIRECT_BRIDGE_SELECTION, "relayers", "isIndexed", true],
+    ["state", DIRECT_BRIDGE_SELECTION, "relayers", "storageLocation", "memory"],
+    [
+      "state",
+      DIRECT_BRIDGE_SELECTION,
+      "relayers",
+      "expression",
+      SYNTHETIC_DECLARATION_EXPRESSION
+    ],
+    ["local", BOUND_BRIDGE_SELECTION, "seed", "isStateVar", true],
+    ["local", BOUND_BRIDGE_SELECTION, "seed", "isIndexed", true],
+    ["local", BOUND_BRIDGE_SELECTION, "seed", "storageLocation", "memory"],
+    [
+      "local",
+      BOUND_BRIDGE_SELECTION,
+      "seed",
+      "expression",
+      SYNTHETIC_DECLARATION_EXPRESSION
+    ],
+    [
+      "parameter",
+      authorizationSource("block.prevrandao < threshold"),
+      "threshold",
+      "isStateVar",
+      true
+    ],
+    [
+      "parameter",
+      authorizationSource("block.prevrandao < threshold"),
+      "threshold",
+      "isIndexed",
+      true
+    ],
+    [
+      "parameter",
+      authorizationSource("block.prevrandao < threshold"),
+      "threshold",
+      "storageLocation",
+      "memory"
+    ],
+    [
+      "parameter",
+      authorizationSource("block.prevrandao < threshold"),
+      "threshold",
+      "expression",
+      SYNTHETIC_DECLARATION_EXPRESSION
+    ]
+  ] as const)(
+    "fails closed for contradictory %s declaration evidence",
+    async (_role, source, name, field, value) => {
+      const parser = parserReplacingDeclarationField(name, field, value);
+
+      const result = await analyzePrevrandaoFlowFile(
+        "src/Evidence.sol",
+        source,
+        async () => parser
+      );
+
+      expect(result.records).toEqual([]);
     }
   );
 
@@ -1862,6 +1965,39 @@ function parserRemovingDeclarationRange(name: string): {
         throw new Error(`Missing declaration AST evidence for ${name}`);
       }
       delete declaration.range;
+      return ast;
+    }
+  };
+}
+
+function parserReplacingDeclarationField(
+  name: string,
+  field: string,
+  value: unknown
+): {
+  parse(source: string, options: Record<string, unknown>): unknown;
+} {
+  return {
+    parse(source, options) {
+      const ast = parserModule.parse(source, options) as MutableAstNode;
+      const declaration = findAstNode(
+        ast,
+        (node) => node.type === "VariableDeclaration" && node.name === name
+      );
+      if (declaration === undefined) {
+        throw new Error(`Missing declaration AST evidence for ${name}`);
+      }
+      declaration[field] =
+        value === SYNTHETIC_DECLARATION_EXPRESSION
+          ? {
+              type: "NumberLiteral",
+              number: "1",
+              subdenomination: null,
+              range: Array.isArray(declaration.range)
+                ? [declaration.range[0], declaration.range[0]]
+                : [0, 0]
+            }
+          : value;
       return ast;
     }
   };

@@ -61,6 +61,12 @@ const UINT256_PARAMETER_TYPES = new Set(["uint", "uint256"]);
 const ADDRESS_PARAMETER_TYPES = new Set(["address"]);
 const BOOL_RETURN_TYPES = new Set(["bool"]);
 const BYTES32_RETURN_TYPES = new Set(["bytes32"]);
+const STATE_VARIABLE_VISIBILITIES = new Set([
+  "default",
+  "internal",
+  "private",
+  "public"
+]);
 const UINT256_MAX = (1n << 256n) - 1n;
 const ASSIGNMENT_OPERATORS = new Set([
   "=",
@@ -940,7 +946,7 @@ function hasExactFunctionParameter(
     parameters.length === 1 &&
     declarations.all.filter((declaration) => declaration.name === name)
       .length === 1 &&
-    hasApprovedElementaryType(parameters[0], allowedTypes)
+    hasApprovedElementaryType(parameters[0], allowedTypes, "parameter")
   );
 }
 
@@ -965,7 +971,11 @@ function hasExactVisibleValueDeclaration(
     [...declarations.parameters, ...declarations.stateVariables].includes(
       named[0]
     ) &&
-    hasApprovedElementaryType(named[0], allowedTypes)
+    hasApprovedElementaryType(
+      named[0],
+      allowedTypes,
+      declarations.parameters.includes(named[0]) ? "parameter" : "state"
+    )
   );
 }
 
@@ -1006,22 +1016,22 @@ function exactVisibleValueDeclarations(
   if (
     parameters.some(
       (node) =>
-        !hasExactVariableDeclarationShape(node) ||
+        !hasExactVariableDeclarationShape(node, "parameter") ||
         !validTree(node, size, functionNode)
     ) ||
     returnParameters.some(
       (node) =>
-        !hasExactVariableDeclarationShape(node) ||
+        !hasExactVariableDeclarationShape(node, "return") ||
         !validTree(node, size, functionNode)
     ) ||
     locals.some(
       (node) =>
-        !hasExactVariableDeclarationShape(node) ||
+        !hasExactVariableDeclarationShape(node, "local") ||
         !validTree(node, size, functionBody)
     ) ||
     stateVariables.some(
       (node) =>
-        !hasExactVariableDeclarationShape(node) ||
+        !hasExactVariableDeclarationShape(node, "state") ||
         !validTree(node, size, contract)
     )
   ) {
@@ -1036,13 +1046,14 @@ function exactVisibleValueDeclarations(
 
 function hasApprovedElementaryType(
   declaration: AstNode,
-  allowedTypes: ReadonlySet<string>
+  allowedTypes: ReadonlySet<string>,
+  role: VariableDeclarationRole
 ): boolean {
   const typeName = isNode(declaration.typeName)
     ? declaration.typeName
     : undefined;
   return (
-    hasExactVariableDeclarationShape(declaration) &&
+    hasExactVariableDeclarationShape(declaration, role) &&
     isApprovedElementaryTypeName(typeName, allowedTypes)
   );
 }
@@ -1060,7 +1071,12 @@ function isApprovedElementaryTypeName(
   );
 }
 
-function hasExactVariableDeclarationShape(declaration: AstNode): boolean {
+type VariableDeclarationRole = "parameter" | "return" | "local" | "state";
+
+function hasExactVariableDeclarationShape(
+  declaration: AstNode,
+  role: VariableDeclarationRole
+): boolean {
   const name = declaration.name;
   const identifier = declaration.identifier;
   return (
@@ -1071,14 +1087,65 @@ function hasExactVariableDeclarationShape(declaration: AstNode): boolean {
       : isNode(identifier) &&
         identifier.type === "Identifier" &&
         identifier.name === name) &&
-    (declaration.storageLocation === null ||
-      declaration.storageLocation === "memory" ||
-      declaration.storageLocation === "storage" ||
-      declaration.storageLocation === "calldata") &&
-    typeof declaration.isStateVar === "boolean" &&
-    typeof declaration.isIndexed === "boolean" &&
-    (declaration.expression === null || isNode(declaration.expression))
+    hasExactDataLocationForRole(declaration, role) &&
+    declaration.isStateVar === (role === "state") &&
+    declaration.isIndexed === false &&
+    declaration.expression === null &&
+    (role !== "state" ||
+      (STATE_VARIABLE_VISIBILITIES.has(
+        stringValue(declaration.visibility) ?? ""
+      ) &&
+        declaration.isDeclaredConst === false &&
+        declaration.isImmutable === false &&
+        declaration.isTransient === false &&
+        declaration.override === null))
   );
+}
+
+function hasExactDataLocationForRole(
+  declaration: AstNode,
+  role: VariableDeclarationRole
+): boolean {
+  const typeName = isNode(declaration.typeName)
+    ? declaration.typeName
+    : undefined;
+  if (typeName === undefined) return false;
+
+  if (typeName.type === "Mapping") {
+    return (
+      (role === "state" && declaration.storageLocation === null) ||
+      (role === "local" && declaration.storageLocation === "storage")
+    );
+  }
+
+  const isReferenceType =
+    typeName.type === "ArrayTypeName" ||
+    (typeName.type === "ElementaryTypeName" &&
+      (typeName.name === "bytes" || typeName.name === "string"));
+  if (
+    typeName.type !== "ArrayTypeName" &&
+    typeName.type !== "ElementaryTypeName"
+  ) {
+    return false;
+  }
+  if (!isReferenceType) return declaration.storageLocation === null;
+
+  switch (role) {
+    case "state":
+      return declaration.storageLocation === null;
+    case "parameter":
+      return (
+        declaration.storageLocation === "memory" ||
+        declaration.storageLocation === "calldata"
+      );
+    case "return":
+      return declaration.storageLocation === "memory";
+    case "local":
+      return (
+        declaration.storageLocation === "memory" ||
+        declaration.storageLocation === "storage"
+      );
+  }
 }
 
 function hasExactUnnamedReturnType(
@@ -1092,7 +1159,7 @@ function hasExactUnnamedReturnType(
     parameter !== null &&
     parameter.name === null &&
     validTree(parameter, size, functionNode) &&
-    hasApprovedElementaryType(parameter, allowedTypes)
+    hasApprovedElementaryType(parameter, allowedTypes, "return")
   );
 }
 
@@ -1238,7 +1305,11 @@ function exactCollectionSelection(
     !isNode(functionNode.body) ||
     !validTree(declaration, size, functionNode.body) ||
     indexVariable === undefined ||
-    !hasApprovedElementaryType(indexVariable, UINT256_PARAMETER_TYPES) ||
+    !hasApprovedElementaryType(
+      indexVariable,
+      UINT256_PARAMETER_TYPES,
+      "local"
+    ) ||
     nodeEnd(declaration) >= nodeStart(node) ||
     !isStableSingleAssignment(functionNode, declaration, indexName) ||
     !isNode(declaration.initialValue) ||
@@ -1289,7 +1360,7 @@ function exactSelectionSinkContext(
     parents.get(parent) !== functionBody ||
     !validTree(parent, size, functionBody) ||
     selected === undefined ||
-    !hasApprovedElementaryType(selected, ADDRESS_PARAMETER_TYPES)
+    !hasApprovedElementaryType(selected, ADDRESS_PARAMETER_TYPES, "local")
   ) {
     return null;
   }
@@ -1612,7 +1683,7 @@ function exactInitializerBinding(
     variable === undefined ||
     !isNode(functionNode.body) ||
     !validTree(statement, size, functionNode.body) ||
-    !hasApprovedElementaryType(variable, UINT256_PARAMETER_TYPES) ||
+    !hasApprovedElementaryType(variable, UINT256_PARAMETER_TYPES, "local") ||
     parents.get(statement) !== functionNode.body
   ) {
     return { unsupported: true };
@@ -1720,7 +1791,7 @@ function localDeclarations(
     if (
       !isNode(functionNode.body) ||
       !validTree(statement, size, functionNode.body) ||
-      !hasApprovedElementaryType(variable, UINT256_PARAMETER_TYPES)
+      !hasApprovedElementaryType(variable, UINT256_PARAMETER_TYPES, "local")
     ) {
       continue;
     }
