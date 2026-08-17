@@ -41,6 +41,16 @@ function broadcastTransaction(chain, transaction) {
   return JSON.stringify({ chain, transactions: [transaction] });
 }
 
+function parserLoaderWithMutation(mutate) {
+  return async () => ({
+    parse(source, options) {
+      const ast = parserModule.parse(source, options);
+      mutate(ast, source);
+      return ast;
+    }
+  });
+}
+
 function nativePath(repositoryPath) {
   return join(PROJECT_ROOT, ...repositoryPath.split("/"));
 }
@@ -142,13 +152,6 @@ describe("C09A-E3 Foundry eligibility", () => {
   ])(
     "fails closed when a duplicate definition has a %s AST type",
     async (_label, mutateDefinition) => {
-      const parse = (source, options) => {
-        const ast = parserModule.parse(source, options);
-        if (source === "contract RelaySelector {}") {
-          mutateDefinition(ast.children[0]);
-        }
-        return ast;
-      };
       const result = await requestPrevrandaoEligibleRecords(
         createInput(
           {
@@ -156,13 +159,117 @@ describe("C09A-E3 Foundry eligibility", () => {
             "src/Duplicate.sol": "contract RelaySelector {}",
             [ARC_PATH]: broadcast()
           },
-          { parserLoader: async () => ({ parse }) }
+          {
+            parserLoader: parserLoaderWithMutation((ast, source) => {
+              if (source === "contract RelaySelector {}") {
+                mutateDefinition(ast.children[0]);
+              }
+            })
+          }
         )
       );
 
       expect(result).toEqual([]);
     }
   );
+
+  it.each([
+    ["concrete", "contract Helper {}"],
+    ["abstract with trivia", "abstract /* reviewed */ contract Helper {}"],
+    ["interface", "interface Helper {}"],
+    ["library", "library Helper {}"]
+  ])("accepts an unrelated valid %s declaration", async (_label, helper) => {
+    const result = await requestPrevrandaoEligibleRecords(
+      createInput({
+        "src/RelaySelector.sol": SOURCE,
+        "src/Helper.sol": helper,
+        [ARC_PATH]: broadcast()
+      })
+    );
+
+    expect(result).toHaveLength(1);
+  });
+
+  it.each([
+    ["exact", "ImportDirective"],
+    ["missing", undefined],
+    ["unknown", "UnknownEvidence"],
+    ["as a pragma", "PragmaDirective"]
+  ])(
+    "does not restore eligibility when an import type is %s",
+    async (_label, type) => {
+      const importingSource = `import "./Helper.sol";\n${SOURCE}`;
+      const result = await requestPrevrandaoEligibleRecords(
+        createInput(
+          {
+            "src/RelaySelector.sol": importingSource,
+            "src/Helper.sol": "contract Helper {}",
+            [ARC_PATH]: broadcast()
+          },
+          {
+            parserLoader: parserLoaderWithMutation((ast, source) => {
+              if (source === importingSource) {
+                const directive = ast.children.find(
+                  (child) => child.type === "ImportDirective"
+                );
+                if (type === undefined) delete directive.type;
+                else directive.type = type;
+              }
+            })
+          }
+        )
+      );
+
+      expect(result).toEqual([]);
+    }
+  );
+
+  it("does not restore eligibility when an unsupported pragma is relabeled", async () => {
+    const unsupportedSource = SOURCE.replace("^0.8.24", "^0.7.6");
+    const result = await requestPrevrandaoEligibleRecords(
+      createInput(
+        { "src/RelaySelector.sol": unsupportedSource, [ARC_PATH]: broadcast() },
+        {
+          parserLoader: parserLoaderWithMutation((ast) => {
+            ast.children[0].type = "UnknownEvidence";
+          })
+        }
+      )
+    );
+
+    expect(result).toEqual([]);
+  });
+
+  it.each([
+    ["pragma range", (node) => delete node.range],
+    ["pragma value", (node) => delete node.value],
+    ["contract base list", (_node, ast) => delete ast.children[1].baseContracts]
+  ])("fails closed for a missing required %s", async (_label, mutate) => {
+    const result = await requestPrevrandaoEligibleRecords(
+      createInput(
+        { "src/RelaySelector.sol": SOURCE, [ARC_PATH]: broadcast() },
+        {
+          parserLoader: parserLoaderWithMutation((ast) => {
+            mutate(ast.children[0], ast);
+          })
+        }
+      )
+    );
+
+    expect(result).toEqual([]);
+  });
+
+  it("fails closed for an unsupported file-level role", async () => {
+    const result = await requestPrevrandaoEligibleRecords(
+      createInput({
+        "src/RelaySelector.sol": SOURCE,
+        "src/Helper.sol": "error HelperError();",
+        [ARC_PATH]: broadcast()
+      })
+    );
+
+    expect(result).toEqual([]);
+  });
 
   it("fails closed when config-scoped files omit malformed Solidity", async () => {
     const result = await requestPrevrandaoEligibleRecords(

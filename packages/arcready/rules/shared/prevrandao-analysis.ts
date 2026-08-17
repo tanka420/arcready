@@ -825,38 +825,82 @@ function exactConcreteContractNames(
   if (children === null) return null;
   const names: string[] = [];
   for (const child of children) {
-    const declarationKind = topLevelContractKind(child, source);
-    if (typeof child.type !== "string") return null;
-    if (child.type !== "ContractDefinition") {
-      if (declarationKind !== null) return null;
-      continue;
-    }
-    if (
-      typeof child.kind !== "string" ||
-      !CONTRACT_DEFINITION_KINDS.has(child.kind) ||
-      declarationKind !== child.kind ||
-      exactNodeArray(child.baseContracts) === null ||
-      exactNodeArray(child.subNodes) === null
-    ) {
-      return null;
-    }
-    const name = stringValue(child.name);
-    if (name === null) return null;
-    if (child.kind === "contract") names.push(name);
+    const evidence = exactTopLevelEvidence(child, source);
+    if (evidence === null || evidence.kind === "import") return null;
+    if (evidence.kind === "contract") names.push(evidence.name);
   }
   return names;
 }
 
-function topLevelContractKind(
+function exactTopLevelEvidence(
   node: AstNode,
   source: string
-): "contract" | "interface" | "library" | null {
+):
+  | { kind: "contract"; name: string }
+  | { kind: "import" | "recognized-noncontract" }
+  | null {
   if (!validRange(node, source.length)) return null;
-  const text = source.slice(nodeStart(node), nodeEnd(node) + 1);
+  const identifiers = leadingIdentifiers(
+    source.slice(nodeStart(node), nodeEnd(node) + 1),
+    3
+  );
+
+  // E3 intentionally supports only the pinned parser's three top-level roles
+  // needed for private eligibility evidence. Other valid file-level Solidity
+  // forms remain fail-closed false negatives until real adoption justifies them.
+  if (node.type === "PragmaDirective") {
+    return identifiers[0] === "pragma" &&
+      typeof node.name === "string" &&
+      identifiers[1] === node.name &&
+      typeof node.value === "string"
+      ? { kind: "recognized-noncontract" }
+      : null;
+  }
+  if (node.type === "ImportDirective") {
+    const path = stringValue(node.path);
+    return identifiers[0] === "import" &&
+      path !== null &&
+      isNode(node.pathLiteral) &&
+      node.pathLiteral.type === "StringLiteral" &&
+      node.pathLiteral.value === path
+      ? { kind: "import" }
+      : null;
+  }
+  if (node.type !== "ContractDefinition") return null;
+
+  const name = stringValue(node.name);
+  if (
+    name === null ||
+    typeof node.kind !== "string" ||
+    !CONTRACT_DEFINITION_KINDS.has(node.kind) ||
+    exactNodeArray(node.baseContracts) === null ||
+    exactNodeArray(node.subNodes) === null
+  ) {
+    return null;
+  }
+  const abstractDeclaration = identifiers[0] === "abstract";
+  const sourceKind = abstractDeclaration ? identifiers[1] : identifiers[0];
+  const sourceName = abstractDeclaration ? identifiers[2] : identifiers[1];
+  const expectedKind = abstractDeclaration ? "abstract" : sourceKind;
+  if (
+    (sourceKind !== "contract" &&
+      sourceKind !== "interface" &&
+      sourceKind !== "library") ||
+    node.kind !== expectedKind ||
+    sourceName !== name
+  ) {
+    return null;
+  }
+  return node.kind === "contract"
+    ? { kind: "contract", name }
+    : { kind: "recognized-noncontract" };
+}
+
+function leadingIdentifiers(text: string, limit: number): readonly string[] {
   const identifiers: string[] = [];
   let offset = 0;
 
-  while (offset < text.length && identifiers.length < 2) {
+  while (offset < text.length && identifiers.length < limit) {
     const whitespace = /^\s+/.exec(text.slice(offset));
     if (whitespace !== null) {
       offset += whitespace[0].length;
@@ -877,11 +921,7 @@ function topLevelContractKind(
     identifiers.push(identifier[0]);
     offset += identifier[0].length;
   }
-
-  const kind = identifiers[0] === "abstract" ? identifiers[1] : identifiers[0];
-  return kind === "contract" || kind === "interface" || kind === "library"
-    ? kind
-    : null;
+  return identifiers;
 }
 
 async function analyzeParsedPrevrandaoSourceFile(
