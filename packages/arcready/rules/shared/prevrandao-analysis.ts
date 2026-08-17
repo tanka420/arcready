@@ -1,4 +1,7 @@
 import { createRequire } from "node:module";
+import { resolve } from "node:path";
+import { discoverFilesInstrumented } from "../../core/fs/index.js";
+import { createRepositoryLocationResolver } from "../../core/findings-v2/location.js";
 import { currentRuleExecutionScope } from "../../core/rules/execution-scope.js";
 
 type AstNode = Record<string, unknown> & {
@@ -50,10 +53,40 @@ export interface PrevrandaoFlowAnalysis {
   readonly records: readonly PrevrandaoFlowRecord[];
 }
 
+export interface PrevrandaoEligibleRecord extends PrevrandaoFlowRecord {
+  readonly sourceFile: string;
+  readonly foundryArtifactPath: string;
+  readonly chainId: 5042002;
+  readonly contractAddress: string;
+  readonly confidence: "medium";
+}
+
 export interface PrevrandaoScanInput {
   readonly files: readonly string[];
   readFile(filePath: string): Promise<string>;
   readonly parserLoader?: () => Promise<unknown>;
+}
+
+export interface PrevrandaoProjectEvidenceDiscovery {
+  readonly complete: boolean;
+  readonly sourceFiles: readonly string[];
+  readonly artifactFiles: readonly string[];
+}
+
+export interface PrevrandaoProjectEvidenceRequest {
+  readonly projectRoot: string;
+  readonly projectPath: string;
+  readonly sourcePath: string;
+  readonly broadcastPath: string;
+}
+
+export interface PrevrandaoEligibilityInput extends PrevrandaoScanInput {
+  readonly projectRoot: string;
+  readonly discoverProjectEvidence?: (
+    request: PrevrandaoProjectEvidenceRequest
+  ) =>
+    | PrevrandaoProjectEvidenceDiscovery
+    | Promise<PrevrandaoProjectEvidenceDiscovery>;
 }
 
 const DIRECT_CAST_NAMES = new Set(["uint", "uint256", "bytes32"]);
@@ -67,7 +100,14 @@ const STATE_VARIABLE_VISIBILITIES = new Set([
   "private",
   "public"
 ]);
+const CONTRACT_DEFINITION_KINDS = new Set([
+  "abstract",
+  "contract",
+  "interface",
+  "library"
+]);
 const UINT256_MAX = (1n << 256n) - 1n;
+const ARC_TESTNET_CHAIN_ID = 5042002 as const;
 const ASSIGNMENT_OPERATORS = new Set([
   "=",
   "+=",
@@ -140,9 +180,17 @@ const KNOWN_DIRECT_SOURCE_CONTEXTS = new Set([
 const EXCLUDED_DIRECTORIES =
   /(?:^|\/)(?:test|tests|__tests__|generated|vendor|node_modules|lib|out|cache|broadcast|dist|build|coverage)(?:\/|$)/i;
 const require = createRequire(import.meta.url);
+const scanSnapshotsByExecution = new WeakMap<
+  object,
+  Promise<PrevrandaoScanSnapshot>
+>();
 const flowRecordsByExecution = new WeakMap<
   object,
   Promise<readonly PrevrandaoFlowRecord[]>
+>();
+const eligibleRecordsByExecution = new WeakMap<
+  object,
+  Promise<readonly PrevrandaoEligibleRecord[]>
 >();
 
 export function supportsPrevrandaoSourcePath(filePath: string): boolean {
@@ -194,13 +242,39 @@ export function requestPrevrandaoFlowRecords(
   input: PrevrandaoScanInput
 ): Promise<readonly PrevrandaoFlowRecord[]> {
   const execution = currentRuleExecutionScope();
-  if (execution === undefined) return collectScanFlowRecords(input);
+  if (execution === undefined) {
+    return requestPrevrandaoScanSnapshot(input).then(
+      (snapshot) => snapshot.records
+    );
+  }
 
   const cached = flowRecordsByExecution.get(execution);
   if (cached !== undefined) return cached;
 
-  const requested = collectScanFlowRecords(input);
+  const requested = requestPrevrandaoScanSnapshot(input).then(
+    (snapshot) => snapshot.records
+  );
   flowRecordsByExecution.set(execution, requested);
+  return requested;
+}
+
+export function requestPrevrandaoEligibleRecords(
+  input: PrevrandaoEligibilityInput
+): Promise<readonly PrevrandaoEligibleRecord[]> {
+  const execution = currentRuleExecutionScope();
+  if (execution === undefined) {
+    return requestPrevrandaoScanSnapshot(input).then((snapshot) =>
+      collectEligibleRecords(input, snapshot)
+    );
+  }
+
+  const cached = eligibleRecordsByExecution.get(execution);
+  if (cached !== undefined) return cached;
+
+  const requested = requestPrevrandaoScanSnapshot(input).then((snapshot) =>
+    collectEligibleRecords(input, snapshot)
+  );
+  eligibleRecordsByExecution.set(execution, requested);
   return requested;
 }
 
@@ -212,45 +286,651 @@ export function selectPrevrandaoFlowRecordsForShells(
   return records.filter((record) => selected.has(record.shellOwner));
 }
 
-async function collectScanFlowRecords(
+type SnapshotSourceStatus =
+  | PrevrandaoSourceAnalysisStatus
+  | "unreadable"
+  | "untrusted-definitions";
+
+interface PrevrandaoSourceFileSnapshot {
+  readonly filePath: string;
+  readonly status: SnapshotSourceStatus;
+  readonly concreteContractNames: readonly string[];
+}
+
+interface PrevrandaoScanSnapshot {
+  readonly records: readonly PrevrandaoFlowRecord[];
+  readonly sourceFiles: readonly PrevrandaoSourceFileSnapshot[];
+}
+
+function requestPrevrandaoScanSnapshot(
   input: PrevrandaoScanInput
-): Promise<readonly PrevrandaoFlowRecord[]> {
+): Promise<PrevrandaoScanSnapshot> {
+  const execution = currentRuleExecutionScope();
+  if (execution === undefined) return collectScanSnapshot(input);
+
+  const cached = scanSnapshotsByExecution.get(execution);
+  if (cached !== undefined) return cached;
+
+  const requested = collectScanSnapshot(input);
+  scanSnapshotsByExecution.set(execution, requested);
+  return requested;
+}
+
+async function collectScanSnapshot(
+  input: PrevrandaoScanInput
+): Promise<PrevrandaoScanSnapshot> {
   const records: PrevrandaoFlowRecord[] = [];
-  const files = [...new Set(input.files.filter(supportsPrevrandaoSourcePath))]
+  const sourceFiles: PrevrandaoSourceFileSnapshot[] = [];
+  const files = [
+    ...new Set(
+      input.files.filter((filePath) =>
+        supportsScanInputSourcePath(input, filePath)
+      )
+    )
+  ]
     .slice()
     .sort(compareText);
+  const parserLoader =
+    input.parserLoader ??
+    (() => Promise.resolve(require("@solidity-parser/parser")));
 
   for (const filePath of files) {
     let source: string;
     try {
       source = await input.readFile(filePath);
     } catch {
+      sourceFiles.push({
+        filePath,
+        status: "unreadable",
+        concreteContractNames: []
+      });
       continue;
     }
-    const result =
-      input.parserLoader === undefined
-        ? await analyzePrevrandaoFlowFile(filePath, source)
-        : await analyzePrevrandaoFlowFile(filePath, source, input.parserLoader);
-    records.push(...result.records);
+    const parsed = await analyzeParsedPrevrandaoSourceFile(
+      filePath,
+      source,
+      parserLoader,
+      true
+    );
+    const concreteContractNames =
+      parsed.ast === undefined
+        ? null
+        : exactConcreteContractNames(parsed.ast, source);
+    sourceFiles.push({
+      filePath,
+      status:
+        concreteContractNames === null
+          ? "untrusted-definitions"
+          : parsed.analysis.status,
+      concreteContractNames: concreteContractNames ?? []
+    });
+    if (parsed.ast !== undefined && parsed.analysis.status === "analyzed") {
+      records.push(
+        ...collectCollectionSelectionRecords(
+          parsed.ast,
+          parsed.analysis.sources,
+          source.length
+        )
+      );
+    }
   }
-  return records.sort(
-    (left, right) =>
-      compareText(left.sourceFile, right.sourceFile) ||
-      left.sourceOffset - right.sourceOffset ||
-      left.sinkOffset - right.sinkOffset
-  );
+  return {
+    records: records.sort(
+      (left, right) =>
+        compareText(left.sourceFile, right.sourceFile) ||
+        left.sourceOffset - right.sourceOffset ||
+        left.sinkOffset - right.sinkOffset
+    ),
+    sourceFiles
+  };
 }
 
 function compareText(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
 }
 
+interface NormalizedOperationalPath {
+  readonly relativePath: string;
+  readonly absolutePath: string;
+}
+
+interface FoundryCreateRecord {
+  readonly artifactPath: string;
+  readonly chainId: number;
+  readonly contractName: string;
+  readonly contractAddress: string;
+}
+
+async function collectEligibleRecords(
+  input: PrevrandaoEligibilityInput,
+  snapshot: PrevrandaoScanSnapshot
+): Promise<readonly PrevrandaoEligibleRecord[]> {
+  let resolveLocation: ReturnType<typeof createRepositoryLocationResolver>;
+  try {
+    resolveLocation = createRepositoryLocationResolver(input.projectRoot);
+  } catch {
+    return [];
+  }
+
+  const normalizedSources = new Map<
+    string,
+    PrevrandaoSourceFileSnapshot | null
+  >();
+  for (const source of snapshot.sourceFiles) {
+    const normalized = normalizeOperationalPath(
+      input.projectRoot,
+      source.filePath,
+      resolveLocation
+    );
+    if (normalized === null) continue;
+    normalizedSources.set(
+      normalized.relativePath,
+      normalizedSources.has(normalized.relativePath) ? null : source
+    );
+  }
+
+  const recordsByRoot = new Map<
+    string,
+    Array<{ record: PrevrandaoFlowRecord; sourcePath: string }>
+  >();
+  for (const record of snapshot.records) {
+    const normalized = normalizeOperationalPath(
+      input.projectRoot,
+      record.sourceFile,
+      resolveLocation
+    );
+    if (normalized === null) continue;
+    const projectPath = sourceProjectPath(normalized.relativePath);
+    if (projectPath === null) continue;
+    const records = recordsByRoot.get(projectPath) ?? [];
+    records.push({ record, sourcePath: normalized.relativePath });
+    recordsByRoot.set(projectPath, records);
+  }
+
+  const eligible: PrevrandaoEligibleRecord[] = [];
+  for (const projectPath of [...recordsByRoot.keys()].sort(compareText)) {
+    const records = recordsByRoot.get(projectPath) ?? [];
+    const sourcePath = `${projectPath}src`;
+    const broadcastPath = `${projectPath}broadcast`;
+    let discovery: PrevrandaoProjectEvidenceDiscovery;
+    try {
+      discovery = await (
+        input.discoverProjectEvidence ?? defaultProjectEvidenceDiscovery
+      )({
+        projectRoot: input.projectRoot,
+        projectPath,
+        sourcePath,
+        broadcastPath
+      });
+    } catch {
+      continue;
+    }
+    if (!hasExactDiscoveryShape(discovery) || !discovery.complete) continue;
+
+    const discoveredSources = normalizeDiscoveredFiles(
+      input.projectRoot,
+      discovery.sourceFiles,
+      resolveLocation,
+      (path) =>
+        path.startsWith(`${sourcePath}/`) && supportsPrevrandaoSourcePath(path)
+    );
+    const discoveredArtifacts = normalizeDiscoveredFiles(
+      input.projectRoot,
+      discovery.artifactFiles,
+      resolveLocation,
+      (path) => path.startsWith(`${broadcastPath}/`)
+    );
+    if (discoveredSources === null || discoveredArtifacts === null) continue;
+
+    const snapshotPaths = [...normalizedSources.keys()].filter(
+      (path) => sourceProjectPath(path) === projectPath
+    );
+    if (!sameTextSet(snapshotPaths, discoveredSources.keys())) continue;
+
+    const rootSources: PrevrandaoSourceFileSnapshot[] = [];
+    let trustworthyRoot = true;
+    for (const path of [...discoveredSources.keys()].sort(compareText)) {
+      const source = normalizedSources.get(path);
+      if (
+        source === undefined ||
+        source === null ||
+        source.status !== "analyzed"
+      ) {
+        trustworthyRoot = false;
+        break;
+      }
+      rootSources.push(source);
+    }
+    if (!trustworthyRoot) continue;
+
+    const definitionCounts = new Map<string, number>();
+    for (const source of rootSources) {
+      for (const name of source.concreteContractNames) {
+        definitionCounts.set(name, (definitionCounts.get(name) ?? 0) + 1);
+      }
+    }
+    if (
+      records.some(
+        ({ record }) => definitionCounts.get(record.contractName) !== 1
+      )
+    ) {
+      continue;
+    }
+
+    const creates = await readFoundryCreates(
+      input,
+      projectPath,
+      discoveredArtifacts
+    );
+    if (
+      creates === null ||
+      hasFoundryOwnershipConflict(creates, definitionCounts)
+    ) {
+      continue;
+    }
+
+    for (const { record, sourcePath: normalizedSourcePath } of records) {
+      const owned = creates.filter(
+        (create) => create.contractName === record.contractName
+      );
+      if (
+        owned.length === 0 ||
+        owned.some((create) => create.chainId !== ARC_TESTNET_CHAIN_ID)
+      ) {
+        continue;
+      }
+      const addresses = new Set(owned.map((create) => create.contractAddress));
+      if (addresses.size !== 1) continue;
+      const selected = owned
+        .slice()
+        .sort((left, right) =>
+          compareText(left.artifactPath, right.artifactPath)
+        )[0];
+      if (selected === undefined) continue;
+      eligible.push({
+        ...record,
+        sourceFile: normalizedSourcePath,
+        foundryArtifactPath: selected.artifactPath,
+        chainId: ARC_TESTNET_CHAIN_ID,
+        contractAddress: selected.contractAddress,
+        confidence: "medium"
+      });
+    }
+  }
+
+  return eligible.sort(
+    (left, right) =>
+      compareText(left.sourceFile, right.sourceFile) ||
+      left.sourceOffset - right.sourceOffset ||
+      left.sinkOffset - right.sinkOffset ||
+      compareText(left.foundryArtifactPath, right.foundryArtifactPath)
+  );
+}
+
+function defaultProjectEvidenceDiscovery(
+  request: PrevrandaoProjectEvidenceRequest
+): PrevrandaoProjectEvidenceDiscovery {
+  const source = discoverFilesInstrumented({
+    projectRoot: request.projectRoot,
+    paths: [request.sourcePath],
+    exclude: []
+  });
+  const artifacts = discoverFilesInstrumented({
+    projectRoot: request.projectRoot,
+    paths: [request.broadcastPath],
+    exclude: []
+  });
+  let resolveLocation: ReturnType<typeof createRepositoryLocationResolver>;
+  try {
+    resolveLocation = createRepositoryLocationResolver(request.projectRoot);
+  } catch {
+    return { complete: false, sourceFiles: [], artifactFiles: [] };
+  }
+  return {
+    complete:
+      source.instrumentation.complete && artifacts.instrumentation.complete,
+    sourceFiles: source.files.filter((filePath) => {
+      const resolved = resolveLocation(filePath);
+      return (
+        resolved.status === "resolved" &&
+        supportsPrevrandaoSourcePath(resolved.location.path)
+      );
+    }),
+    artifactFiles: artifacts.files.filter((filePath) =>
+      /\.json$/i.test(filePath)
+    )
+  };
+}
+
+function supportsScanInputSourcePath(
+  input: PrevrandaoScanInput,
+  filePath: string
+): boolean {
+  const projectRoot = isNode(input) ? input.projectRoot : undefined;
+  if (typeof projectRoot !== "string") {
+    return supportsPrevrandaoSourcePath(filePath);
+  }
+  try {
+    const resolved = createRepositoryLocationResolver(projectRoot)(filePath);
+    return (
+      resolved.status === "resolved" &&
+      supportsPrevrandaoSourcePath(resolved.location.path)
+    );
+  } catch {
+    return false;
+  }
+}
+
+function hasExactDiscoveryShape(
+  value: unknown
+): value is PrevrandaoProjectEvidenceDiscovery {
+  if (!isNode(value) || typeof value.complete !== "boolean") return false;
+  return (
+    Array.isArray(value.sourceFiles) &&
+    value.sourceFiles.every((item) => typeof item === "string") &&
+    Array.isArray(value.artifactFiles) &&
+    value.artifactFiles.every((item) => typeof item === "string")
+  );
+}
+
+function normalizeDiscoveredFiles(
+  projectRoot: string,
+  files: readonly string[],
+  resolveLocation: ReturnType<typeof createRepositoryLocationResolver>,
+  accepts: (relativePath: string) => boolean
+): Map<string, string> | null {
+  const normalized = new Map<string, string>();
+  for (const filePath of files) {
+    const path = normalizeOperationalPath(
+      projectRoot,
+      filePath,
+      resolveLocation
+    );
+    if (
+      path === null ||
+      !accepts(path.relativePath) ||
+      normalized.has(path.relativePath)
+    ) {
+      return null;
+    }
+    normalized.set(path.relativePath, path.absolutePath);
+  }
+  return normalized;
+}
+
+function normalizeOperationalPath(
+  projectRoot: string,
+  filePath: string,
+  resolveLocation: ReturnType<typeof createRepositoryLocationResolver>
+): NormalizedOperationalPath | null {
+  if (filePath.includes("/") && filePath.includes("\\")) return null;
+  const resolved = resolveLocation(filePath);
+  if (resolved.status !== "resolved") return null;
+  const relativePath = resolved.location.path;
+  return {
+    relativePath,
+    absolutePath: resolve(projectRoot, ...relativePath.split("/"))
+  };
+}
+
+function sourceProjectPath(filePath: string): string | null {
+  if (filePath.startsWith("src/")) return "";
+  const marker = "/src/";
+  const first = filePath.indexOf(marker);
+  if (first < 0 || filePath.indexOf(marker, first + marker.length) >= 0) {
+    return null;
+  }
+  const projectPath = filePath.slice(0, first + 1);
+  return projectPath.split("/").includes("vendor") ? null : projectPath;
+}
+
+function sameTextSet(left: Iterable<string>, right: Iterable<string>): boolean {
+  const leftSet = new Set(left);
+  const rightSet = new Set(right);
+  return (
+    leftSet.size === rightSet.size &&
+    [...leftSet].every((value) => rightSet.has(value))
+  );
+}
+
+async function readFoundryCreates(
+  input: PrevrandaoEligibilityInput,
+  projectPath: string,
+  artifacts: ReadonlyMap<string, string>
+): Promise<FoundryCreateRecord[] | null> {
+  const creates: FoundryCreateRecord[] = [];
+  for (const artifactPath of [...artifacts.keys()].sort(compareText)) {
+    const descriptor = foundryArtifactDescriptor(artifactPath, projectPath);
+    if (descriptor.kind === "noncanonical") continue;
+    if (descriptor.kind === "invalid") return null;
+    let content: string;
+    try {
+      content = await input.readFile(artifacts.get(artifactPath) ?? "");
+    } catch {
+      return null;
+    }
+    const parsed = parseFoundryArtifact(
+      content,
+      artifactPath,
+      descriptor.chainId
+    );
+    if (parsed === null) return null;
+    creates.push(...parsed);
+  }
+  return creates;
+}
+
+function foundryArtifactDescriptor(
+  artifactPath: string,
+  projectPath: string
+):
+  | { kind: "canonical"; chainId: number }
+  | { kind: "invalid" }
+  | { kind: "noncanonical" } {
+  const prefix = `${projectPath}broadcast/`;
+  if (!artifactPath.startsWith(prefix)) return { kind: "invalid" };
+  const relative = artifactPath.slice(prefix.length);
+  const match = /^([^/]+\.s\.sol)\/([^/]+)\/run-latest\.json$/.exec(relative);
+  if (match === null) return { kind: "noncanonical" };
+  if (!/^(?:0|[1-9]\d*)$/.test(match[2] ?? "")) {
+    return { kind: "invalid" };
+  }
+  const chainId = Number(match[2]);
+  return Number.isSafeInteger(chainId)
+    ? { kind: "canonical", chainId }
+    : { kind: "invalid" };
+}
+
+function parseFoundryArtifact(
+  content: string,
+  artifactPath: string,
+  pathChainId: number
+): FoundryCreateRecord[] | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(content);
+  } catch {
+    return null;
+  }
+  if (
+    !isNode(parsed) ||
+    typeof parsed.chain !== "number" ||
+    !Number.isSafeInteger(parsed.chain) ||
+    parsed.chain !== pathChainId ||
+    !Array.isArray(parsed.transactions)
+  ) {
+    return null;
+  }
+
+  const creates: FoundryCreateRecord[] = [];
+  for (const transaction of parsed.transactions) {
+    if (
+      !isNode(transaction) ||
+      typeof transaction.transactionType !== "string"
+    ) {
+      return null;
+    }
+    if (transaction.transactionType !== "CREATE") continue;
+    if (
+      typeof transaction.contractName !== "string" ||
+      !/^[A-Za-z_$][\w$]*$/.test(transaction.contractName) ||
+      typeof transaction.contractAddress !== "string" ||
+      !/^0x[0-9a-fA-F]{40}$/.test(transaction.contractAddress)
+    ) {
+      return null;
+    }
+    creates.push({
+      artifactPath,
+      chainId: pathChainId,
+      contractName: transaction.contractName,
+      contractAddress: transaction.contractAddress.toLowerCase()
+    });
+  }
+  return creates;
+}
+
+function hasFoundryOwnershipConflict(
+  creates: readonly FoundryCreateRecord[],
+  definitionCounts: ReadonlyMap<string, number>
+): boolean {
+  for (const [contractName, definitionCount] of definitionCounts) {
+    if (definitionCount > 1) return true;
+    const owned = creates.filter(
+      (create) => create.contractName === contractName
+    );
+    if (owned.length === 0) continue;
+    const arc = owned.filter(
+      (create) => create.chainId === ARC_TESTNET_CHAIN_ID
+    );
+    const nonArc = owned.filter(
+      (create) => create.chainId !== ARC_TESTNET_CHAIN_ID
+    );
+    if (
+      (arc.length > 0 && nonArc.length > 0) ||
+      new Set(arc.map((create) => create.contractAddress)).size > 1
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function exactConcreteContractNames(
+  ast: AstNode,
+  source: string
+): readonly string[] | null {
+  const size = source.length;
+  if (!validTree(ast, size)) return null;
+  const children = exactNodeArray(ast.children);
+  if (children === null) return null;
+  const names: string[] = [];
+  for (const child of children) {
+    const evidence = exactTopLevelEvidence(child, source);
+    if (evidence === null || evidence.kind === "import") return null;
+    if (evidence.kind === "contract") names.push(evidence.name);
+  }
+  return names;
+}
+
+function exactTopLevelEvidence(
+  node: AstNode,
+  source: string
+):
+  | { kind: "contract"; name: string }
+  | { kind: "import" | "recognized-noncontract" }
+  | null {
+  if (!validRange(node, source.length)) return null;
+  const identifiers = leadingIdentifiers(
+    source.slice(nodeStart(node), nodeEnd(node) + 1),
+    3
+  );
+
+  // E3 intentionally supports only the pinned parser's three top-level roles
+  // needed for private eligibility evidence. Other valid file-level Solidity
+  // forms remain fail-closed false negatives until real adoption justifies them.
+  if (node.type === "PragmaDirective") {
+    return identifiers[0] === "pragma" &&
+      typeof node.name === "string" &&
+      identifiers[1] === node.name &&
+      typeof node.value === "string"
+      ? { kind: "recognized-noncontract" }
+      : null;
+  }
+  if (node.type === "ImportDirective") {
+    const path = stringValue(node.path);
+    return identifiers[0] === "import" &&
+      path !== null &&
+      isNode(node.pathLiteral) &&
+      node.pathLiteral.type === "StringLiteral" &&
+      node.pathLiteral.value === path
+      ? { kind: "import" }
+      : null;
+  }
+  if (node.type !== "ContractDefinition") return null;
+
+  const name = stringValue(node.name);
+  if (
+    name === null ||
+    typeof node.kind !== "string" ||
+    !CONTRACT_DEFINITION_KINDS.has(node.kind) ||
+    exactNodeArray(node.baseContracts) === null ||
+    exactNodeArray(node.subNodes) === null
+  ) {
+    return null;
+  }
+  const abstractDeclaration = identifiers[0] === "abstract";
+  const sourceKind = abstractDeclaration ? identifiers[1] : identifiers[0];
+  const sourceName = abstractDeclaration ? identifiers[2] : identifiers[1];
+  const expectedKind = abstractDeclaration ? "abstract" : sourceKind;
+  if (
+    (sourceKind !== "contract" &&
+      sourceKind !== "interface" &&
+      sourceKind !== "library") ||
+    node.kind !== expectedKind ||
+    sourceName !== name
+  ) {
+    return null;
+  }
+  return node.kind === "contract"
+    ? { kind: "contract", name }
+    : { kind: "recognized-noncontract" };
+}
+
+function leadingIdentifiers(text: string, limit: number): readonly string[] {
+  const identifiers: string[] = [];
+  let offset = 0;
+
+  while (offset < text.length && identifiers.length < limit) {
+    const whitespace = /^\s+/.exec(text.slice(offset));
+    if (whitespace !== null) {
+      offset += whitespace[0].length;
+      continue;
+    }
+    const lineComment = /^\/\/[^\r\n]*(?:\r?\n|$)/.exec(text.slice(offset));
+    if (lineComment !== null) {
+      offset += lineComment[0].length;
+      continue;
+    }
+    const blockComment = /^\/\*[\s\S]*?\*\//.exec(text.slice(offset));
+    if (blockComment !== null) {
+      offset += blockComment[0].length;
+      continue;
+    }
+    const identifier = /^[A-Za-z_$][\w$]*/.exec(text.slice(offset));
+    if (identifier === null) break;
+    identifiers.push(identifier[0]);
+    offset += identifier[0].length;
+  }
+  return identifiers;
+}
+
 async function analyzeParsedPrevrandaoSourceFile(
   filePath: string,
   source: string,
-  parserLoader: () => Promise<unknown>
+  parserLoader: () => Promise<unknown>,
+  pathAlreadySupported = false
 ): Promise<{ analysis: PrevrandaoSourceAnalysis; ast?: AstNode }> {
-  if (!supportsPrevrandaoSourcePath(filePath)) {
+  if (!pathAlreadySupported && !supportsPrevrandaoSourcePath(filePath)) {
     return { analysis: { status: "unsupported-file", sources: [] } };
   }
 
