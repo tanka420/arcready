@@ -1130,7 +1130,7 @@ describe("runtime boundaries and diagnostic ordering", () => {
     expect(publicSource).not.toContain("runInternalScanV2");
   });
 
-  it("records the intended DX01 demo finding-count change", async () => {
+  it("records the intended C09A demo finding migration", async () => {
     const broken = await runScan(
       join(repoRoot, "examples", "demo-projects", "broken-arc-integration")
     );
@@ -1141,8 +1141,15 @@ describe("runtime boundaries and diagnostic ordering", () => {
     const blobFindings = broken.report.findings.filter(
       ({ ruleId }) => ruleId === "wallet/NO_BLOB_TX_ON_ARC"
     );
+    const prevrandaoRuleIds = broken.report.findings
+      .filter(({ ruleId }) => ruleId.includes("PREVRANDAO"))
+      .map(({ ruleId }) => ruleId);
 
-    expect(broken.report.findings).toHaveLength(15);
+    expect(broken.report.findings).toHaveLength(14);
+    expect(prevrandaoRuleIds).toEqual([
+      "wallet/PREVRANDAO_NOT_SUPPORTED",
+      "bridge/NO_PREVRANDAO_RELAY_SELECTION"
+    ]);
     expect(blobFindings).toHaveLength(1);
     expect(fixed.report.findings).toHaveLength(0);
   });

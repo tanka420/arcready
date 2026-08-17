@@ -1,64 +1,27 @@
 import type { Rule } from "../../core/rules/index.js";
 import {
-  BRIDGE_DOCS,
-  createBridgeFinding,
-  isArcRelated,
-  isBridgeRelated,
-  isCommentOrDocumentationLine,
-  isGuidanceAgainstUsage,
-  readBridgeFiles
-} from "./helpers.js";
-
-const SUGGESTED_FIX =
-  "Replace PREVRANDAO or mixHash-based relay selection with deterministic selection, offchain coordination, or another documented randomness source.";
+  createPrevrandaoCompatibilityFinding,
+  requestPrevrandaoCompatibilityRecords
+} from "../shared/prevrandao-compatibility-finding.js";
+import { BRIDGE_DOCS } from "./helpers.js";
 
 export const noPrevrandaoRelaySelectionRule: Rule = {
   id: "bridge/NO_PREVRANDAO_RELAY_SELECTION",
   name: "No PREVRANDAO relay selection",
-  description: "Detects PREVRANDAO usage in Arc relay selection logic.",
+  description:
+    "Detects supported PREVRANDAO relay behavior in Foundry-associated Arc contracts.",
   preset: "bridge",
   defaultSeverity: "critical",
   docs: [BRIDGE_DOCS.prevrandao],
   async run(context) {
-    const findings = [];
-
-    for (const { filePath, content } of await readBridgeFiles(context)) {
-      if (!isArcRelated(content) || !isBridgeRelated(content)) {
-        continue;
-      }
-
-      if (hasPrevrandaoRelaySelection(content)) {
-        findings.push(
-          createBridgeFinding(
-            noPrevrandaoRelaySelectionRule,
-            filePath,
-            "Arc relay selection appears to use PREVRANDAO or mixHash randomness.",
-            SUGGESTED_FIX,
-            BRIDGE_DOCS.prevrandao
-          )
-        );
-      }
-    }
-
-    return findings;
+    const records = await requestPrevrandaoCompatibilityRecords(context);
+    return records
+      .filter((record) => record.shellOwner === "bridge-relay")
+      .map((record) =>
+        createPrevrandaoCompatibilityFinding(
+          noPrevrandaoRelaySelectionRule,
+          record
+        )
+      );
   }
 };
-
-function hasPrevrandaoRelaySelection(content: string): boolean {
-  return content.split(/\r?\n/).some((line) => {
-    if (
-      isCommentOrDocumentationLine(line) ||
-      isGuidanceAgainstUsage(
-        line,
-        /\b(block\.prevrandao|PREVRANDAO|prevrandao|mixHash)\b/
-      )
-    ) {
-      return false;
-    }
-
-    return (
-      /\b(block\.prevrandao|PREVRANDAO|prevrandao|mixHash)\b/.test(line) &&
-      /(relay|relayer|selection|select|shuffle|randomness|random)/i.test(line)
-    );
-  });
-}

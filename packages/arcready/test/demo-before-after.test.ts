@@ -56,12 +56,14 @@ describe("before/after demo helpers", () => {
 
     expect(output).toBe(`ArcReady Before/After Demo
 
-BEFORE  broken-arc-integration  FAIL  0  4 findings
-  required findings: 4/4
+BEFORE  broken-arc-integration  FAIL  0  6 findings
+  required findings: 6/6
   app-kit/APPKIT_CHAIN_IDENTIFIER_VALID
   bridge/CCTP_DOMAIN_26
+  bridge/NO_PREVRANDAO_RELAY_SELECTION
   wallet/ARC_CHAIN_METADATA
   wallet/NO_BLOB_TX_ON_ARC
+  wallet/PREVRANDAO_NOT_SUPPORTED
 AFTER  fixed-arc-integration  PASS  100  0 findings
 
 Result: PASS`);
@@ -332,8 +334,8 @@ function createBrokenResult(
     fixture: "broken-arc-integration",
     status: "fail",
     score: 0,
-    critical: 4,
-    findings: 4,
+    critical: ESSENTIAL_RULE_IDS.length,
+    findings: ESSENTIAL_RULE_IDS.length,
     ruleIds: [...ESSENTIAL_RULE_IDS],
     expected: "findings",
     matched: true,

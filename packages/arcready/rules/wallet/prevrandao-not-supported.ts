@@ -1,60 +1,24 @@
 import type { Rule } from "../../core/rules/index.js";
 import {
-  WALLET_DOCS,
-  createWalletFinding,
-  isArcRelated,
-  isCommentOrDocumentationLine,
-  isGuidanceAgainstUsage,
-  readWalletFiles
-} from "./helpers.js";
-
-const SUGGESTED_FIX =
-  "Replace PREVRANDAO or mixHash assumptions with deterministic logic or another randomness source documented for your Arc integration.";
+  createPrevrandaoCompatibilityFinding,
+  requestPrevrandaoCompatibilityRecords
+} from "../shared/prevrandao-compatibility-finding.js";
+import { WALLET_DOCS } from "./helpers.js";
 
 export const prevrandaoNotSupportedRule: Rule = {
   id: "wallet/PREVRANDAO_NOT_SUPPORTED",
   name: "PREVRANDAO not supported",
-  description: "Detects PREVRANDAO assumptions in Arc-related code.",
+  description:
+    "Detects supported PREVRANDAO behavior dependencies in Foundry-associated Arc contracts.",
   preset: "wallet",
   defaultSeverity: "critical",
   docs: [WALLET_DOCS.prevrandao],
   async run(context) {
-    const findings = [];
-
-    for (const { filePath, content } of await readWalletFiles(context)) {
-      if (!isArcRelated(content)) {
-        continue;
-      }
-
-      if (hasActivePrevrandaoUsage(content)) {
-        findings.push(
-          createWalletFinding(
-            prevrandaoNotSupportedRule,
-            filePath,
-            "Arc wallet code appears to read PREVRANDAO or mixHash.",
-            SUGGESTED_FIX,
-            WALLET_DOCS.prevrandao
-          )
-        );
-      }
-    }
-
-    return findings;
+    const records = await requestPrevrandaoCompatibilityRecords(context);
+    return records
+      .filter((record) => record.shellOwner === "wallet-compatibility")
+      .map((record) =>
+        createPrevrandaoCompatibilityFinding(prevrandaoNotSupportedRule, record)
+      );
   }
 };
-
-function hasActivePrevrandaoUsage(content: string): boolean {
-  return content.split(/\r?\n/).some((line) => {
-    if (
-      isCommentOrDocumentationLine(line) ||
-      isGuidanceAgainstUsage(
-        line,
-        /\b(block\.prevrandao|PREVRANDAO|prevrandao|mixHash)\b/
-      )
-    ) {
-      return false;
-    }
-
-    return /\b(block\.prevrandao|PREVRANDAO|prevrandao|mixHash)\b/.test(line);
-  });
-}

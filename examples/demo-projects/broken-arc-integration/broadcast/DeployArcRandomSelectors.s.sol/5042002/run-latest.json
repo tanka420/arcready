@@ -1,0 +1,15 @@
+{
+  "chain": 5042002,
+  "transactions": [
+    {
+      "transactionType": "CREATE",
+      "contractName": "RelaySelector",
+      "contractAddress": "0x1111111111111111111111111111111111111111"
+    },
+    {
+      "transactionType": "CREATE",
+      "contractName": "WinnerSelector",
+      "contractAddress": "0x2222222222222222222222222222222222222222"
+    }
+  ]
+}

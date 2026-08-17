@@ -867,19 +867,13 @@ describe("wallet rules", () => {
     ).resolves.toEqual([]);
   });
 
-  it("PREVRANDAO_NOT_SUPPORTED flags PREVRANDAO usage", async () => {
-    const findings = await runWalletRule(
-      prevrandaoNotSupportedRule,
-      "const chainId = 5042002;\nconst seed = block.prevrandao;"
-    );
-
-    expect(findings[0]).toMatchObject({
-      ruleId: "wallet/PREVRANDAO_NOT_SUPPORTED",
-      severity: "critical",
-      docs: "arc-prevrandao",
-      message: expect.stringContaining("PREVRANDAO"),
-      suggestedFix: expect.stringContaining("randomness source")
-    });
+  it("PREVRANDAO_NOT_SUPPORTED ignores legacy keyword-only Arc text", async () => {
+    await expect(
+      runWalletRule(
+        prevrandaoNotSupportedRule,
+        "const chainId = 5042002;\nconst seed = block.prevrandao;"
+      )
+    ).resolves.toEqual([]);
   });
 
   it("PREVRANDAO_NOT_SUPPORTED ignores non-Arc PREVRANDAO usage", async () => {
