@@ -204,6 +204,32 @@ describe("internal rule taxonomy catalog", () => {
       expect.arrayContaining(["bridge-cctp", "indexer-infrastructure"])
     );
   });
+  it("locks the bounded C09A PREVRANDAO metadata", () => {
+    for (const id of [
+      "bridge/NO_PREVRANDAO_RELAY_SELECTION",
+      "wallet/PREVRANDAO_NOT_SUPPORTED"
+    ]) {
+      const metadata = findMetadata(id);
+
+      expect(metadata).toMatchObject({
+        taxonomy: "experimental-compatibility",
+        impact: "required-change",
+        defaultConfidence: "medium",
+        maturity: "prototype",
+        recommendedDefaultEnabled: true,
+        recommendedCiFailureEligible: false,
+        deprecated: false
+      });
+      expect(metadata.detectorLimitations).toEqual([
+        "Coverage is limited to the bounded Solidity grammar and Foundry run-latest.json ownership family reviewed by C09A.",
+        "The static artifact association does not verify live deployment, deployed bytecode, runtime behavior, or transaction success."
+      ]);
+    }
+
+    expect(
+      findMetadata("wallet/PREVRANDAO_NOT_SUPPORTED").documentation[0]?.support
+    ).toBe("direct");
+  });
   it("does not expose taxonomy metadata through the public package API", () => {
     expect("ruleTaxonomyCatalog" in publicApi).toBe(false);
     expect("validateRuleMetadata" in publicApi).toBe(false);

@@ -125,7 +125,7 @@ The private canonical runtime remains exactly four rules.
 
 ### `wallet/PREVRANDAO_NOT_SUPPORTED`
 
-- Decision: Build selected; C09A implementation pending.
+- Decision: C09A compatibility-shell migration implemented; closeout pending.
 - Priority: P1.
 - Impact: Required change.
 - Retain as a temporary compatibility shell over one shared private analyzer.
@@ -196,7 +196,7 @@ It must not be used as an implementation base.
 
 ### `bridge/NO_PREVRANDAO_RELAY_SELECTION`
 
-- Decision: Build selected; C09A implementation pending.
+- Decision: C09A compatibility-shell migration implemented; closeout pending.
 - Priority: P1.
 - Impact: Required change.
 - Retain as a temporary relay/validator/sequencer compatibility shell over the

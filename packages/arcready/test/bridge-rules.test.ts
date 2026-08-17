@@ -1595,19 +1595,13 @@ describe("bridge rules", () => {
     ).resolves.toEqual([]);
   });
 
-  it("NO_PREVRANDAO_RELAY_SELECTION flags PREVRANDAO relay selection", async () => {
-    const findings = await runBridgeRule(
-      noPrevrandaoRelaySelectionRule,
-      "const chain = 'Arc Testnet'; const relaySelection = block.prevrandao % relayers.length;"
-    );
-
-    expect(findings[0]).toMatchObject({
-      ruleId: "bridge/NO_PREVRANDAO_RELAY_SELECTION",
-      severity: "critical",
-      docs: "arc-prevrandao",
-      message: expect.stringContaining("PREVRANDAO"),
-      suggestedFix: expect.stringContaining("relay selection")
-    });
+  it("NO_PREVRANDAO_RELAY_SELECTION ignores legacy keyword proximity", async () => {
+    await expect(
+      runBridgeRule(
+        noPrevrandaoRelaySelectionRule,
+        "const chain = 'Arc Testnet'; const relaySelection = block.prevrandao % relayers.length;"
+      )
+    ).resolves.toEqual([]);
   });
 
   it("NO_PREVRANDAO_RELAY_SELECTION ignores non-Arc relay randomness", async () => {

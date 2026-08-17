@@ -322,7 +322,7 @@ export const ruleTaxonomyCatalog = [
     rulePacks: ["bridge-cctp", "solidity"],
     taxonomy: "experimental-compatibility",
     impact: "required-change",
-    defaultConfidence: "low",
+    defaultConfidence: "medium",
     maturity: "prototype",
     recommendedDefaultEnabled: true,
     recommendedCiFailureEligible: false,
@@ -341,10 +341,10 @@ export const ruleTaxonomyCatalog = [
       }
     ],
     rationale:
-      "Selection logic that depends on PREVRANDAO entropy can malfunction on Arc, but keyword proximity cannot prove that data flow.",
+      "A supported relay behavior dependency on PREVRANDAO in an exact concrete contract associated by retained Foundry JSON with Arc Testnet must change because PREVRANDAO returns zero on Arc.",
     detectorLimitations: [
-      "Same-line randomness and relay keywords do not establish a selection dependency.",
-      "The mixHash equivalence included by the detector is not sufficiently documented."
+      "Coverage is limited to the bounded Solidity grammar and Foundry run-latest.json ownership family reviewed by C09A.",
+      "The static artifact association does not verify live deployment, deployed bytecode, runtime behavior, or transaction success."
     ],
     deprecated: false
   },
@@ -597,7 +597,7 @@ export const ruleTaxonomyCatalog = [
     rulePacks: ["solidity", "core-compatibility"],
     taxonomy: "experimental-compatibility",
     impact: "required-change",
-    defaultConfidence: "low",
+    defaultConfidence: "medium",
     maturity: "prototype",
     recommendedDefaultEnabled: true,
     recommendedCiFailureEligible: false,
@@ -608,18 +608,18 @@ export const ruleTaxonomyCatalog = [
         title: "Infrastructure Integration",
         publisher: "Arc",
         claim:
-          "PREVRANDAO always returns zero on Arc; the page does not establish the detector's blanket mixHash equivalence.",
-        support: "partial",
+          "PREVRANDAO always returns zero on Arc and does not provide randomness.",
+        support: "direct",
         verifiedAt: VERIFIED_AT,
         network: "Arc Testnet",
         stability: "versioned"
       }
     ],
     rationale:
-      "Logic that expects PREVRANDAO entropy must change for Arc, while the current broad symbol matching and mixHash equivalence are not sufficiently precise.",
+      "A supported behavior dependency on PREVRANDAO in an exact concrete contract associated by retained Foundry JSON with Arc Testnet must change because PREVRANDAO returns zero on Arc.",
     detectorLimitations: [
-      "Symbol presence does not prove that the value affects application behavior.",
-      "The current mixHash equivalence is not sufficiently supported by official documentation."
+      "Coverage is limited to the bounded Solidity grammar and Foundry run-latest.json ownership family reviewed by C09A.",
+      "The static artifact association does not verify live deployment, deployed bytecode, runtime behavior, or transaction success."
     ],
     deprecated: false
   },

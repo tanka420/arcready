@@ -103,10 +103,12 @@ fee disclosure, but does not establish a universal Arc-specific bridge minimum.
 A separately identified future Advice rule may cover fee estimation or
 confirmation disclosure.
 
-The current `PREVRANDAO_NOT_SUPPORTED` metadata records only partial support for
-the detector: official documentation establishes that PREVRANDAO returns zero,
-but does not establish the detector's blanket `mixHash` equivalence. A future
-implementation should focus on zero-value semantics and data flow.
+The two PREVRANDAO compatibility shells now use medium-confidence private
+records that require bounded same-function value flow and exact retained
+Foundry JSON association with Arc Testnet. The former keyword and blanket
+`mixHash` matching is removed. Coverage remains Foundry-only and fail-closed;
+it does not establish live deployment, bytecode identity, runtime behavior, or
+transaction success.
 
 `UB_DELEGATE_REQUIRED` is conditional. Delegation is required when a delegate
 spends for an owner; owner-controlled spending does not establish the same

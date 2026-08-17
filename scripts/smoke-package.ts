@@ -158,6 +158,7 @@ try {
   assertInstalledTypeScript(smokeRoot);
   assertInstalledParser(smokeRoot);
   validateLazyParserBoundary(smokeRoot);
+  validateInstalledPrevrandaoFixtures(smokeRoot);
 
   run("npx", ["--no-install", "arcready", "--help"], smokeRoot);
   run("npx", ["--no-install", "arcready", "init"], smokeRoot);
@@ -297,11 +298,6 @@ function assertParserIsExternal(): ParserArtifactInventory {
     throw new Error("Expected private prevrandao analyzer package entries");
   }
   const analyzer = readFileSync(analyzerPath, "utf8");
-  if (!analyzer.includes("@solidity-parser/parser")) {
-    throw new Error(
-      "Expected the private analyzer to resolve the external parser"
-    );
-  }
   console.log(
     `Prevrandao analyzer entry size: ${Buffer.byteLength(analyzer, "utf8")} bytes.`
   );
@@ -313,6 +309,7 @@ function assertParserIsExternal(): ParserArtifactInventory {
     declarations: new Set<string>(),
     javascript: new Set<string>()
   };
+  let analyzerImportIncluded = false;
   for (const fileName of listArtifactFiles(distRoot)) {
     const artifactPath = join(distRoot, ...fileName.split("/"));
     if (fileName.endsWith(".d.ts")) {
@@ -327,6 +324,9 @@ function assertParserIsExternal(): ParserArtifactInventory {
     if (!fileName.endsWith(".js")) continue;
 
     inventory.javascript.add(fileName);
+    analyzerImportIncluded ||= readFileSync(artifactPath, "utf8").includes(
+      "@solidity-parser/parser"
+    );
     const mapPath = `${artifactPath}.map`;
     if (!existsSync(mapPath)) {
       throw new Error(`Missing parser provenance source map for ${fileName}`);
@@ -355,6 +355,11 @@ function assertParserIsExternal(): ParserArtifactInventory {
         );
       }
     }
+  }
+  if (!analyzerImportIncluded) {
+    throw new Error(
+      "Expected the private analyzer bundle to resolve the external parser"
+    );
   }
   return inventory;
 }
@@ -551,6 +556,168 @@ function validateInstalledAmountFixtures(root: string): void {
     score: 75,
     status: "fail",
     ruleId: "wallet/ARC_USDC_AMOUNT_CONVERSION"
+  });
+}
+
+function validateInstalledPrevrandaoFixtures(root: string): void {
+  const sourcePath = join(root, "src", "Selectors.sol");
+  const keywordPath = join(root, "src", "keyword.ts");
+  const broadcastRoot = join(root, "broadcast");
+  const artifactPath = join(
+    broadcastRoot,
+    "Deploy.s.sol",
+    "5042002",
+    "run-latest.json"
+  );
+  const scan = () =>
+    runCapturedNpx(
+      ["--no-install", "arcready", "scan", "--format", "json"],
+      root
+    );
+
+  try {
+    mkdirSync(join(root, "src"), { recursive: true });
+    rmSync(join(root, "src", "bridge.ts"), { force: true });
+    writeConfig(root, {
+      presets: ["wallet"],
+      paths: ["src"],
+      failOn: "critical"
+    });
+    writeFileSync(
+      keywordPath,
+      "const chainId = 5042002; const seed = block.prevrandao;\n"
+    );
+    assertLegacyReport(scan(), {
+      exitCode: 0,
+      findings: 0,
+      score: 100,
+      status: "pass"
+    });
+
+    rmSync(keywordPath, { force: true });
+    writeFileSync(sourcePath, installedPrevrandaoSource(false));
+    assertLegacyReport(scan(), {
+      exitCode: 0,
+      findings: 0,
+      score: 100,
+      status: "pass"
+    });
+
+    mkdirSync(dirname(artifactPath), { recursive: true });
+    writeFileSync(
+      artifactPath,
+      installedPrevrandaoArtifact(["WinnerSelector"])
+    );
+    assertLegacyReport(scan(), {
+      exitCode: 1,
+      findings: 1,
+      score: 75,
+      status: "fail",
+      ruleId: "wallet/PREVRANDAO_NOT_SUPPORTED"
+    });
+
+    writeConfig(root, {
+      presets: ["wallet", "bridge"],
+      paths: ["src"],
+      failOn: "critical"
+    });
+    writeFileSync(sourcePath, installedPrevrandaoSource(true));
+    writeFileSync(
+      artifactPath,
+      installedPrevrandaoArtifact(["RelaySelector", "WinnerSelector"])
+    );
+    const both = scan();
+    if (both.error) throw both.error;
+    const report = JSON.parse(both.stdout) as {
+      findings: Array<{ ruleId: string; files: string[]; message: string }>;
+      score: number;
+      status: string;
+    };
+    if (
+      both.status !== 1 ||
+      report.score !== 50 ||
+      report.status !== "fail" ||
+      JSON.stringify(report.findings.map(({ ruleId }) => ruleId)) !==
+        JSON.stringify([
+          "wallet/PREVRANDAO_NOT_SUPPORTED",
+          "bridge/NO_PREVRANDAO_RELAY_SELECTION"
+        ]) ||
+      report.findings.some(
+        (finding) =>
+          finding.files.length !== 1 ||
+          finding.files[0] !== "src/Selectors.sol" ||
+          !finding.message.includes("static artifact evidence")
+      )
+    ) {
+      throw new Error(`Unexpected installed C09A-E4 report: ${both.stdout}`);
+    }
+
+    for (const format of ["terminal", "markdown", "html"] as const) {
+      const rendered = runCapturedNpx(
+        ["--no-install", "arcready", "scan", "--format", format],
+        root
+      );
+      if (
+        rendered.error ||
+        rendered.status !== 1 ||
+        !rendered.stdout.includes("PREVRANDAO_NOT_SUPPORTED") ||
+        !rendered.stdout.includes("NO_PREVRANDAO_RELAY_SELECTION") ||
+        !rendered.stdout.includes("static artifact evidence") ||
+        !rendered.stdout.includes("deterministic")
+      ) {
+        throw new Error(`Unexpected installed C09A-E4 ${format} output`);
+      }
+    }
+
+    writeConfig(root, {
+      presets: ["wallet"],
+      paths: ["src"],
+      failOn: "critical",
+      rules: { "wallet/PREVRANDAO_NOT_SUPPORTED": "warning" }
+    });
+    assertLegacyReport(scan(), {
+      exitCode: 0,
+      findings: 1,
+      score: 90,
+      status: "warn",
+      ruleId: "wallet/PREVRANDAO_NOT_SUPPORTED"
+    });
+  } finally {
+    rmSync(sourcePath, { force: true });
+    rmSync(keywordPath, { force: true });
+    rmSync(broadcastRoot, { recursive: true, force: true });
+  }
+}
+
+function installedPrevrandaoSource(includeBridge: boolean): string {
+  return `pragma solidity ^0.8.24;
+${
+  includeBridge
+    ? `contract RelaySelector {
+  address[] internal relayers;
+  function selectRelay() external view returns (address) {
+    return relayers[block.prevrandao % relayers.length];
+  }
+}`
+    : ""
+}
+contract WinnerSelector {
+  address[] internal winners;
+  function chooseWinner() external view returns (address) {
+    return winners[block.prevrandao % winners.length];
+  }
+}
+`;
+}
+
+function installedPrevrandaoArtifact(contractNames: readonly string[]): string {
+  return JSON.stringify({
+    chain: 5042002,
+    transactions: contractNames.map((contractName, index) => ({
+      transactionType: "CREATE",
+      contractName,
+      contractAddress: `0x${String(index + 1).repeat(40)}`
+    }))
   });
 }
 

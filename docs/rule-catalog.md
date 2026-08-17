@@ -15,14 +15,14 @@ ArcReady does not perform live Arc RPC checks, Circle API checks, on-chain trans
 | Wallet  | `wallet/ARC_USDC_AMOUNT_CONVERSION`     | Critical | Checks proven Arc native and exact Arc USDC ERC-20 balance reads for direct 18-versus-6 decimal interpretation mismatches.          |
 | Wallet  | `wallet/NO_ETH_GAS_LABEL`               | Critical | Checks Arc wallet fee UI text for ETH or gwei gas labels.                                                                           |
 | Wallet  | `wallet/ONE_CONFIRMATION_FINAL`         | Critical | Checks Arc wallet transaction flows for Ethereum-style multi-confirmation waits.                                                    |
-| Wallet  | `wallet/PREVRANDAO_NOT_SUPPORTED`       | Critical | Checks Arc wallet code for active PREVRANDAO or mixHash assumptions.                                                                |
+| Wallet  | `wallet/PREVRANDAO_NOT_SUPPORTED`       | Critical | Checks bounded PREVRANDAO behavior dependencies in exact Foundry-associated Arc contracts owned by the wallet compatibility shell.  |
 | Wallet  | `wallet/NO_BLOB_TX_ON_ARC`              | Critical | Checks exact supported ethers and viem EIP-4844 transaction submissions in proven Arc flows.                                        |
 | Bridge  | `bridge/BRIDGE_CONFIRMATIONS_ONE`       | Critical | Checks Arc bridge and relayer flows for more than one required confirmation.                                                        |
 | Bridge  | `bridge/CCTP_DOMAIN_26`                 | Critical | Checks Arc CCTP domain configuration for domain `26`.                                                                               |
 | Bridge  | `bridge/NO_WRAPPED_USDC_ON_ARC`         | Critical | Checks Arc bridge routes for wrapped or bridged USDC as the Arc-side asset.                                                         |
 | Bridge  | `bridge/RELAYER_USES_USDC_FOR_GAS`      | Critical | Checks Arc relayer funding and gas-token config for ETH gas assumptions.                                                            |
 | Bridge  | `bridge/ATTESTATION_404_NOT_FATAL`      | Info     | Deprecated, default-excluded low-confidence guidance for suspicious terminal handling near conditional attestation `404` responses. |
-| Bridge  | `bridge/NO_PREVRANDAO_RELAY_SELECTION`  | Critical | Checks Arc relay selection for PREVRANDAO or mixHash randomness assumptions.                                                        |
+| Bridge  | `bridge/NO_PREVRANDAO_RELAY_SELECTION`  | Critical | Checks bounded PREVRANDAO relay behavior in exact Foundry-associated Arc contracts owned by the bridge shell.                       |
 | App Kit | `app-kit/APPKIT_CHAIN_IDENTIFIER_VALID` | Critical | Checks App Kit Arc chain identifiers for unsupported spellings.                                                                     |
 | App Kit | `app-kit/APPKIT_CAPABILITY_SUPPORTED`   | Warning  | Deprecated, default-excluded detector with an unsupported generic capability-guard contract.                                        |
 | App Kit | `app-kit/APPKIT_CUSTOM_RPC_RECOMMENDED` | Warning  | Checks App Kit Arc Testnet usage for implicit or shared RPC configuration.                                                          |
@@ -116,17 +116,21 @@ ArcReady does not perform live Arc RPC checks, Circle API checks, on-chain trans
 
 - Preset: Wallet
 - Severity: Critical
-- What it detects: Arc wallet code that appears to actively read `block.prevrandao`, `PREVRANDAO`, `prevrandao`, or `mixHash`.
-- Why it matters: Wallet flows should not rely on unsupported randomness assumptions for Arc.
+- What it detects: Supported same-function selection, authorization, or ordering behavior that depends on exact PREVRANDAO evidence in a concrete Solidity contract whose exact name and address are associated with Arc Testnet by retained Foundry `run-latest.json` evidence. This shell owns only non-bridge compatibility records.
+- Why it matters: PREVRANDAO returns zero on Arc, so application behavior that expects entropy from it can select or authorize the wrong result.
 - Example bad pattern:
 
-  ```ts
-  const chainId = 5042002;
-  const seed = block.prevrandao;
+  ```solidity
+  contract WinnerSelector {
+    address[] winners;
+    function chooseWinner() external view returns (address) {
+      return winners[block.prevrandao % winners.length];
+    }
+  }
   ```
 
-- Suggested fix: Replace PREVRANDAO or mixHash assumptions with deterministic logic or another randomness source documented for your Arc integration.
-- Static-analysis limitation: ArcReady checks active-looking source references; it does not validate randomness quality at runtime.
+- Suggested fix: Replace the PREVRANDAO-dependent behavior with deterministic logic or an external randomness source appropriate to the application.
+- Static-analysis limitation: Medium-confidence coverage is limited to the reviewed bounded Solidity grammar and `broadcast/<Script>.s.sol/<chainId>/run-latest.json` ownership family. Imports and other unsupported source or artifact shapes fail closed. The finding is static artifact evidence, not live deployment, bytecode, runtime, or transaction-success verification.
 
 ### NO_BLOB_TX_ON_ARC
 
@@ -255,17 +259,21 @@ ArcReady does not perform live Arc RPC checks, Circle API checks, on-chain trans
 
 - Preset: Bridge
 - Severity: Critical
-- What it detects: Arc relay selection logic that appears to use PREVRANDAO, `prevrandao`, `block.prevrandao`, or `mixHash` randomness.
-- Why it matters: Relay selection should not depend on unsupported randomness assumptions.
+- What it detects: Supported same-function relay, relayer, validator, sequencer, or committee behavior that depends on exact PREVRANDAO evidence in a concrete Solidity contract whose exact name and address are associated with Arc Testnet by retained Foundry `run-latest.json` evidence.
+- Why it matters: PREVRANDAO returns zero on Arc, so relay selection and ordering cannot obtain entropy from it.
 - Example bad pattern:
 
-  ```ts
-  const chain = "Arc Testnet";
-  const relaySelection = block.prevrandao % relayers.length;
+  ```solidity
+  contract RelaySelector {
+    address[] relayers;
+    function selectRelay() external view returns (address) {
+      return relayers[block.prevrandao % relayers.length];
+    }
+  }
   ```
 
-- Suggested fix: Replace PREVRANDAO or mixHash-based relay selection with deterministic selection, offchain coordination, or another documented randomness source.
-- Static-analysis limitation: ArcReady checks source patterns; it does not evaluate relayer selection fairness or runtime execution.
+- Suggested fix: Replace the PREVRANDAO-dependent relay behavior with deterministic selection or an external randomness source appropriate to the application.
+- Static-analysis limitation: Medium-confidence coverage is limited to the reviewed bounded Solidity grammar and `broadcast/<Script>.s.sol/<chainId>/run-latest.json` ownership family. Imports and other unsupported source or artifact shapes fail closed. The finding is static artifact evidence, not live deployment, bytecode, runtime, or transaction-success verification.
 
 ## App Kit rules
 

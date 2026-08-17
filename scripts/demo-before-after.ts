@@ -8,8 +8,10 @@ const FIXED_PROJECT = "fixed-arc-integration";
 export const ESSENTIAL_RULE_IDS = [
   "app-kit/APPKIT_CHAIN_IDENTIFIER_VALID",
   "bridge/CCTP_DOMAIN_26",
+  "bridge/NO_PREVRANDAO_RELAY_SELECTION",
   "wallet/ARC_CHAIN_METADATA",
-  "wallet/NO_BLOB_TX_ON_ARC"
+  "wallet/NO_BLOB_TX_ON_ARC",
+  "wallet/PREVRANDAO_NOT_SUPPORTED"
 ] as const;
 
 export interface BeforeAfterDemoEvaluation {
