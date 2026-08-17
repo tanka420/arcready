@@ -8,6 +8,7 @@ const EXPECTED_FLOWS = new Map([
   ["C09-S02", ["collection-selection", "wallet-compatibility"]],
   ["C09-S03", ["collection-selection", "bridge-relay"]],
   ["C09-S04", ["authorization", "wallet-compatibility"]],
+  ["C09-S05", ["ordering", "wallet-compatibility"]],
   ["C09-S06", ["collection-selection", "bridge-relay"]],
   ["C09-S08", ["collection-selection", "bridge-relay"]],
   ["C09-A06", ["collection-selection", "bridge-relay"]]

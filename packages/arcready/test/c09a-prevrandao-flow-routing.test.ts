@@ -23,6 +23,14 @@ pragma solidity ^0.8.24;
 contract Gate {
   function eligible(uint256 threshold) external view returns (bool) {
     return AUTHORIZATION_EXPRESSION;
+}
+}`;
+
+const ORDERING_TEMPLATE = `
+pragma solidity ^0.8.24;
+contract Ordering {
+  function orderingKey(uint256 item) external view returns (uint256) {
+    return ORDERING_EXPRESSION;
   }
 }`;
 
@@ -387,6 +395,25 @@ contract Selector {
     }
   );
 
+  it.each([
+    ["inverted", [100, 60]],
+    ["negative", [-1, 100]],
+    ["out-of-bounds", [60, Number.MAX_SAFE_INTEGER]]
+  ] as const)(
+    "fails closed for a %s selection range",
+    async (_label, range) => {
+      const parser = parserReplacingSelectionRange(range);
+
+      await expect(
+        analyzePrevrandaoFlowFile(
+          "src/Selector.sol",
+          DIRECT_BRIDGE_SELECTION,
+          async () => parser
+        )
+      ).resolves.toEqual({ status: "analyzed", records: [] });
+    }
+  );
+
   it("does not combine a source and sink from sibling functions", async () => {
     const source = `
 pragma solidity ^0.8.24;
@@ -404,6 +431,127 @@ contract Selector {
       analyzePrevrandaoFlowFile("src/Selector.sol", source)
     ).resolves.toEqual({ status: "analyzed", records: [] });
   });
+
+  it("routes one exact direct PREVRANDAO ordering key to the wallet shell", async () => {
+    const expression = "uint256(keccak256(abi.encode(item, block.prevrandao)))";
+    const source = orderingSource(expression);
+    const result = await analyzePrevrandaoFlowFile("src/Ordering.sol", source);
+
+    expect(result).toEqual({
+      status: "analyzed",
+      records: [
+        {
+          sourceFile: "src/Ordering.sol",
+          contractName: "Ordering",
+          functionName: "orderingKey",
+          sourceKind: "block-prevrandao",
+          sourceOffset: source.indexOf("block.prevrandao"),
+          bindingKind: "direct",
+          sinkKind: "ordering",
+          sinkOffset: source.indexOf("keccak256"),
+          shellOwner: "wallet-compatibility"
+        }
+      ]
+    });
+  });
+
+  it.each([
+    [
+      "approved source cast",
+      "uint256(keccak256(abi.encode(item, uint256(block.prevrandao))))"
+    ],
+    [
+      "bytes32 ordering result",
+      "bytes32(keccak256(abi.encode(item, block.prevrandao)))"
+    ]
+  ])("routes exact ordering with %s", async (_label, expression) => {
+    const result = await analyzePrevrandaoFlowFile(
+      "src/Ordering.sol",
+      orderingSource(expression)
+    );
+
+    expect(result.records).toHaveLength(1);
+    expect(result.records[0]).toMatchObject({
+      sinkKind: "ordering",
+      shellOwner: "wallet-compatibility"
+    });
+  });
+
+  it.each([
+    ["no non-source input", "uint256(keccak256(abi.encode(block.prevrandao)))"],
+    [
+      "multiple sources",
+      "uint256(keccak256(abi.encode(block.prevrandao, block.prevrandao)))"
+    ],
+    [
+      "transformed source",
+      "uint256(keccak256(abi.encode(item, block.prevrandao + 1)))"
+    ],
+    [
+      "wrong encoder",
+      "uint256(keccak256(bytes.concat(item, block.prevrandao)))"
+    ],
+    [
+      "arbitrary outer wrapper",
+      "normalize(uint256(keccak256(abi.encode(item, block.prevrandao))))"
+    ]
+  ])("does not route ordering with %s", async (_label, expression) => {
+    await expect(
+      analyzePrevrandaoFlowFile("src/Ordering.sol", orderingSource(expression))
+    ).resolves.toEqual({ status: "analyzed", records: [] });
+  });
+
+  it.each([
+    [
+      "an import that could affect builtin identity",
+      orderingSource(
+        "uint256(keccak256(abi.encode(item, block.prevrandao)))"
+      ).replace(
+        "contract Ordering",
+        'import "./Hashing.sol"; contract Ordering'
+      )
+    ],
+    [
+      "an inherited namespace",
+      orderingSource(
+        "uint256(keccak256(abi.encode(item, block.prevrandao)))"
+      ).replace("contract Ordering", "contract Ordering is Hashing")
+    ],
+    [
+      "a shadowing keccak256 declaration",
+      orderingSource(
+        "uint256(keccak256(abi.encode(item, block.prevrandao)))"
+      ).replace(
+        "function orderingKey",
+        "function keccak256(bytes memory value) internal pure returns (bytes32) { value; return bytes32(0); } function orderingKey"
+      )
+    ]
+  ])("does not route ordering with %s", async (_label, source) => {
+    await expect(
+      analyzePrevrandaoFlowFile("src/Ordering.sol", source)
+    ).resolves.toEqual({ status: "analyzed", records: [] });
+  });
+
+  it.each(["return", "keccak", "encoding", "source"] as const)(
+    "fails closed when ordering %s range evidence is missing",
+    async (target) => {
+      const source = orderingSource(
+        "uint256(keccak256(abi.encode(item, block.prevrandao)))"
+      );
+      const parser = parserRemovingOrderingRange(target);
+
+      const result = await analyzePrevrandaoFlowFile(
+        "src/Ordering.sol",
+        source,
+        async () => Promise.resolve(parser)
+      );
+
+      expect(result.records).toEqual([]);
+      expect(result.status).toBe(
+        target === "source" ? "unsupported-source" : "analyzed"
+      );
+    }
+  );
 
   it.each(
     ["==", "!=", "<", ">", "<=", ">="].flatMap((operator) => [
@@ -483,6 +631,10 @@ contract Selector {
     ["direct zero equality", "block.prevrandao == 0"],
     ["symmetric direct zero equality", "0 == block.prevrandao"],
     ["cast zero equality", "uint256(block.prevrandao) == 0"],
+    ["zero modulo", "block.prevrandao % 0 < threshold"],
+    ["hex zero modulo", "block.prevrandao % 0x0 < threshold"],
+    ["fractional modulo", "block.prevrandao % 1.5 < threshold"],
+    ["exponent modulo", "block.prevrandao % 1e2 < threshold"],
     ["transformed source", "(block.prevrandao + 1) < threshold"],
     ["source on both sides", "block.prevrandao < uint256(block.prevrandao)"]
   ])("does not route %s as authorization", async (_label, expression) => {
@@ -526,6 +678,20 @@ contract Selector {
       ).resolves.toEqual({ status: "analyzed", records: [] });
     }
   );
+
+  it("rejects a runtime-invalid zero modulo authorization counterpart", async () => {
+    const source = AUTHORIZATION_TEMPLATE.replace(
+      "function eligible(uint256 threshold)",
+      "function eligible(address account)"
+    ).replace(
+      "AUTHORIZATION_EXPRESSION",
+      "uint160(account) % 0 == block.prevrandao % 2"
+    );
+
+    await expect(
+      analyzePrevrandaoFlowFile("src/Gate.sol", source)
+    ).resolves.toEqual({ status: "analyzed", records: [] });
+  });
 
   it.each([
     [
@@ -860,6 +1026,10 @@ function authorizationSource(expression: string): string {
   return AUTHORIZATION_TEMPLATE.replace("AUTHORIZATION_EXPRESSION", expression);
 }
 
+function orderingSource(expression: string): string {
+  return ORDERING_TEMPLATE.replace("ORDERING_EXPRESSION", expression);
+}
+
 function createRequestRule(
   id: string,
   request: (context: RuleContext) => Promise<readonly unknown[]>
@@ -945,6 +1115,67 @@ function parserRemovingSelectionRange(target: RangeEvidenceTarget): {
       if (node === undefined) {
         throw new Error(`Missing test AST evidence for ${target}`);
       }
+      delete node.range;
+      return ast;
+    }
+  };
+}
+
+function parserReplacingSelectionRange(range: readonly [number, number]): {
+  parse(source: string, options: Record<string, unknown>): unknown;
+} {
+  return {
+    parse(source, options) {
+      const ast = parserModule.parse(source, options) as MutableAstNode;
+      const selection = findAstNode(ast, (node) => node.type === "IndexAccess");
+      if (selection === undefined)
+        throw new Error("Missing selection AST evidence");
+      selection.range = [...range];
+      return ast;
+    }
+  };
+}
+
+function parserRemovingOrderingRange(
+  target: "return" | "keccak" | "encoding" | "source"
+): {
+  parse(source: string, options: Record<string, unknown>): unknown;
+} {
+  return {
+    parse(source, options) {
+      const ast = parserModule.parse(source, options) as MutableAstNode;
+      const returnNode = findAstNode(
+        ast,
+        (node) => node.type === "ReturnStatement"
+      );
+      const keccak = findAstNode(
+        ast,
+        (node) =>
+          node.type === "FunctionCall" &&
+          astNode(node.expression)?.type === "Identifier" &&
+          astNode(node.expression)?.name === "keccak256"
+      );
+      const encoding = findAstNode(
+        ast,
+        (node) =>
+          node.type === "FunctionCall" &&
+          astNode(node.expression)?.type === "MemberAccess" &&
+          astNode(node.expression)?.memberName === "encode"
+      );
+      const sourceNode = findAstNode(
+        ast,
+        (node) =>
+          node.type === "MemberAccess" && node.memberName === "prevrandao"
+      );
+      const evidence = {
+        return: returnNode,
+        keccak,
+        encoding,
+        source: sourceNode
+      };
+      const node = evidence[target];
+      if (node === undefined)
+        throw new Error(`Missing ordering AST evidence for ${target}`);
       delete node.range;
       return ast;
     }

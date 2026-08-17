@@ -38,7 +38,7 @@ export interface PrevrandaoSourceAnalysis {
 }
 
 export interface PrevrandaoFlowRecord extends PrevrandaoSourceRecord {
-  readonly sinkKind: "authorization" | "collection-selection";
+  readonly sinkKind: "authorization" | "collection-selection" | "ordering";
   readonly sinkOffset: number;
   readonly shellOwner: "bridge-relay" | "wallet-compatibility";
 }
@@ -401,7 +401,9 @@ function collectCollectionSelectionRecords(
       if (
         functionNode.type !== "FunctionDefinition" ||
         functionName === null ||
-        !isNode(functionNode.body)
+        !isNode(functionNode.body) ||
+        !validRange(functionNode, size) ||
+        !validRange(functionNode.body, size, functionNode)
       ) {
         continue;
       }
@@ -410,12 +412,14 @@ function collectCollectionSelectionRecords(
           source.contractName === contractName &&
           source.functionName === functionName &&
           nodeStart(functionNode) <= source.sourceOffset &&
-          source.sourceOffset <= nodeEnd(functionNode)
+          source.sourceOffset <= nodeEnd(functionNode) &&
+          hasValidSourceRange(source, functionNode, size)
       );
       if (ownedSources.length === 0) continue;
 
       const candidates: PrevrandaoFlowRecord[] = [];
       let authCount = 0;
+      let orderingCount = 0;
       let ambiguousSelection = false;
       const parents = parentIndex(functionNode);
       for (const node of descendants(functionNode.body)) {
@@ -424,7 +428,12 @@ function collectCollectionSelectionRecords(
         ) {
           continue;
         }
-        const selection = exactCollectionSelection(node, functionNode, parents);
+        const selection = exactCollectionSelection(
+          node,
+          functionNode,
+          parents,
+          size
+        );
         if (selection !== null) {
           const source = exactSelectionSource(
             selection.dependency,
@@ -462,6 +471,25 @@ function collectCollectionSelectionRecords(
             shellOwner: "wallet-compatibility"
           });
         }
+
+        const ordering = exactOrdering(
+          node,
+          ast,
+          contract,
+          functionNode,
+          parents,
+          ownedSources,
+          size
+        );
+        if (ordering !== null) {
+          orderingCount += 1;
+          candidates.push({
+            ...ordering.source,
+            sinkKind: "ordering",
+            sinkOffset: nodeStart(ordering.keccak),
+            shellOwner: "wallet-compatibility"
+          });
+        }
       }
       candidates.sort(
         (left, right) =>
@@ -475,7 +503,8 @@ function collectCollectionSelectionRecords(
       );
       if (
         candidates[0] !== undefined &&
-        (authCount === 0 || (!ambiguousSelection && routes.size === 1))
+        (authCount + orderingCount === 0 ||
+          (!ambiguousSelection && routes.size === 1))
       ) {
         records.push(candidates[0]);
       }
@@ -486,6 +515,21 @@ function collectCollectionSelectionRecords(
     (left, right) =>
       left.sourceOffset - right.sourceOffset ||
       left.sinkOffset - right.sinkOffset
+  );
+}
+
+function hasValidSourceRange(
+  source: PrevrandaoSourceRecord,
+  functionNode: AstNode,
+  size: number
+): boolean {
+  return descendants(functionNode).some(
+    (node) =>
+      nodeStart(node) === source.sourceOffset &&
+      validTree(node, size) &&
+      (source.sourceKind === "inline-assembly-prevrandao"
+        ? node.type === "AssemblyCall" && node.functionName === "prevrandao"
+        : isBlockPrevrandao(node))
   );
 }
 
@@ -553,6 +597,109 @@ function exactAuthorization(
   return { comparison, source };
 }
 
+function exactOrdering(
+  node: AstNode,
+  ast: AstNode,
+  contract: AstNode,
+  functionNode: AstNode,
+  parents: ReadonlyMap<AstNode, AstNode>,
+  sources: readonly PrevrandaoSourceRecord[],
+  size: number
+): { keccak: AstNode; source: PrevrandaoSourceRecord } | null {
+  if (
+    node.type !== "ReturnStatement" ||
+    !isNode(functionNode.body) ||
+    parents.get(node) !== functionNode.body ||
+    hasOrderingIdentityConflict(ast, contract) ||
+    !validRange(node, size, functionNode.body) ||
+    !isNode(node.expression) ||
+    !validTree(node.expression, size)
+  ) {
+    return null;
+  }
+
+  const expression = node.expression;
+  const outerArguments = exactNodeArray(expression.arguments);
+  const possibleRoot = outerArguments?.length === 1 ? outerArguments[0] : null;
+  const root =
+    possibleRoot !== null && isApprovedDirectCast(expression, possibleRoot)
+      ? possibleRoot
+      : expression;
+  const keccakArguments = exactNodeArray(root.arguments);
+  if (
+    root.type !== "FunctionCall" ||
+    !validRange(root, size, expression === root ? node : expression) ||
+    !isIdentifierNamed(root.expression, "keccak256") ||
+    keccakArguments?.length !== 1
+  ) {
+    return null;
+  }
+
+  const encoding = keccakArguments[0];
+  const encodingTarget = isNode(encoding.expression)
+    ? encoding.expression
+    : undefined;
+  const encodingArguments = exactNodeArray(encoding.arguments);
+  if (
+    encoding.type !== "FunctionCall" ||
+    !validRange(encoding, size, root) ||
+    encodingTarget?.type !== "MemberAccess" ||
+    encodingTarget.memberName !== "encode" ||
+    !isIdentifierNamed(encodingTarget.expression, "abi") ||
+    encodingArguments === null ||
+    encodingArguments.length < 2
+  ) {
+    return null;
+  }
+
+  const exactSources = encodingArguments
+    .map((argument) => exactDirectSource(argument, sources))
+    .filter((source): source is PrevrandaoSourceRecord => source !== undefined);
+  const transformedSource = encodingArguments.some(
+    (argument) =>
+      exactDirectSource(argument, sources) === undefined &&
+      containsKnownSource(argument, sources)
+  );
+  const nonSourceCount = encodingArguments.filter(
+    (argument) => !containsKnownSource(argument, sources)
+  ).length;
+  if (transformedSource || exactSources.length !== 1 || nonSourceCount === 0) {
+    return null;
+  }
+  return { keccak: root, source: exactSources[0] };
+}
+
+function hasOrderingIdentityConflict(ast: AstNode, contract: AstNode): boolean {
+  if (
+    arrayNodes(ast.children).some((node) => node.type === "ImportDirective") ||
+    arrayNodes(contract.baseContracts).length > 0
+  ) {
+    return true;
+  }
+  return descendants(contract).some(
+    (node) =>
+      (node.type === "FunctionDefinition" && node.name === "keccak256") ||
+      (node.type === "VariableDeclaration" &&
+        (node.name === "keccak256" || node.name === "abi"))
+  );
+}
+
+function containsKnownSource(
+  expression: AstNode,
+  sources: readonly PrevrandaoSourceRecord[]
+): boolean {
+  const nodes = [expression, ...descendants(expression)];
+  return nodes.some(
+    (node) =>
+      isRawPrevrandaoSource(node) ||
+      (node.type === "Identifier" &&
+        sources.some(
+          (source) =>
+            source.bindingName !== undefined && source.bindingName === node.name
+        ))
+  );
+}
+
 function exactAuthorizationSource(
   expression: AstNode,
   sources: readonly PrevrandaoSourceRecord[],
@@ -566,7 +713,7 @@ function exactAuthorizationSource(
     !validTree(expression, size) ||
     !isNode(expression.left) ||
     !isNode(expression.right) ||
-    expression.right.type !== "NumberLiteral"
+    !isNonZeroIntegerLiteral(expression.right)
   ) {
     return undefined;
   }
@@ -596,7 +743,7 @@ function isAuthorizationCounterpart(
     expression.operator !== "%" ||
     !isNode(expression.left) ||
     !isNode(expression.right) ||
-    expression.right.type !== "NumberLiteral"
+    !isNonZeroIntegerLiteral(expression.right)
   ) {
     return false;
   }
@@ -610,6 +757,21 @@ function isAuthorizationCounterpart(
     arguments_?.length === 1 &&
     arguments_[0]?.type === "Identifier"
   );
+}
+
+function isNonZeroIntegerLiteral(node: AstNode): boolean {
+  if (
+    node.type !== "NumberLiteral" ||
+    !hasRange(node) ||
+    (node.subdenomination !== null && node.subdenomination !== undefined)
+  ) {
+    return false;
+  }
+  const value = node.number ?? node.value;
+  if (typeof value !== "string" && typeof value !== "number") return false;
+  const literal = String(value).replaceAll("_", "").toLowerCase();
+  if (/^0x[0-9a-f]+$/.test(literal)) return !/^0x0+$/.test(literal);
+  return /^[0-9]+$/.test(literal) && !/^0+$/.test(literal);
 }
 
 function exactDirectSource(
@@ -657,24 +819,25 @@ function isZeroLiteral(node: AstNode): boolean {
 function exactCollectionSelection(
   node: AstNode,
   functionNode: AstNode,
-  parents: ReadonlyMap<AstNode, AstNode>
+  parents: ReadonlyMap<AstNode, AstNode>,
+  size: number
 ): { collectionName: string; dependency: AstNode } | null {
-  if (node.type !== "IndexAccess" || !hasRange(node)) return null;
+  if (node.type !== "IndexAccess" || !validTree(node, size)) return null;
   const base = isNode(node.base) ? node.base : undefined;
   const index = isNode(node.index) ? node.index : undefined;
   const collectionName = base === undefined ? null : stringValue(base.name);
   if (
     base?.type !== "Identifier" ||
-    !hasRange(base) ||
+    !validRange(base, size, node) ||
     collectionName === null ||
     index === undefined ||
-    !hasRange(index)
+    !validRange(index, size, node)
   ) {
     return null;
   }
 
   if (index?.type === "BinaryOperation") {
-    return exactModuloDependency(index, collectionName);
+    return exactModuloDependency(index, collectionName, size);
   }
   if (index?.type !== "Identifier") return null;
 
@@ -693,6 +856,7 @@ function exactCollectionSelection(
   const declaration = declarations[0];
   if (
     !hasRange(declaration) ||
+    !validTree(declaration, size) ||
     nodeEnd(declaration) >= nodeStart(node) ||
     !isStableSingleAssignment(functionNode, declaration, indexName) ||
     !isNode(declaration.initialValue) ||
@@ -700,16 +864,17 @@ function exactCollectionSelection(
   ) {
     return null;
   }
-  return exactModuloDependency(declaration.initialValue, collectionName);
+  return exactModuloDependency(declaration.initialValue, collectionName, size);
 }
 
 function exactModuloDependency(
   modulo: AstNode,
-  collectionName: string
+  collectionName: string,
+  size: number
 ): { collectionName: string; dependency: AstNode } | null {
   if (
     modulo.operator !== "%" ||
-    !hasRange(modulo) ||
+    !validTree(modulo, size) ||
     !isNode(modulo.left) ||
     !hasRange(modulo.left)
   ) {
