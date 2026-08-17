@@ -355,7 +355,7 @@ async function collectScanSnapshot(
     const concreteContractNames =
       parsed.ast === undefined
         ? null
-        : exactConcreteContractNames(parsed.ast, source.length);
+        : exactConcreteContractNames(parsed.ast, source);
     sourceFiles.push({
       filePath,
       status:
@@ -764,7 +764,12 @@ function parseFoundryArtifact(
 
   const creates: FoundryCreateRecord[] = [];
   for (const transaction of parsed.transactions) {
-    if (!isNode(transaction)) return null;
+    if (
+      !isNode(transaction) ||
+      typeof transaction.transactionType !== "string"
+    ) {
+      return null;
+    }
     if (transaction.transactionType !== "CREATE") continue;
     if (
       typeof transaction.contractName !== "string" ||
@@ -812,17 +817,24 @@ function hasFoundryOwnershipConflict(
 
 function exactConcreteContractNames(
   ast: AstNode,
-  size: number
+  source: string
 ): readonly string[] | null {
+  const size = source.length;
+  if (!validTree(ast, size)) return null;
   const children = exactNodeArray(ast.children);
   if (children === null) return null;
   const names: string[] = [];
   for (const child of children) {
-    if (child.type !== "ContractDefinition") continue;
+    const declarationKind = topLevelContractKind(child, source);
+    if (typeof child.type !== "string") return null;
+    if (child.type !== "ContractDefinition") {
+      if (declarationKind !== null) return null;
+      continue;
+    }
     if (
-      !validTree(child, size, ast) ||
       typeof child.kind !== "string" ||
       !CONTRACT_DEFINITION_KINDS.has(child.kind) ||
+      declarationKind !== child.kind ||
       exactNodeArray(child.baseContracts) === null ||
       exactNodeArray(child.subNodes) === null
     ) {
@@ -833,6 +845,43 @@ function exactConcreteContractNames(
     if (child.kind === "contract") names.push(name);
   }
   return names;
+}
+
+function topLevelContractKind(
+  node: AstNode,
+  source: string
+): "contract" | "interface" | "library" | null {
+  if (!validRange(node, source.length)) return null;
+  const text = source.slice(nodeStart(node), nodeEnd(node) + 1);
+  const identifiers: string[] = [];
+  let offset = 0;
+
+  while (offset < text.length && identifiers.length < 2) {
+    const whitespace = /^\s+/.exec(text.slice(offset));
+    if (whitespace !== null) {
+      offset += whitespace[0].length;
+      continue;
+    }
+    const lineComment = /^\/\/[^\r\n]*(?:\r?\n|$)/.exec(text.slice(offset));
+    if (lineComment !== null) {
+      offset += lineComment[0].length;
+      continue;
+    }
+    const blockComment = /^\/\*[\s\S]*?\*\//.exec(text.slice(offset));
+    if (blockComment !== null) {
+      offset += blockComment[0].length;
+      continue;
+    }
+    const identifier = /^[A-Za-z_$][\w$]*/.exec(text.slice(offset));
+    if (identifier === null) break;
+    identifiers.push(identifier[0]);
+    offset += identifier[0].length;
+  }
+
+  const kind = identifiers[0] === "abstract" ? identifiers[1] : identifiers[0];
+  return kind === "contract" || kind === "interface" || kind === "library"
+    ? kind
+    : null;
 }
 
 async function analyzeParsedPrevrandaoSourceFile(

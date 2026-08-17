@@ -37,6 +37,10 @@ function broadcast({
   return JSON.stringify({ chain, transactions: [transaction] });
 }
 
+function broadcastTransaction(chain, transaction) {
+  return JSON.stringify({ chain, transactions: [transaction] });
+}
+
 function nativePath(repositoryPath) {
   return join(PROJECT_ROOT, ...repositoryPath.split("/"));
 }
@@ -131,6 +135,34 @@ describe("C09A-E3 Foundry eligibility", () => {
 
     expect(result).toEqual([]);
   });
+
+  it.each([
+    ["missing", (definition) => delete definition.type],
+    ["mislabeled", (definition) => (definition.type = "PragmaDirective")]
+  ])(
+    "fails closed when a duplicate definition has a %s AST type",
+    async (_label, mutateDefinition) => {
+      const parse = (source, options) => {
+        const ast = parserModule.parse(source, options);
+        if (source === "contract RelaySelector {}") {
+          mutateDefinition(ast.children[0]);
+        }
+        return ast;
+      };
+      const result = await requestPrevrandaoEligibleRecords(
+        createInput(
+          {
+            "src/RelaySelector.sol": SOURCE,
+            "src/Duplicate.sol": "contract RelaySelector {}",
+            [ARC_PATH]: broadcast()
+          },
+          { parserLoader: async () => ({ parse }) }
+        )
+      );
+
+      expect(result).toEqual([]);
+    }
+  );
 
   it("fails closed when config-scoped files omit malformed Solidity", async () => {
     const result = await requestPrevrandaoEligibleRecords(
@@ -229,6 +261,47 @@ describe("C09A-E3 Foundry eligibility", () => {
     );
 
     expect(result).toEqual([]);
+  });
+
+  it.each([
+    ["missing", undefined],
+    ["non-string", 1]
+  ])(
+    "fails closed when a non-Arc ownership transaction has a %s discriminator",
+    async (_label, transactionType) => {
+      const transaction = {
+        ...(transactionType === undefined ? {} : { transactionType }),
+        contractName: "RelaySelector",
+        contractAddress: ARC_ADDRESS
+      };
+      const result = await requestPrevrandaoEligibleRecords(
+        createInput({
+          "src/RelaySelector.sol": SOURCE,
+          [ARC_PATH]: broadcast(),
+          "broadcast/Deploy.s.sol/1/run-latest.json": broadcastTransaction(
+            1,
+            transaction
+          )
+        })
+      );
+
+      expect(result).toEqual([]);
+    }
+  );
+
+  it("ignores a well-shaped non-Arc CALL without hiding Arc ownership", async () => {
+    const result = await requestPrevrandaoEligibleRecords(
+      createInput({
+        "src/RelaySelector.sol": SOURCE,
+        [ARC_PATH]: broadcast(),
+        "broadcast/Deploy.s.sol/1/run-latest.json": broadcast({
+          chain: 1,
+          transactionType: "CALL"
+        })
+      })
+    );
+
+    expect(result).toHaveLength(1);
   });
 
   it("does not lend Arc ownership from another exact contract name", async () => {
