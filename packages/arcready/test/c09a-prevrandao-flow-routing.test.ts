@@ -245,6 +245,71 @@ describe("C09A-E2 collection-selection routing", () => {
     ).resolves.toEqual({ status: "analyzed", records: [] });
   });
 
+  it.each(["relayer", "relayerWinner"])(
+    "keeps assignment-based selected entity %s outside the bounded grammar",
+    async (selectedEntity) => {
+      const source = `
+pragma solidity ^0.8.24;
+contract Selector {
+  address[] internal members;
+  function pick() external view returns (address ${selectedEntity}) {
+    ${selectedEntity} = members[block.prevrandao % members.length];
+  }
+}`;
+
+      await expect(
+        analyzePrevrandaoFlowFile("src/Selector.sol", source)
+      ).resolves.toEqual({ status: "analyzed", records: [] });
+    }
+  );
+
+  it("rejects an invalid selected-entity declaration type", async () => {
+    const source = DIRECT_BRIDGE_SELECTION.replace(
+      "return relayers[block.prevrandao % relayers.length];",
+      "uint256 relayer = relayers[block.prevrandao % relayers.length]; return address(0);"
+    );
+
+    await expect(
+      analyzePrevrandaoFlowFile("src/Selector.sol", source)
+    ).resolves.toEqual({ status: "analyzed", records: [] });
+  });
+
+  it("rejects a selection whose function return type is not address", async () => {
+    const source = DIRECT_BRIDGE_SELECTION.replace(
+      "returns (address)",
+      "returns (uint256)"
+    );
+
+    await expect(
+      analyzePrevrandaoFlowFile("src/Selector.sol", source)
+    ).resolves.toEqual({ status: "analyzed", records: [] });
+  });
+
+  it("keeps expression-only collection access non-reportable", async () => {
+    const source = DIRECT_BRIDGE_SELECTION.replace(
+      "return relayers[block.prevrandao % relayers.length];",
+      "relayers[block.prevrandao % relayers.length]; return address(0);"
+    );
+
+    await expect(
+      analyzePrevrandaoFlowFile("src/Selector.sol", source)
+    ).resolves.toEqual({ status: "analyzed", records: [] });
+  });
+
+  it.each(["relayer", "relayerWinner"])(
+    "keeps named return parameter %s outside the bounded selection grammar",
+    async (selectedEntity) => {
+      const source = DIRECT_BRIDGE_SELECTION.replace(
+        "returns (address)",
+        `returns (address ${selectedEntity})`
+      );
+
+      await expect(
+        analyzePrevrandaoFlowFile("src/Selector.sol", source)
+      ).resolves.toEqual({ status: "analyzed", records: [] });
+    }
+  );
+
   it("keeps event-only collection observation non-reportable", async () => {
     const source = DIRECT_BRIDGE_SELECTION.replace(
       "return relayers[block.prevrandao % relayers.length];",
@@ -274,6 +339,17 @@ describe("C09A-E2 collection-selection routing", () => {
     const source = DIRECT_BRIDGE_SELECTION.replace(
       "return relayers[block.prevrandao % relayers.length];",
       "address[] memory relayers; return relayers[block.prevrandao % relayers.length];"
+    );
+
+    await expect(
+      analyzePrevrandaoFlowFile("src/Selector.sol", source)
+    ).resolves.toEqual({ status: "analyzed", records: [] });
+  });
+
+  it("rejects an invalid collection index binding type", async () => {
+    const source = DIRECT_BRIDGE_SELECTION.replace(
+      "return relayers[block.prevrandao % relayers.length];",
+      "address index = block.prevrandao % relayers.length; return relayers[index];"
     );
 
     await expect(
@@ -318,11 +394,21 @@ describe("C09A-E2 collection-selection routing", () => {
         "pragma solidity ^0.8.24;",
         "pragma solidity ^0.8.24; struct FakeBlock { uint256 prevrandao; } contract FakeBase { FakeBlock internal block; }"
       )
+    ],
+    [
+      "source-unit block library",
+      DIRECT_BRIDGE_SELECTION.replace(
+        "contract Selector",
+        "library block { uint256 internal constant prevrandao = 1; } contract Selector"
+      )
     ]
   ])("does not treat %s as the EVM source", async (_label, source) => {
     await expect(
       analyzePrevrandaoFlowFile("src/Selector.sol", source)
-    ).resolves.toEqual({ status: "analyzed", records: [] });
+    ).resolves.toEqual({ status: "unsupported-source", records: [] });
+    await expect(
+      analyzePrevrandaoSourceFile("src/Selector.sol", source)
+    ).resolves.toEqual({ status: "unsupported-source", sources: [] });
   });
 
   it("fails closed when source identity depends on an import", async () => {
@@ -333,7 +419,64 @@ describe("C09A-E2 collection-selection routing", () => {
 
     await expect(
       analyzePrevrandaoFlowFile("src/Selector.sol", source)
+    ).resolves.toEqual({ status: "unsupported-source", records: [] });
+    await expect(
+      analyzePrevrandaoSourceFile("src/Selector.sol", source)
+    ).resolves.toEqual({ status: "unsupported-source", sources: [] });
+  });
+
+  it("keeps modifier-owned selection outside the bounded grammar", async () => {
+    const source = DIRECT_BRIDGE_SELECTION.replace(
+      "address[] internal relayers;",
+      "address[] internal relayers; modifier active() { _; }"
+    ).replace("external view returns", "external view active returns");
+
+    await expect(
+      analyzePrevrandaoFlowFile("src/Selector.sol", source)
     ).resolves.toEqual({ status: "analyzed", records: [] });
+  });
+
+  it.each([
+    [
+      "initializer binding type",
+      DIRECT_BRIDGE_SELECTION.replace(
+        "return relayers[block.prevrandao % relayers.length];",
+        "address seed = block.prevrandao; return relayers[uint256(uint160(seed)) % relayers.length];"
+      )
+    ],
+    [
+      "assembly binding type",
+      DIRECT_BRIDGE_SELECTION.replace(
+        "return relayers[block.prevrandao % relayers.length];",
+        "address seed; assembly { seed := prevrandao() } return relayers[uint256(uint160(seed)) % relayers.length];"
+      )
+    ]
+  ])(
+    "rejects an invalid %s at the private source API",
+    async (_label, source) => {
+      await expect(
+        analyzePrevrandaoSourceFile("src/Selector.sol", source)
+      ).resolves.toEqual({ status: "unsupported-source", sources: [] });
+      await expect(
+        analyzePrevrandaoFlowFile("src/Selector.sol", source)
+      ).resolves.toEqual({ status: "unsupported-source", records: [] });
+    }
+  );
+
+  it("rejects missing range evidence on a source binding declaration", async () => {
+    const source = DIRECT_BRIDGE_SELECTION.replace(
+      "return relayers[block.prevrandao % relayers.length];",
+      "uint256 seed = block.prevrandao; return relayers[seed % relayers.length];"
+    );
+    const parser = parserRemovingDeclarationRange("seed");
+
+    await expect(
+      analyzePrevrandaoSourceFile(
+        "src/Selector.sol",
+        source,
+        async () => parser
+      )
+    ).resolves.toEqual({ status: "unsupported-source", sources: [] });
   });
 
   it.each([
@@ -507,7 +650,7 @@ contract Selector {
       analyzePrevrandaoFlowFile("src/Selector.sol", "ignored", async () =>
         Promise.resolve(parser)
       )
-    ).resolves.toEqual({ status: "analyzed", records: [] });
+    ).resolves.toEqual({ status: "unsupported-source", records: [] });
   });
 
   it.each([
@@ -618,11 +761,15 @@ contract Selector {
       "bytes32 ordering result",
       "bytes32(keccak256(abi.encode(item, block.prevrandao)))"
     ]
-  ])("routes exact ordering with %s", async (_label, expression) => {
-    const result = await analyzePrevrandaoFlowFile(
-      "src/Ordering.sol",
-      orderingSource(expression)
-    );
+  ] as const)("routes exact ordering with %s", async (label, expression) => {
+    const source =
+      label === "bytes32 ordering result"
+        ? orderingSource(expression).replace(
+            "returns (uint256)",
+            "returns (bytes32)"
+          )
+        : orderingSource(expression);
+    const result = await analyzePrevrandaoFlowFile("src/Ordering.sol", source);
 
     expect(result.records).toHaveLength(1);
     expect(result.records[0]).toMatchObject({
@@ -663,13 +810,15 @@ contract Selector {
       ).replace(
         "contract Ordering",
         'import "./Hashing.sol"; contract Ordering'
-      )
+      ),
+      "unsupported-source"
     ],
     [
       "an inherited namespace",
       orderingSource(
         "uint256(keccak256(abi.encode(item, block.prevrandao)))"
-      ).replace("contract Ordering", "contract Ordering is Hashing")
+      ).replace("contract Ordering", "contract Ordering is Hashing"),
+      "unsupported-source"
     ],
     [
       "a shadowing keccak256 declaration",
@@ -678,7 +827,8 @@ contract Selector {
       ).replace(
         "function orderingKey",
         "function keccak256(bytes memory value) internal pure returns (bytes32) { value; return bytes32(0); } function orderingKey"
-      )
+      ),
+      "analyzed"
     ],
     [
       "a source-unit keccak256 declaration",
@@ -687,7 +837,8 @@ contract Selector {
       ).replace(
         "contract Ordering",
         "function keccak256(bytes memory value) pure returns (bytes32) { value; return bytes32(0); } contract Ordering"
-      )
+      ),
+      "analyzed"
     ],
     [
       "a sibling abi library",
@@ -696,13 +847,24 @@ contract Selector {
       ).replace(
         "contract Ordering",
         "library abi { function encode(uint256 value) internal pure returns (bytes memory) { return bytes.concat(bytes32(value)); } } contract Ordering"
-      )
+      ),
+      "analyzed"
+    ],
+    [
+      "a source-unit keccak256 contract",
+      orderingSource(
+        "uint256(keccak256(abi.encode(item, block.prevrandao)))"
+      ).replace("contract Ordering", "contract keccak256 {} contract Ordering"),
+      "analyzed"
     ]
-  ])("does not route ordering with %s", async (_label, source) => {
-    await expect(
-      analyzePrevrandaoFlowFile("src/Ordering.sol", source)
-    ).resolves.toEqual({ status: "analyzed", records: [] });
-  });
+  ] as const)(
+    "does not route ordering with %s",
+    async (_label, source, status) => {
+      await expect(
+        analyzePrevrandaoFlowFile("src/Ordering.sol", source)
+      ).resolves.toEqual({ status, records: [] });
+    }
+  );
 
   it("does not route ordering with an undeclared non-source input", async () => {
     const source = orderingSource(
@@ -718,6 +880,67 @@ contract Selector {
     const source = orderingSource(
       "uint256(keccak256(abi.encode(item, block.prevrandao)))"
     ).replace("contract Ordering {", "contract Ordering { uint256 item;");
+
+    await expect(
+      analyzePrevrandaoFlowFile("src/Ordering.sol", source)
+    ).resolves.toEqual({ status: "analyzed", records: [] });
+  });
+
+  it("rejects a uint256-overflow ordering literal", async () => {
+    const overflow = (1n << 256n).toString();
+    const source = orderingSource(
+      `uint256(keccak256(abi.encode(${overflow}, block.prevrandao)))`
+    );
+
+    await expect(
+      analyzePrevrandaoFlowFile("src/Ordering.sol", source)
+    ).resolves.toEqual({ status: "analyzed", records: [] });
+  });
+
+  it("rejects an ordering expression that conflicts with its return type", async () => {
+    const source = orderingSource(
+      "uint256(keccak256(abi.encode(item, block.prevrandao)))"
+    ).replace("returns (uint256)", "returns (bytes32)");
+
+    await expect(
+      analyzePrevrandaoFlowFile("src/Ordering.sol", source)
+    ).resolves.toEqual({ status: "analyzed", records: [] });
+  });
+
+  it("routes ordering with exact bridge function identity to the bridge shell", async () => {
+    const source = orderingSource(
+      "uint256(keccak256(abi.encode(item, block.prevrandao)))"
+    ).replace("orderingKey", "validatorOrderingKey");
+    const result = await analyzePrevrandaoFlowFile("src/Ordering.sol", source);
+
+    expect(result.records).toHaveLength(1);
+    expect(result.records[0]?.shellOwner).toBe("bridge-relay");
+  });
+
+  it("fails closed for ambiguous ordering function ownership", async () => {
+    const source = orderingSource(
+      "uint256(keccak256(abi.encode(item, block.prevrandao)))"
+    ).replace("orderingKey", "validatorWinnerOrderingKey");
+
+    await expect(
+      analyzePrevrandaoFlowFile("src/Ordering.sol", source)
+    ).resolves.toEqual({ status: "analyzed", records: [] });
+  });
+
+  it("uses an exact ordering input identifier as owner evidence", async () => {
+    const source = orderingSource(
+      "uint256(keccak256(abi.encode(validator, block.prevrandao)))"
+    ).replace("uint256 item", "uint256 validator");
+    const result = await analyzePrevrandaoFlowFile("src/Ordering.sol", source);
+
+    expect(result.records).toHaveLength(1);
+    expect(result.records[0]?.shellOwner).toBe("bridge-relay");
+  });
+
+  it("fails closed for ambiguous ordering input ownership", async () => {
+    const source = orderingSource(
+      "uint256(keccak256(abi.encode(validatorWinner, block.prevrandao)))"
+    ).replace("uint256 item", "uint256 validatorWinner");
 
     await expect(
       analyzePrevrandaoFlowFile("src/Ordering.sol", source)
@@ -742,6 +965,33 @@ contract Selector {
       expect(result.status).toBe(
         target === "source" ? "unsupported-source" : "analyzed"
       );
+    }
+  );
+
+  it.each([
+    ["collection declaration", DIRECT_BRIDGE_SELECTION, "relayers"],
+    [
+      "ordering parameter",
+      orderingSource("uint256(keccak256(abi.encode(item, block.prevrandao)))"),
+      "item"
+    ],
+    [
+      "authorization parameter",
+      authorizationSource("block.prevrandao < threshold"),
+      "threshold"
+    ]
+  ] as const)(
+    "fails closed when %s range evidence is missing",
+    async (_label, source, declarationName) => {
+      const parser = parserRemovingDeclarationRange(declarationName);
+
+      await expect(
+        analyzePrevrandaoFlowFile(
+          "src/Evidence.sol",
+          source,
+          async () => parser
+        )
+      ).resolves.toEqual({ status: "analyzed", records: [] });
     }
   );
 
@@ -909,6 +1159,41 @@ contract Selector {
     ).resolves.toEqual({ status: "analyzed", records: [] });
   });
 
+  it.each(["string memory", "address"])(
+    "rejects an authorization counterpart declared as %s",
+    async (type) => {
+      const source = authorizationSource(
+        "block.prevrandao < threshold"
+      ).replace("uint256 threshold", `${type} threshold`);
+
+      await expect(
+        analyzePrevrandaoFlowFile("src/Gate.sol", source)
+      ).resolves.toEqual({ status: "analyzed", records: [] });
+    }
+  );
+
+  it("rejects a uint256-overflow authorization literal", async () => {
+    const overflow = (1n << 256n).toString();
+
+    await expect(
+      analyzePrevrandaoFlowFile(
+        "src/Gate.sol",
+        authorizationSource(`block.prevrandao < ${overflow}`)
+      )
+    ).resolves.toEqual({ status: "analyzed", records: [] });
+  });
+
+  it("rejects authorization when the function return type is not bool", async () => {
+    const source = authorizationSource("block.prevrandao < threshold").replace(
+      "returns (bool)",
+      "returns (uint256)"
+    );
+
+    await expect(
+      analyzePrevrandaoFlowFile("src/Gate.sol", source)
+    ).resolves.toEqual({ status: "analyzed", records: [] });
+  });
+
   it.each([
     [
       "source binding",
@@ -942,7 +1227,7 @@ contract Selector {
     ).resolves.toEqual({ status: "analyzed", records: [] });
   });
 
-  it("routes authorization to wallet even when function identifiers are bridge-like", async () => {
+  it("routes authorization by exact bridge function identity", async () => {
     const source = authorizationSource("block.prevrandao < threshold").replace(
       "eligible",
       "authorizeValidator"
@@ -950,7 +1235,46 @@ contract Selector {
     const result = await analyzePrevrandaoFlowFile("src/Gate.sol", source);
 
     expect(result.records).toHaveLength(1);
-    expect(result.records[0]?.shellOwner).toBe("wallet-compatibility");
+    expect(result.records[0]?.shellOwner).toBe("bridge-relay");
+  });
+
+  it("fails closed for ambiguous authorization function ownership", async () => {
+    const source = authorizationSource("block.prevrandao < threshold").replace(
+      "eligible",
+      "eligibleValidator"
+    );
+
+    await expect(
+      analyzePrevrandaoFlowFile("src/Gate.sol", source)
+    ).resolves.toEqual({ status: "analyzed", records: [] });
+  });
+
+  it("uses an exact authorization entity identifier as owner evidence", async () => {
+    const source = AUTHORIZATION_TEMPLATE.replace(
+      "function eligible(uint256 threshold)",
+      "function check(address validator)"
+    ).replace(
+      "AUTHORIZATION_EXPRESSION",
+      "uint160(validator) % 2 == block.prevrandao % 2"
+    );
+    const result = await analyzePrevrandaoFlowFile("src/Gate.sol", source);
+
+    expect(result.records).toHaveLength(1);
+    expect(result.records[0]?.shellOwner).toBe("bridge-relay");
+  });
+
+  it("fails closed for ambiguous authorization entity ownership", async () => {
+    const source = AUTHORIZATION_TEMPLATE.replace(
+      "function eligible(uint256 threshold)",
+      "function check(address validatorWinner)"
+    ).replace(
+      "AUTHORIZATION_EXPRESSION",
+      "uint160(validatorWinner) % 2 == block.prevrandao % 2"
+    );
+
+    await expect(
+      analyzePrevrandaoFlowFile("src/Gate.sol", source)
+    ).resolves.toEqual({ status: "analyzed", records: [] });
   });
 
   it("fails closed when one function has conflicting sink routes", async () => {
@@ -1464,6 +1788,25 @@ function parserRemovingAuthorizationRange(target: AuthorizationRangeTarget): {
         throw new Error(`Missing authorization AST evidence for ${target}`);
       }
       delete node.range;
+      return ast;
+    }
+  };
+}
+
+function parserRemovingDeclarationRange(name: string): {
+  parse(source: string, options: Record<string, unknown>): unknown;
+} {
+  return {
+    parse(source, options) {
+      const ast = parserModule.parse(source, options) as MutableAstNode;
+      const declaration = findAstNode(
+        ast,
+        (node) => node.type === "VariableDeclaration" && node.name === name
+      );
+      if (declaration === undefined) {
+        throw new Error(`Missing declaration AST evidence for ${name}`);
+      }
+      delete declaration.range;
       return ast;
     }
   };

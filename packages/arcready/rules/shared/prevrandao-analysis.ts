@@ -57,6 +57,11 @@ export interface PrevrandaoScanInput {
 }
 
 const DIRECT_CAST_NAMES = new Set(["uint", "uint256", "bytes32"]);
+const UINT256_PARAMETER_TYPES = new Set(["uint", "uint256"]);
+const ADDRESS_PARAMETER_TYPES = new Set(["address"]);
+const BOOL_RETURN_TYPES = new Set(["bool"]);
+const BYTES32_RETURN_TYPES = new Set(["bytes32"]);
+const UINT256_MAX = (1n << 256n) - 1n;
 const ASSIGNMENT_OPERATORS = new Set([
   "=",
   "+=",
@@ -258,7 +263,7 @@ async function analyzeParsedPrevrandaoSourceFile(
   if (
     !isNode(ast) ||
     ast.type !== "SourceUnit" ||
-    !hasRange(ast) ||
+    !validRange(ast, source.length) ||
     exactNodeArray(ast.children) === null
   ) {
     return { analysis: { status: "unsupported-source", sources: [] } };
@@ -267,7 +272,7 @@ async function analyzeParsedPrevrandaoSourceFile(
     return { analysis: { status: "unsupported-source", sources: [] } };
   }
 
-  const result = collectSourceRecords(filePath, ast);
+  const result = collectSourceRecords(filePath, ast, source.length);
   if (result.unsupported) {
     return { analysis: { status: "unsupported-source", sources: [] } };
   }
@@ -304,7 +309,8 @@ function isSupportedPragma(node: AstNode): boolean {
 
 function collectSourceRecords(
   sourceFile: string,
-  ast: AstNode
+  ast: AstNode,
+  size: number
 ): { sources: PrevrandaoSourceRecord[]; unsupported: boolean } {
   const sources: PrevrandaoSourceRecord[] = [];
   let unsupported = false;
@@ -324,12 +330,17 @@ function collectSourceRecords(
       continue;
     }
     if (contractName === null) continue;
-    if (!hasRange(contract)) {
+    if (!validRange(contract, size, ast)) {
       unsupported = true;
       continue;
     }
     const subNodes = exactNodeArray(contract.subNodes);
     if (subNodes === null) {
+      unsupported = true;
+      continue;
+    }
+    if (hasUnsupportedFlowIdentity(ast, contract)) {
+      ignoredContractRanges.push([nodeStart(contract), nodeEnd(contract)]);
       unsupported = true;
       continue;
     }
@@ -345,7 +356,7 @@ function collectSourceRecords(
         continue;
       }
       const functionName = stringValue(functionNode.name);
-      if (functionName === null || !hasRange(functionNode)) {
+      if (functionName === null || !validRange(functionNode, size, contract)) {
         unsupported = true;
         continue;
       }
@@ -354,13 +365,15 @@ function collectSourceRecords(
         sourceFile,
         contractName,
         functionName,
-        functionNode
+        functionNode,
+        size
       );
       const assembly = collectAssemblySources(
         sourceFile,
         contractName,
         functionName,
-        functionNode
+        functionNode,
+        size
       );
       sources.push(...direct.sources, ...assembly.sources);
       unsupported ||= direct.unsupported || assembly.unsupported;
@@ -409,9 +422,12 @@ function collectCollectionSelectionRecords(
 
     for (const functionNode of subNodes) {
       const functionName = stringValue(functionNode.name);
+      const modifiers = exactNodeArray(functionNode.modifiers);
       if (
         functionNode.type !== "FunctionDefinition" ||
         functionName === null ||
+        modifiers === null ||
+        modifiers.length > 0 ||
         !isNode(functionNode.body) ||
         !validRange(functionNode, size) ||
         !validRange(functionNode.body, size, functionNode)
@@ -431,7 +447,7 @@ function collectCollectionSelectionRecords(
       const candidates: PrevrandaoFlowRecord[] = [];
       let authCount = 0;
       let orderingCount = 0;
-      let ambiguousSelection = false;
+      let ambiguousOwner = false;
       const parents = parentIndex(functionNode);
       for (const node of descendants(functionNode.body)) {
         if (
@@ -451,13 +467,12 @@ function collectCollectionSelectionRecords(
             selection.dependency,
             ownedSources
           );
-          const shellOwner = classifySelectionShellOwner(
-            functionName,
+          const shellOwner = classifyShellOwner(functionName, [
             selection.collectionName,
             selection.selectedEntityName
-          );
+          ]);
           if (source !== undefined && shellOwner === null) {
-            ambiguousSelection = true;
+            ambiguousOwner = true;
           } else if (source !== undefined && shellOwner !== null) {
             candidates.push({
               ...source,
@@ -478,12 +493,20 @@ function collectCollectionSelectionRecords(
         );
         if (authorization !== null) {
           authCount += 1;
-          candidates.push({
-            ...authorization.source,
-            sinkKind: "authorization",
-            sinkOffset: nodeStart(authorization.comparison),
-            shellOwner: "wallet-compatibility"
-          });
+          const shellOwner = classifyShellOwner(
+            functionName,
+            authorization.ownerIdentifiers
+          );
+          if (shellOwner === null) {
+            ambiguousOwner = true;
+          } else {
+            candidates.push({
+              ...authorization.source,
+              sinkKind: "authorization",
+              sinkOffset: nodeStart(authorization.comparison),
+              shellOwner
+            });
+          }
         }
 
         const ordering = exactOrdering(
@@ -497,12 +520,20 @@ function collectCollectionSelectionRecords(
         );
         if (ordering !== null) {
           orderingCount += 1;
-          candidates.push({
-            ...ordering.source,
-            sinkKind: "ordering",
-            sinkOffset: nodeStart(ordering.keccak),
-            shellOwner: "wallet-compatibility"
-          });
+          const shellOwner = classifyShellOwner(
+            functionName,
+            ordering.ownerIdentifiers
+          );
+          if (shellOwner === null) {
+            ambiguousOwner = true;
+          } else {
+            candidates.push({
+              ...ordering.source,
+              sinkKind: "ordering",
+              sinkOffset: nodeStart(ordering.keccak),
+              shellOwner
+            });
+          }
         }
       }
       candidates.sort(
@@ -517,8 +548,8 @@ function collectCollectionSelectionRecords(
       );
       if (
         candidates[0] !== undefined &&
-        (authCount + orderingCount === 0 ||
-          (!ambiguousSelection && routes.size === 1))
+        !ambiguousOwner &&
+        (authCount + orderingCount === 0 || routes.size === 1)
       ) {
         records.push(candidates[0]);
       }
@@ -551,9 +582,16 @@ function hasUnsupportedFlowIdentity(ast: AstNode, contract: AstNode): boolean {
   return (
     arrayNodes(ast.children).some((node) => node.type === "ImportDirective") ||
     arrayNodes(contract.baseContracts).length > 0 ||
-    descendants(contract).some(
-      (node) => node.type === "VariableDeclaration" && node.name === "block"
-    )
+    hasDeclarationNamed(ast, "block")
+  );
+}
+
+function hasDeclarationNamed(ast: AstNode, name: string): boolean {
+  return descendants(ast).some(
+    (node) =>
+      node.name === name &&
+      (node.type === "VariableDeclaration" ||
+        (typeof node.type === "string" && node.type.endsWith("Definition")))
   );
 }
 
@@ -564,7 +602,11 @@ function exactAuthorization(
   parents: ReadonlyMap<AstNode, AstNode>,
   sources: readonly PrevrandaoSourceRecord[],
   size: number
-): { comparison: AstNode; source: PrevrandaoSourceRecord } | null {
+): {
+  comparison: AstNode;
+  source: PrevrandaoSourceRecord;
+  ownerIdentifiers: readonly string[];
+} | null {
   const comparison = isNode(node.expression) ? node.expression : undefined;
   const leftExpression = isNode(comparison?.left) ? comparison.left : undefined;
   const rightExpression = isNode(comparison?.right)
@@ -577,6 +619,7 @@ function exactAuthorization(
     !validRange(functionNode.body, size, functionNode) ||
     !validRange(node, size, functionNode.body) ||
     parents.get(node) !== functionNode.body ||
+    !hasExactUnnamedReturnType(functionNode, size, BOOL_RETURN_TYPES) ||
     comparison?.type !== "BinaryOperation" ||
     !validRange(comparison, size, node) ||
     !AUTHORIZATION_COMPARISON_OPERATORS.has(
@@ -605,9 +648,16 @@ function exactAuthorization(
 
   const source = left ?? right;
   const other = left === undefined ? leftExpression : rightExpression;
+  const counterpart = isAuthorizationCounterpart(
+    other,
+    contract,
+    functionNode,
+    parents,
+    size
+  );
   if (
     source === undefined ||
-    !isAuthorizationCounterpart(other, contract, functionNode, parents, size) ||
+    counterpart === null ||
     [other, ...descendants(other)].some(
       (node) =>
         node.type === "Identifier" &&
@@ -619,7 +669,12 @@ function exactAuthorization(
   ) {
     return null;
   }
-  return { comparison, source };
+  return {
+    comparison,
+    source,
+    ownerIdentifiers:
+      counterpart.ownerIdentifier === null ? [] : [counterpart.ownerIdentifier]
+  };
 }
 
 function exactOrdering(
@@ -630,7 +685,11 @@ function exactOrdering(
   parents: ReadonlyMap<AstNode, AstNode>,
   sources: readonly PrevrandaoSourceRecord[],
   size: number
-): { keccak: AstNode; source: PrevrandaoSourceRecord } | null {
+): {
+  keccak: AstNode;
+  source: PrevrandaoSourceRecord;
+  ownerIdentifiers: readonly string[];
+} | null {
   if (
     node.type !== "ReturnStatement" ||
     !isNode(functionNode.body) ||
@@ -650,8 +709,17 @@ function exactOrdering(
     possibleRoot !== null && isApprovedDirectCast(expression, possibleRoot)
       ? possibleRoot
       : expression;
+  const castName =
+    expression === root || !isNode(expression.expression)
+      ? null
+      : stringValue(expression.expression.name);
+  const returnTypes =
+    expression === root || castName === "bytes32"
+      ? BYTES32_RETURN_TYPES
+      : UINT256_PARAMETER_TYPES;
   const keccakArguments = exactNodeArray(root.arguments);
   if (
+    !hasExactUnnamedReturnType(functionNode, size, returnTypes) ||
     root.type !== "FunctionCall" ||
     !validRange(root, size, expression === root ? node : expression) ||
     !isIdentifierNamed(root.expression, "keccak256") ||
@@ -699,7 +767,15 @@ function exactOrdering(
   ) {
     return null;
   }
-  return { keccak: root, source: exactSources[0] };
+  return {
+    keccak: root,
+    source: exactSources[0],
+    ownerIdentifiers: nonSourceArguments.flatMap((argument) => {
+      const name =
+        argument.type === "Identifier" ? stringValue(argument.name) : null;
+      return name === null ? [] : [name];
+    })
+  };
 }
 
 function hasOrderingIdentityConflict(ast: AstNode, contract: AstNode): boolean {
@@ -709,12 +785,8 @@ function hasOrderingIdentityConflict(ast: AstNode, contract: AstNode): boolean {
   ) {
     return true;
   }
-  return descendants(ast).some(
-    (node) =>
-      (node.type === "FunctionDefinition" && node.name === "keccak256") ||
-      (node.type === "ContractDefinition" && node.name === "abi") ||
-      (node.type === "VariableDeclaration" &&
-        (node.name === "keccak256" || node.name === "abi"))
+  return (
+    hasDeclarationNamed(ast, "keccak256") || hasDeclarationNamed(ast, "abi")
   );
 }
 
@@ -732,7 +804,13 @@ function isBoundOrderingInput(
     expression.type === "Identifier" ? stringValue(expression.name) : null;
   return (
     name !== null &&
-    hasExactVisibleValueDeclaration(name, contract, functionNode)
+    hasExactVisibleValueDeclaration(
+      name,
+      contract,
+      functionNode,
+      size,
+      UINT256_PARAMETER_TYPES
+    )
   );
 }
 
@@ -788,16 +866,25 @@ function isAuthorizationCounterpart(
   functionNode: AstNode,
   parents: ReadonlyMap<AstNode, AstNode>,
   size: number
-): boolean {
-  if (!validTree(expression, size)) return false;
+): { ownerIdentifier: string | null } | null {
+  if (!validTree(expression, size)) return null;
   if (expression.type === "Identifier") {
     const name = stringValue(expression.name);
-    return (
-      name !== null && hasExactFunctionParameter(name, contract, functionNode)
-    );
+    return name !== null &&
+      hasExactFunctionParameter(
+        name,
+        contract,
+        functionNode,
+        size,
+        UINT256_PARAMETER_TYPES
+      )
+      ? { ownerIdentifier: name }
+      : null;
   }
   if (expression.type === "NumberLiteral") {
-    return isUnsignedIntegerLiteral(expression);
+    return isUnsignedIntegerLiteral(expression)
+      ? { ownerIdentifier: null }
+      : null;
   }
   if (
     expression.type !== "BinaryOperation" ||
@@ -806,48 +893,69 @@ function isAuthorizationCounterpart(
     !isNode(expression.right) ||
     !isNonZeroIntegerLiteral(expression.right)
   ) {
-    return false;
+    return null;
   }
   const call = expression.left;
   const typeName = isNode(call.expression) ? call.expression : undefined;
   const arguments_ = exactNodeArray(call.arguments);
-  return (
-    call.type === "FunctionCall" &&
+  const ownerIdentifier =
+    arguments_?.length === 1 && arguments_[0]?.type === "Identifier"
+      ? stringValue(arguments_[0].name)
+      : null;
+  return call.type === "FunctionCall" &&
     typeName?.type === "ElementaryTypeName" &&
     typeName.name === "uint160" &&
     arguments_?.length === 1 &&
     arguments_[0]?.type === "Identifier" &&
-    stringValue(arguments_[0].name) !== null &&
+    ownerIdentifier !== null &&
     hasExactFunctionParameter(
-      stringValue(arguments_[0].name)!,
+      ownerIdentifier,
       contract,
-      functionNode
+      functionNode,
+      size,
+      ADDRESS_PARAMETER_TYPES
     ) &&
     parents.get(call) === expression
-  );
+    ? { ownerIdentifier }
+    : null;
 }
 
 function hasExactFunctionParameter(
   name: string,
   contract: AstNode,
-  functionNode: AstNode
+  functionNode: AstNode,
+  size: number,
+  allowedTypes: ReadonlySet<string> = UINT256_PARAMETER_TYPES
 ): boolean {
-  const declarations = exactVisibleValueDeclarations(contract, functionNode);
+  const declarations = exactVisibleValueDeclarations(
+    contract,
+    functionNode,
+    size
+  );
   if (declarations === null) return false;
+  const parameters = declarations.parameters.filter(
+    (parameter) => parameter.name === name
+  );
   return (
-    declarations.parameters.filter((parameter) => parameter.name === name)
-      .length === 1 &&
+    parameters.length === 1 &&
     declarations.all.filter((declaration) => declaration.name === name)
-      .length === 1
+      .length === 1 &&
+    hasApprovedElementaryType(parameters[0], allowedTypes)
   );
 }
 
 function hasExactVisibleValueDeclaration(
   name: string,
   contract: AstNode,
-  functionNode: AstNode
+  functionNode: AstNode,
+  size: number,
+  allowedTypes: ReadonlySet<string>
 ): boolean {
-  const declarations = exactVisibleValueDeclarations(contract, functionNode);
+  const declarations = exactVisibleValueDeclarations(
+    contract,
+    functionNode,
+    size
+  );
   if (declarations === null) return false;
   const named = declarations.all.filter(
     (declaration) => declaration.name === name
@@ -856,13 +964,15 @@ function hasExactVisibleValueDeclaration(
     named.length === 1 &&
     [...declarations.parameters, ...declarations.stateVariables].includes(
       named[0]
-    )
+    ) &&
+    hasApprovedElementaryType(named[0], allowedTypes)
   );
 }
 
 function exactVisibleValueDeclarations(
   contract: AstNode,
-  functionNode: AstNode
+  functionNode: AstNode,
+  size: number
 ): {
   parameters: readonly AstNode[];
   stateVariables: readonly AstNode[];
@@ -871,11 +981,14 @@ function exactVisibleValueDeclarations(
   const parameters = exactNodeArray(functionNode.parameters);
   const returnParameters = exactNodeArray(functionNode.returnParameters);
   const subNodes = exactNodeArray(contract.subNodes);
+  const functionBody = isNode(functionNode.body)
+    ? functionNode.body
+    : undefined;
   if (
     parameters === null ||
     returnParameters === null ||
     subNodes === null ||
-    !isNode(functionNode.body)
+    functionBody === undefined
   ) {
     return null;
   }
@@ -887,14 +1000,62 @@ function exactVisibleValueDeclarations(
     if (variables === null) return null;
     stateVariables.push(...variables);
   }
-  const locals = descendants(functionNode.body).filter(
+  const locals = descendants(functionBody).filter(
     (node) => node.type === "VariableDeclaration"
   );
+  if (
+    parameters.some(
+      (node) =>
+        node.type !== "VariableDeclaration" ||
+        !validTree(node, size, functionNode)
+    ) ||
+    returnParameters.some(
+      (node) =>
+        node.type !== "VariableDeclaration" ||
+        !validTree(node, size, functionNode)
+    ) ||
+    locals.some((node) => !validTree(node, size, functionBody)) ||
+    stateVariables.some(
+      (node) =>
+        node.type !== "VariableDeclaration" || !validTree(node, size, contract)
+    )
+  ) {
+    return null;
+  }
   return {
     parameters,
     stateVariables,
     all: [...parameters, ...returnParameters, ...locals, ...stateVariables]
   };
+}
+
+function hasApprovedElementaryType(
+  declaration: AstNode,
+  allowedTypes: ReadonlySet<string>
+): boolean {
+  const typeName = isNode(declaration.typeName)
+    ? declaration.typeName
+    : undefined;
+  return (
+    typeName?.type === "ElementaryTypeName" &&
+    typeof typeName.name === "string" &&
+    allowedTypes.has(typeName.name)
+  );
+}
+
+function hasExactUnnamedReturnType(
+  functionNode: AstNode,
+  size: number,
+  allowedTypes: ReadonlySet<string>
+): boolean {
+  const returnParameters = exactNodeArray(functionNode.returnParameters);
+  const parameter = returnParameters?.length === 1 ? returnParameters[0] : null;
+  return (
+    parameter !== null &&
+    stringValue(parameter.name) === null &&
+    validTree(parameter, size, functionNode) &&
+    hasApprovedElementaryType(parameter, allowedTypes)
+  );
 }
 
 function isUnsignedIntegerLiteral(node: AstNode): boolean {
@@ -907,7 +1068,13 @@ function isUnsignedIntegerLiteral(node: AstNode): boolean {
   }
   const value = node.number ?? node.value;
   if (typeof value !== "string" && typeof value !== "number") return false;
-  return /^(?:0x[0-9a-f]+|[0-9]+)$/i.test(String(value).replaceAll("_", ""));
+  const literal = String(value).replaceAll("_", "");
+  if (!/^[0-9]+$/.test(literal) || literal.length > 78) return false;
+  try {
+    return BigInt(literal) <= UINT256_MAX;
+  } catch {
+    return false;
+  }
 }
 
 function isNonZeroIntegerLiteral(node: AstNode): boolean {
@@ -918,11 +1085,7 @@ function isNonZeroIntegerLiteral(node: AstNode): boolean {
   ) {
     return false;
   }
-  const value = node.number ?? node.value;
-  if (typeof value !== "string" && typeof value !== "number") return false;
-  const literal = String(value).replaceAll("_", "").toLowerCase();
-  if (/^0x[0-9a-f]+$/.test(literal)) return !/^0x0+$/.test(literal);
-  return /^[0-9]+$/.test(literal) && !/^0+$/.test(literal);
+  return isUnsignedIntegerLiteral(node) && !isZeroLiteral(node);
 }
 
 function exactDirectSource(
@@ -978,7 +1141,15 @@ function exactCollectionSelection(
   dependency: AstNode;
   selectedEntityName: string | null;
 } | null {
-  if (node.type !== "IndexAccess" || !validTree(node, size)) return null;
+  if (
+    node.type !== "IndexAccess" ||
+    !validTree(node, size) ||
+    hasNamedReturnParameter(functionNode)
+  ) {
+    return null;
+  }
+  const sink = exactSelectionSinkContext(node, functionNode, parents, size);
+  if (sink === null) return null;
   const base = isNode(node.base) ? node.base : undefined;
   const index = isNode(node.index) ? node.index : undefined;
   const collectionName = base === undefined ? null : stringValue(base.name);
@@ -986,7 +1157,7 @@ function exactCollectionSelection(
     base?.type !== "Identifier" ||
     !validRange(base, size, node) ||
     collectionName === null ||
-    !hasExactArrayDeclaration(collectionName, contract, functionNode) ||
+    !hasExactArrayDeclaration(collectionName, contract, functionNode, size) ||
     index === undefined ||
     !validRange(index, size, node)
   ) {
@@ -999,7 +1170,7 @@ function exactCollectionSelection(
       ? null
       : {
           ...dependency,
-          selectedEntityName: selectedEntityName(node, parents)
+          selectedEntityName: sink.selectedEntityName
         };
   }
   if (index?.type !== "Identifier") return null;
@@ -1017,9 +1188,15 @@ function exactCollectionSelection(
   );
   if (declarations.length !== 1) return null;
   const declaration = declarations[0];
+  const declarationVariables = exactNodeArray(declaration.variables);
+  const indexVariable =
+    declarationVariables?.length === 1 ? declarationVariables[0] : undefined;
   if (
     !hasRange(declaration) ||
-    !validTree(declaration, size) ||
+    !isNode(functionNode.body) ||
+    !validTree(declaration, size, functionNode.body) ||
+    indexVariable === undefined ||
+    !hasApprovedElementaryType(indexVariable, UINT256_PARAMETER_TYPES) ||
     nodeEnd(declaration) >= nodeStart(node) ||
     !isStableSingleAssignment(functionNode, declaration, indexName) ||
     !isNode(declaration.initialValue) ||
@@ -1036,16 +1213,67 @@ function exactCollectionSelection(
     ? null
     : {
         ...dependency,
-        selectedEntityName: selectedEntityName(node, parents)
+        selectedEntityName: sink.selectedEntityName
       };
+}
+
+function exactSelectionSinkContext(
+  selection: AstNode,
+  functionNode: AstNode,
+  parents: ReadonlyMap<AstNode, AstNode>,
+  size: number
+): { selectedEntityName: string | null } | null {
+  const functionBody = isNode(functionNode.body)
+    ? functionNode.body
+    : undefined;
+  const parent = parents.get(selection);
+  if (functionBody === undefined || parent === undefined) return null;
+
+  if (
+    parent.type === "ReturnStatement" &&
+    parent.expression === selection &&
+    parents.get(parent) === functionBody &&
+    validTree(parent, size, functionBody) &&
+    hasExactUnnamedReturnType(functionNode, size, ADDRESS_PARAMETER_TYPES)
+  ) {
+    return { selectedEntityName: null };
+  }
+
+  const variables = exactNodeArray(parent.variables);
+  const selected = variables?.length === 1 ? variables[0] : undefined;
+  if (
+    parent.type !== "VariableDeclarationStatement" ||
+    parent.initialValue !== selection ||
+    parents.get(parent) !== functionBody ||
+    !validTree(parent, size, functionBody) ||
+    selected === undefined ||
+    !hasApprovedElementaryType(selected, ADDRESS_PARAMETER_TYPES)
+  ) {
+    return null;
+  }
+  const selectedEntityName = stringValue(selected.name);
+  return selectedEntityName === null ? null : { selectedEntityName };
+}
+
+function hasNamedReturnParameter(functionNode: AstNode): boolean {
+  const returnParameters = exactNodeArray(functionNode.returnParameters);
+  return (
+    returnParameters === null ||
+    returnParameters.some((parameter) => stringValue(parameter.name) !== null)
+  );
 }
 
 function hasExactArrayDeclaration(
   name: string,
   contract: AstNode,
-  functionNode: AstNode
+  functionNode: AstNode,
+  size: number
 ): boolean {
-  const declarations = exactVisibleValueDeclarations(contract, functionNode);
+  const declarations = exactVisibleValueDeclarations(
+    contract,
+    functionNode,
+    size
+  );
   if (declarations === null) return false;
   const named = declarations.all.filter(
     (declaration) => declaration.name === name
@@ -1056,23 +1284,13 @@ function hasExactArrayDeclaration(
       named[0]
     ) &&
     isNode(named[0].typeName) &&
-    named[0].typeName.type === "ArrayTypeName"
+    named[0].typeName.type === "ArrayTypeName" &&
+    (named[0].typeName.length === null ||
+      named[0].typeName.length === undefined) &&
+    isNode(named[0].typeName.baseTypeName) &&
+    named[0].typeName.baseTypeName.type === "ElementaryTypeName" &&
+    named[0].typeName.baseTypeName.name === "address"
   );
-}
-
-function selectedEntityName(
-  selection: AstNode,
-  parents: ReadonlyMap<AstNode, AstNode>
-): string | null {
-  const parent = parents.get(selection);
-  if (
-    parent?.type !== "VariableDeclarationStatement" ||
-    parent.initialValue !== selection
-  ) {
-    return null;
-  }
-  const variables = exactNodeArray(parent.variables);
-  return variables?.length === 1 ? stringValue(variables[0].name) : null;
 }
 
 function exactModuloDependency(
@@ -1133,15 +1351,15 @@ function exactSelectionSource(
   return exactDirectSource(dependency, sources);
 }
 
-function classifySelectionShellOwner(
+function classifyShellOwner(
   functionName: string,
-  collectionName: string,
-  selectedEntityName: string | null
+  additionalIdentifiers: readonly (string | null)[] = []
 ): PrevrandaoFlowRecord["shellOwner"] | null {
   const tokens = [
     ...identifierTokens(functionName),
-    ...identifierTokens(collectionName),
-    ...(selectedEntityName === null ? [] : identifierTokens(selectedEntityName))
+    ...additionalIdentifiers.flatMap((identifier) =>
+      identifier === null ? [] : identifierTokens(identifier)
+    )
   ];
   const bridge = tokens.some((token) => BRIDGE_OWNER_IDENTIFIERS.has(token));
   const wallet = tokens.some((token) => WALLET_OWNER_IDENTIFIERS.has(token));
@@ -1166,6 +1384,12 @@ function isWithinUnsupportedSelectionControlFlow(
       return true;
     }
     if (parent.type === "EmitStatement") return true;
+    if (
+      parent.type === "BinaryOperation" &&
+      ASSIGNMENT_OPERATORS.has(stringValue(parent.operator) ?? "")
+    ) {
+      return true;
+    }
     if (
       parent !== functionNode &&
       !KNOWN_DIRECT_SOURCE_CONTEXTS.has(parent.type ?? "")
@@ -1201,7 +1425,8 @@ function collectDirectSources(
   sourceFile: string,
   contractName: string,
   functionName: string,
-  functionNode: AstNode
+  functionNode: AstNode,
+  size: number
 ): { sources: PrevrandaoSourceRecord[]; unsupported: boolean } {
   const sources: PrevrandaoSourceRecord[] = [];
   let unsupported = false;
@@ -1209,14 +1434,14 @@ function collectDirectSources(
 
   for (const node of descendants(functionNode)) {
     if (!isBlockPrevrandao(node)) continue;
-    if (!hasRange(node)) {
+    if (!validTree(node, size, functionNode)) {
       unsupported = true;
       continue;
     }
 
     const parent = parents.get(node);
     const cast = isApprovedDirectCast(parent, node) ? parent : undefined;
-    if (cast !== undefined && !hasRange(cast)) {
+    if (cast !== undefined && !validTree(cast, size, functionNode)) {
       unsupported = true;
       continue;
     }
@@ -1228,7 +1453,8 @@ function collectDirectSources(
     const binding = exactInitializerBinding(
       parents,
       sourceExpression,
-      functionNode
+      functionNode,
+      size
     );
     if (binding.unsupported) {
       unsupported = true;
@@ -1252,12 +1478,13 @@ function collectAssemblySources(
   sourceFile: string,
   contractName: string,
   functionName: string,
-  functionNode: AstNode
+  functionNode: AstNode,
+  size: number
 ): { sources: PrevrandaoSourceRecord[]; unsupported: boolean } {
   const sources: PrevrandaoSourceRecord[] = [];
   let unsupported = false;
   const parents = parentIndex(functionNode);
-  const declarations = localDeclarations(functionNode, parents);
+  const declarations = localDeclarations(functionNode, parents, size);
 
   for (const inlineNode of descendants(functionNode).filter(
     (node) => node.type === "InlineAssemblyStatement"
@@ -1283,11 +1510,11 @@ function collectAssemblySources(
               item.name === targetName && item.offset < nodeStart(inlineNode)
           );
     const supported =
-      hasRange(inlineNode) &&
+      validTree(inlineNode, size, functionNode) &&
       call !== undefined &&
-      hasRange(call) &&
+      validRange(call, size, inlineNode) &&
       exact !== undefined &&
-      hasRange(exact) &&
+      validRange(exact, size, inlineNode) &&
       exact.expression === call &&
       exactNodeArray(call.arguments)?.length === 0 &&
       targetName !== null &&
@@ -1319,7 +1546,8 @@ function collectAssemblySources(
 function exactInitializerBinding(
   parents: ReadonlyMap<AstNode, AstNode>,
   expression: AstNode,
-  functionNode: AstNode
+  functionNode: AstNode,
+  size: number
 ): { name?: string; unsupported: boolean } {
   const statement = parents.get(expression);
   if (
@@ -1336,14 +1564,17 @@ function exactInitializerBinding(
     return { unsupported: false };
   }
   const variables = exactNodeArray(statement.variables);
+  const variable = variables?.length === 1 ? variables[0] : undefined;
   if (
-    variables?.length !== 1 ||
-    !hasRange(statement) ||
+    variable === undefined ||
+    !isNode(functionNode.body) ||
+    !validTree(statement, size, functionNode.body) ||
+    !hasApprovedElementaryType(variable, UINT256_PARAMETER_TYPES) ||
     parents.get(statement) !== functionNode.body
   ) {
     return { unsupported: true };
   }
-  const name = stringValue(variables[0].name);
+  const name = stringValue(variable.name);
   if (
     name === null ||
     !isStableSingleAssignment(functionNode, statement, name)
@@ -1425,7 +1656,8 @@ function isIdentifierNamed(value: unknown, name: string): boolean {
 
 function localDeclarations(
   functionNode: AstNode,
-  parents: ReadonlyMap<AstNode, AstNode>
+  parents: ReadonlyMap<AstNode, AstNode>,
+  size: number
 ): Array<{ name: string; offset: number; node: AstNode }> {
   const declarations: Array<{ name: string; offset: number; node: AstNode }> =
     [];
@@ -1439,15 +1671,21 @@ function localDeclarations(
       continue;
     }
     const variables = exactNodeArray(statement.variables);
-    const name =
-      variables?.length === 1 ? stringValue(variables[0].name) : null;
-    if (name !== null) {
-      declarations.push({
-        name,
-        offset: nodeStart(statement),
-        node: statement
-      });
+    const variable = variables?.length === 1 ? variables[0] : undefined;
+    const name = variable === undefined ? null : stringValue(variable.name);
+    if (variable === undefined || name === null) continue;
+    if (
+      !isNode(functionNode.body) ||
+      !validTree(statement, size, functionNode.body) ||
+      !hasApprovedElementaryType(variable, UINT256_PARAMETER_TYPES)
+    ) {
+      continue;
     }
+    declarations.push({
+      name,
+      offset: nodeStart(statement),
+      node: statement
+    });
   }
   return declarations;
 }
