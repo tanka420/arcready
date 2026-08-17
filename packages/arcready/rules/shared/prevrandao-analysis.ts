@@ -1006,18 +1006,23 @@ function exactVisibleValueDeclarations(
   if (
     parameters.some(
       (node) =>
-        node.type !== "VariableDeclaration" ||
+        !hasExactVariableDeclarationShape(node) ||
         !validTree(node, size, functionNode)
     ) ||
     returnParameters.some(
       (node) =>
-        node.type !== "VariableDeclaration" ||
+        !hasExactVariableDeclarationShape(node) ||
         !validTree(node, size, functionNode)
     ) ||
-    locals.some((node) => !validTree(node, size, functionBody)) ||
+    locals.some(
+      (node) =>
+        !hasExactVariableDeclarationShape(node) ||
+        !validTree(node, size, functionBody)
+    ) ||
     stateVariables.some(
       (node) =>
-        node.type !== "VariableDeclaration" || !validTree(node, size, contract)
+        !hasExactVariableDeclarationShape(node) ||
+        !validTree(node, size, contract)
     )
   ) {
     return null;
@@ -1037,9 +1042,42 @@ function hasApprovedElementaryType(
     ? declaration.typeName
     : undefined;
   return (
+    hasExactVariableDeclarationShape(declaration) &&
+    isApprovedElementaryTypeName(typeName, allowedTypes)
+  );
+}
+
+function isApprovedElementaryTypeName(
+  typeName: AstNode | undefined,
+  allowedTypes: ReadonlySet<string>
+): boolean {
+  return (
     typeName?.type === "ElementaryTypeName" &&
     typeof typeName.name === "string" &&
-    allowedTypes.has(typeName.name)
+    allowedTypes.has(typeName.name) &&
+    (typeName.stateMutability === null ||
+      (typeName.name === "address" && typeName.stateMutability === "payable"))
+  );
+}
+
+function hasExactVariableDeclarationShape(declaration: AstNode): boolean {
+  const name = declaration.name;
+  const identifier = declaration.identifier;
+  return (
+    declaration.type === "VariableDeclaration" &&
+    (name === null || typeof name === "string") &&
+    (name === null
+      ? identifier === null
+      : isNode(identifier) &&
+        identifier.type === "Identifier" &&
+        identifier.name === name) &&
+    (declaration.storageLocation === null ||
+      declaration.storageLocation === "memory" ||
+      declaration.storageLocation === "storage" ||
+      declaration.storageLocation === "calldata") &&
+    typeof declaration.isStateVar === "boolean" &&
+    typeof declaration.isIndexed === "boolean" &&
+    (declaration.expression === null || isNode(declaration.expression))
   );
 }
 
@@ -1052,7 +1090,7 @@ function hasExactUnnamedReturnType(
   const parameter = returnParameters?.length === 1 ? returnParameters[0] : null;
   return (
     parameter !== null &&
-    stringValue(parameter.name) === null &&
+    parameter.name === null &&
     validTree(parameter, size, functionNode) &&
     hasApprovedElementaryType(parameter, allowedTypes)
   );
@@ -1062,13 +1100,12 @@ function isUnsignedIntegerLiteral(node: AstNode): boolean {
   if (
     node.type !== "NumberLiteral" ||
     !hasRange(node) ||
-    (node.subdenomination !== null && node.subdenomination !== undefined)
+    node.subdenomination !== null
   ) {
     return false;
   }
-  const value = node.number ?? node.value;
-  if (typeof value !== "string" && typeof value !== "number") return false;
-  const literal = String(value).replaceAll("_", "");
+  if (typeof node.number !== "string") return false;
+  const literal = node.number.replaceAll("_", "");
   if (!/^[0-9]+$/.test(literal) || literal.length > 78) return false;
   try {
     return BigInt(literal) <= UINT256_MAX;
@@ -1081,7 +1118,7 @@ function isNonZeroIntegerLiteral(node: AstNode): boolean {
   if (
     node.type !== "NumberLiteral" ||
     !hasRange(node) ||
-    (node.subdenomination !== null && node.subdenomination !== undefined)
+    node.subdenomination !== null
   ) {
     return false;
   }
@@ -1120,10 +1157,15 @@ function exactDirectSource(
 }
 
 function isZeroLiteral(node: AstNode): boolean {
-  if (node.type !== "NumberLiteral" || !hasRange(node)) return false;
-  const value = node.number ?? node.value;
-  if (typeof value !== "string" && typeof value !== "number") return false;
-  const literal = String(value).replaceAll("_", "").toLowerCase();
+  if (
+    node.type !== "NumberLiteral" ||
+    !hasRange(node) ||
+    node.subdenomination !== null ||
+    typeof node.number !== "string"
+  ) {
+    return false;
+  }
+  const literal = node.number.replaceAll("_", "").toLowerCase();
   const digits = literal.startsWith("0x")
     ? literal.slice(2)
     : (literal.split("e")[0] ?? "").replace(".", "");
@@ -1259,7 +1301,7 @@ function hasNamedReturnParameter(functionNode: AstNode): boolean {
   const returnParameters = exactNodeArray(functionNode.returnParameters);
   return (
     returnParameters === null ||
-    returnParameters.some((parameter) => stringValue(parameter.name) !== null)
+    returnParameters.some((parameter) => parameter.name !== null)
   );
 }
 
@@ -1285,11 +1327,12 @@ function hasExactArrayDeclaration(
     ) &&
     isNode(named[0].typeName) &&
     named[0].typeName.type === "ArrayTypeName" &&
-    (named[0].typeName.length === null ||
-      named[0].typeName.length === undefined) &&
+    named[0].typeName.length === null &&
     isNode(named[0].typeName.baseTypeName) &&
-    named[0].typeName.baseTypeName.type === "ElementaryTypeName" &&
-    named[0].typeName.baseTypeName.name === "address"
+    isApprovedElementaryTypeName(
+      named[0].typeName.baseTypeName,
+      ADDRESS_PARAMETER_TYPES
+    )
   );
 }
 

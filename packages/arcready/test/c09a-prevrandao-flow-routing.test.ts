@@ -195,6 +195,61 @@ describe("C09A-E2 collection-selection routing", () => {
     }
   );
 
+  it("fails closed when dynamic-array null sentinel evidence is missing", async () => {
+    const parser = parserDeletingAstField("ArrayTypeName", "length");
+
+    await expect(
+      analyzePrevrandaoFlowFile(
+        "src/Selector.sol",
+        DIRECT_BRIDGE_SELECTION,
+        async () => parser
+      )
+    ).resolves.toEqual({ status: "analyzed", records: [] });
+  });
+
+  it.each([
+    ["selection", DIRECT_BRIDGE_SELECTION],
+    ["authorization", authorizationSource("block.prevrandao < threshold")],
+    [
+      "ordering",
+      orderingSource("uint256(keccak256(abi.encode(item, block.prevrandao)))")
+    ]
+  ] as const)(
+    "fails closed when %s unnamed-return sentinel is malformed",
+    async (_label, source) => {
+      const parser = parserReplacingReturnName(42);
+
+      await expect(
+        analyzePrevrandaoFlowFile(
+          "src/Evidence.sol",
+          source,
+          async () => parser
+        )
+      ).resolves.toEqual({ status: "analyzed", records: [] });
+    }
+  );
+
+  it.each([
+    ["authorization", authorizationSource("block.prevrandao < 1")],
+    [
+      "ordering",
+      orderingSource("uint256(keccak256(abi.encode(1, block.prevrandao)))")
+    ]
+  ] as const)(
+    "fails closed when %s literal subdenomination sentinel is missing",
+    async (_label, source) => {
+      const parser = parserDeletingAstField("NumberLiteral", "subdenomination");
+
+      await expect(
+        analyzePrevrandaoFlowFile(
+          "src/Evidence.sol",
+          source,
+          async () => parser
+        )
+      ).resolves.toEqual({ status: "analyzed", records: [] });
+    }
+  );
+
   it.each([
     ["validator", "validators", "selectValidator"],
     ["sequencer", "sequencers", "selectSequencer"],
@@ -1807,6 +1862,47 @@ function parserRemovingDeclarationRange(name: string): {
         throw new Error(`Missing declaration AST evidence for ${name}`);
       }
       delete declaration.range;
+      return ast;
+    }
+  };
+}
+
+function parserDeletingAstField(
+  type: string,
+  field: string
+): {
+  parse(source: string, options: Record<string, unknown>): unknown;
+} {
+  return {
+    parse(source, options) {
+      const ast = parserModule.parse(source, options) as MutableAstNode;
+      const node = findAstNode(ast, (candidate) => candidate.type === type);
+      if (node === undefined) {
+        throw new Error(`Missing ${type} AST evidence`);
+      }
+      delete node[field];
+      return ast;
+    }
+  };
+}
+
+function parserReplacingReturnName(value: unknown): {
+  parse(source: string, options: Record<string, unknown>): unknown;
+} {
+  return {
+    parse(source, options) {
+      const ast = parserModule.parse(source, options) as MutableAstNode;
+      const functionNode = findAstNode(
+        ast,
+        (candidate) => candidate.type === "FunctionDefinition"
+      );
+      const returnParameter = Array.isArray(functionNode?.returnParameters)
+        ? astNode(functionNode.returnParameters[0])
+        : undefined;
+      if (returnParameter === undefined) {
+        throw new Error("Missing return parameter AST evidence");
+      }
+      returnParameter.name = value;
       return ast;
     }
   };
