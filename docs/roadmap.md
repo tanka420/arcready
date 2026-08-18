@@ -1,7 +1,7 @@
 # ArcReady Roadmap
 
-**Status:** Active roadmap after C09-D Build selection
-**Last reviewed:** 2026-08-06
+**Status:** Active roadmap after C09A closeout
+**Last reviewed:** 2026-08-18
 
 ArcReady is an Arc-specific, repository-level static compatibility analyzer for
 projects being ported from Ethereum or other EVM environments to Arc.
@@ -63,7 +63,9 @@ ArcReady currently includes:
 - rule taxonomy, maturity, confidence, documentation, and detector-limitation
   metadata;
 - deterministic private FindingV2, CoverageV2, ScanResultV2, and `json-v2`
-  contracts.
+  contracts;
+- bounded Solidity PREVRANDAO source/value analysis with exact retained Foundry
+  Arc ownership for the C09A compatibility shells.
 
 The private canonical runtime remains exactly four rules in stable order:
 
@@ -88,6 +90,10 @@ ArcReady still has no general:
 - runtime RPC, Circle API, on-chain, or simulation validation;
 - SARIF, baseline, or suppression workflow;
 - precise line-and-column FindingV2 regions.
+
+C09A adds one bounded Solidity parser-backed capability for a prioritized Arc
+compatibility problem; it does not establish a general Solidity analysis
+platform.
 
 These limits are intentional. Infrastructure is justified only when it unlocks
 a prioritized rule with clear product value.
@@ -221,31 +227,49 @@ Inventory is now 19 known / 16 default / 7 wallet / 4 canonical. The R3
 prototype remains research-only. Revisit Retire after one compatibility period
 or earlier if usage evidence shows no material value.
 
-### C09 — Build selected: bounded PREVRANDAO dependency analyzer
+### C09 / C09A — Complete: bounded PREVRANDAO dependency analyzer
 
-C09-R1 through R3-B are complete. The reviewed research established bounded
-Solidity source/value feasibility and one exact Foundry contract-to-Arc
-association family.
+C09-R1 through R3-B established bounded Solidity source/value feasibility and one
+exact Foundry contract-to-Arc association family. C09-D selected Build: one
+private analyzer with two temporary public compatibility shells.
 
-C09-D selects Build: one private analyzer with two temporary public compatibility
-shells. Both old keyword detectors must be removed. A critical finding requires
-both a supported same-function behavior dependency and exact Foundry Arc
-deployment ownership for the same concrete contract.
+C09A implemented that decision in four production phases plus closeout:
 
-C09A is the next implementation milestone. It must retain the two public IDs,
-prevent duplicate findings, add no `solidity` preset or category, preserve
-inventory `19 / 16 / 7 / 4`, and keep the rules non-canonical. Production remains
-blocked until the decision and implementation plan are approved and merged.
+- PR #63 / E1: exact `@solidity-parser/parser@0.20.2` dependency and private
+  Solidity source analysis;
+- PR #65 / E2: bounded same-function value flow, supported sinks, shell routing,
+  and scan-scoped reuse;
+- PR #68 / E3: exact Foundry ownership and composed eligibility;
+- PR #67 / E4: public compatibility-shell migration and removal of broad keyword
+  emission;
+- E5: final documentation/governance closeout.
 
-### C10 — Research/build: versioned App Kit compatibility
+A public finding now requires both a supported same-function behavior dependency
+and exact retained Foundry Arc Testnet ownership for the same concrete contract.
+The two existing public IDs remain default-critical temporary compatibility
+shells, duplicate emission is prevented, no `solidity` preset or category was
+added, inventory remains `19 / 16 / 7 / 4`, and both rules remain non-canonical.
+
+Foundry evidence is static retained artifact evidence only. C09A does not claim
+live deployment, bytecode identity, runtime behavior, or transaction success.
+The completed plans are:
+
+```text
+docs/exec-plans/completed/C09.md
+docs/exec-plans/completed/C09A.md
+```
+
+### C10 — Next: versioned App Kit compatibility
 
 Model official versioned chain identifiers, operations, tokens, adapters, and
 support tables. Do not keep hardening the deprecated generic capability guard.
 
+C10 should remain bounded to versioned first-party compatibility evidence and
+must not expand ArcReady into a generic App Kit or TypeScript analysis platform.
+
 ## Adoption and developer-experience track
 
-With C07C integration complete, prioritize product usefulness before expanding
-deep semantic infrastructure:
+Prioritize product usefulness before expanding deep semantic infrastructure:
 
 1. maintain a small public broken/fixed demo project;
 2. improve onboarding and GitHub Action usage;
@@ -301,13 +325,13 @@ The following remain outside the near-term roadmap:
 
 ## Current recommended next step
 
-1. Review and implement C09A as a bounded analyzer and compatibility-shell
-   migration.
-2. Continue C10 after C09A closeout unless new user evidence changes priority.
-3. Keep native write analysis blocked pending first-party premise clarification.
-4. Continue gathering real unsupported-pattern and false-positive/negative
-   evidence.
+1. Plan C10 as a bounded versioned App Kit compatibility milestone.
+2. Keep native write analysis blocked pending first-party premise clarification.
+3. Continue gathering real unsupported-pattern and false-positive/negative
+   evidence, including C09A compatibility-shell usage evidence.
+4. Revisit C09A shell consolidation or retirement only through a separately
+   reviewed compatibility decision.
 5. Reopen deferred C06B2, C07C, or C08 families only from concrete usage
    evidence or a separately approved milestone.
 
-The private canonical runtime remained exactly four rules throughout C07C.
+The private canonical runtime remains exactly four rules.
