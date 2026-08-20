@@ -6,20 +6,17 @@ Arc-specific static CI quality gate and integration-pattern validator for wallet
 [![Release](https://img.shields.io/github/v/release/tanka420/arcready?include_prereleases&label=release)](https://github.com/tanka420/arcready/releases)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)
 ![Node.js](https://img.shields.io/badge/Node.js-22%2B-green)
-![npm](https://img.shields.io/badge/npm-arcready%400.3.0-blue)
+![npm](https://img.shields.io/badge/npm-arcready%400.4.0-blue)
 ![Backend](https://img.shields.io/badge/backend-not_required-lightgrey)
 
 ArcReady helps developers catch common Arc integration mistakes before release. It is a developer-side early warning layer for static checks in local workflows and CI.
 
 > ArcReady is an independent open-source project. It is not an official Circle or Arc product.
 
-> Release boundary: the install and Action examples below deliberately run the
-> published `arcready@0.3.0` release. The main branch contains later, unreleased
-> rule and runtime changes. In particular, v0.3.0 still runs
-> `wallet/NO_ETH_GAS_LABEL` as a default critical rule, while current main
-> exposes it only as default-excluded, deprecated `info` advice. Use the
-> versioned release notes for v0.3.0 behavior and the current rule catalog for
-> main-branch behavior.
+> Release boundary: npm `latest` is the reviewed `arcready@0.4.0` package. The
+> current stable Action tag remains `tanka420/arcready@v0.3.0` until the staged
+> v0.4.0 Action proof and immutable tag checkpoints complete. The v0.3 Action
+> wrapper can run the new package by setting `arcready-version: "0.4.0"`.
 
 ## What It Is
 
@@ -34,20 +31,20 @@ It reports findings in terminal, JSON, Markdown, or HTML formats and can fail CI
 ## Quick Demo
 
 ```powershell
-npx --yes arcready@0.3.0 init
-npx --yes arcready@0.3.0 scan
+npx --yes arcready@0.4.0 init
+npx --yes arcready@0.4.0 scan
 ```
 
 CI-oriented Markdown report:
 
 ```powershell
-npx --yes arcready@0.3.0 scan --format markdown --out arcready-report.md
+npx --yes arcready@0.4.0 scan --format markdown --out arcready-report.md
 ```
 
 Shortened example output:
 
 ```text
-ArcReady v0.3.0
+ArcReady v0.4.0
 Project: my-arc-app
 Score: 75
 Status: fail
@@ -78,13 +75,13 @@ patterns, not universal Arc compatibility or runtime verification.
 Run without installing:
 
 ```powershell
-npx --yes arcready@0.3.0 scan
+npx --yes arcready@0.4.0 scan
 ```
 
 Create a config file:
 
 ```powershell
-npx --yes arcready@0.3.0 init
+npx --yes arcready@0.4.0 init
 ```
 
 Install locally:
@@ -117,17 +114,18 @@ jobs:
 
       - uses: tanka420/arcready@v0.3.0
         with:
+          arcready-version: "0.4.0"
           fail-on: critical
 ```
 
-The action runs the published npm CLI and defaults to `arcready@0.3.0`. You can pin or override the CLI package version:
-
-The `v0.3.0` Action tag therefore runs v0.3.0 package behavior, not unreleased
-main-branch behavior.
+The stable `v0.3.0` Action wrapper defaults to npm package v0.3.0, so the example
+pins its package input to the published v0.4.0 release. The repository Action
+candidate defaults to v0.4.0, but no `v0.4.0` Action tag is claimed until the
+separate exact-SHA proof and tag checkpoints complete.
 
 ```yaml
 with:
-  arcready-version: "0.3.0"
+  arcready-version: "0.4.0"
 ```
 
 See [docs/github-action.md](docs/github-action.md) for inputs, artifact behavior, and external usage notes.
@@ -184,10 +182,10 @@ Supported formats:
 - HTML
 
 ```powershell
-npx --yes arcready@0.3.0 scan --format terminal
-npx --yes arcready@0.3.0 scan --format json --out arcready-report.json
-npx --yes arcready@0.3.0 scan --format markdown --out arcready-report.md
-npx --yes arcready@0.3.0 scan --format html --out arcready-report.html
+npx --yes arcready@0.4.0 scan --format terminal
+npx --yes arcready@0.4.0 scan --format json --out arcready-report.json
+npx --yes arcready@0.4.0 scan --format markdown --out arcready-report.md
+npx --yes arcready@0.4.0 scan --format html --out arcready-report.html
 ```
 
 Generated report folders such as `.arcready/` and `reports/` are ignored by git.

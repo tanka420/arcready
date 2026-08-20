@@ -27,21 +27,26 @@ jobs:
 
       - uses: tanka420/arcready@v0.3.0
         with:
+          arcready-version: "0.4.0"
           fail-on: critical
 ```
 
-`v0.3.0` is the current GitHub Action-ready release and includes rule quality hardening. The action runs the published npm CLI package, and the default CLI version is `0.3.0`. You can override the CLI package version with `arcready-version`.
+`v0.3.0` remains the current stable GitHub Action tag until the v0.4.0 exact-SHA
+proof and immutable tag checkpoints complete. That wrapper defaults to npm
+package v0.3.0, so current examples set `arcready-version: "0.4.0"`. The
+repository Action candidate defaults to the published npm v0.4.0 package; it is
+not a claim that the `v0.4.0` Action tag already exists.
 
 ## Inputs
 
-| Input               | Default             | Description                                                       |
-| ------------------- | ------------------- | ----------------------------------------------------------------- |
-| `arcready-version`  | `0.3.0`             | ArcReady npm package version to run                               |
-| `working-directory` | `.`                 | Directory to scan                                                 |
-| `fail-on`           | `critical`          | Fail when findings reach `critical`, `warning`, `info`, or `none` |
-| `output-dir`        | `.arcready/reports` | Directory for ArcReady report files                               |
-| `upload-artifact`   | `true`              | Upload ArcReady reports as a workflow artifact                    |
-| `artifact-name`     | `arcready-report`   | Artifact name for uploaded ArcReady reports                       |
+| Input               | Main default        | Stable v0.3 tag | Description                                                       |
+| ------------------- | ------------------- | --------------- | ----------------------------------------------------------------- |
+| `arcready-version`  | `0.4.0`             | `0.3.0`         | ArcReady npm package version to run                               |
+| `working-directory` | `.`                 | `.`             | Directory to scan                                                 |
+| `fail-on`           | `critical`          | `critical`      | Fail when findings reach `critical`, `warning`, `info`, or `none` |
+| `output-dir`        | `.arcready/reports` | same            | Directory for ArcReady report files                               |
+| `upload-artifact`   | `true`              | `true`          | Upload ArcReady reports as a workflow artifact                    |
+| `artifact-name`     | `arcready-report`   | same            | Artifact name for uploaded ArcReady reports                       |
 
 ## Working Directory
 
@@ -50,6 +55,7 @@ Scan a subdirectory:
 ```yaml
 - uses: tanka420/arcready@v0.3.0
   with:
+    arcready-version: "0.4.0"
     working-directory: apps/wallet
     fail-on: critical
 ```
@@ -69,6 +75,7 @@ Upload artifacts with the default settings:
 ```yaml
 - uses: tanka420/arcready@v0.3.0
   with:
+    arcready-version: "0.4.0"
     upload-artifact: true
 ```
 
@@ -77,6 +84,7 @@ Customize the report directory and artifact name:
 ```yaml
 - uses: tanka420/arcready@v0.3.0
   with:
+    arcready-version: "0.4.0"
     output-dir: reports/arcready
     artifact-name: arc-static-validation
 ```
@@ -114,4 +122,6 @@ uses: tanka420/arcready@v0.3.0
 
 It checks a known-good fixture that should pass and a known-bad fixture that should fail as expected.
 
-External action smoke validation is configured to use `uses: tanka420/arcready@v0.3.0` after the `v0.3.0` tag is created and pushed.
+External action smoke validation currently remains pinned to
+`uses: tanka420/arcready@v0.3.0`; R01 changes that reference only in the later,
+separately reviewed exact-SHA and tagged-proof checkpoints.

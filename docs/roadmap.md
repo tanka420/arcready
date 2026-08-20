@@ -56,7 +56,7 @@ ArcReady currently includes:
 - TypeScript and Node.js CLI scanning;
 - wallet, bridge, and App Kit rule packs;
 - terminal, JSON, Markdown, and HTML legacy reports;
-- installable npm package `arcready@0.3.0`;
+- installable npm package `arcready@0.4.0`;
 - external composite GitHub Action `tanka420/arcready@v0.3.0`;
 - validation fixtures and package smoke tests;
 - automated CI and repository verification;
@@ -310,24 +310,22 @@ analysis infrastructure without users.
 
 ## Distribution and release track
 
-The v0.3 package and GitHub Action are already released. Distribution work may
+The npm v0.4 package and GitHub Action v0.3 are released. Distribution work may
 proceed independently of engineering milestones after verifying package
 contents, CLI installation, Action references, release notes, and CI on the
 selected release commit.
 
-The [A03 distribution audit](research/A03.md) confirms that npm `latest` and the
-`v0.3.0` Action still run v0.3.0 while main documents later behavior, including
-the C12 default exclusion. Current documentation must disclose that boundary.
-A separately authorized R3 release milestone must select and verify the next
-version before changing the package manifest, Action default, tag, or release;
-A03 performs none of those distribution mutations.
+The [A03 distribution audit](research/A03.md) established the earlier v0.3
+mismatch. R01 E1 closed the npm side by publishing and registry-verifying
+`arcready@0.4.0` from merge `be945efd`; the stable `v0.3.0` Action tag still
+defaults to npm v0.3 unless callers explicitly override its package input.
 
 The [R01 release plan](exec-plans/active/R01.md) selects a staged v0.4.0
 candidate: npm package first, then the Action default, exact-SHA external proof,
 immutable tag, tagged external smoke, and finally the GitHub Release. Its
-architecture review passed with `0 blocker / 0 major / 0 minor`. E1 package
-candidate implementation is in progress from frozen base `4b7ee02`; explicit
-approval remains required at every merge, publish, tag, and GitHub Release
+architecture review passed with `0 blocker / 0 major / 0 minor`. E1 is complete;
+E2A Action candidate implementation is in progress from the verified E1 merge.
+Explicit approval remains required at every merge, tag, and GitHub Release
 checkpoint.
 
 Core milestones must not silently change an already selected release commit.

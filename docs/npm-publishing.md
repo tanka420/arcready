@@ -1,21 +1,19 @@
 # npm Publishing
 
 ArcReady is published on npm as an installable CLI package. The current public
-version is `arcready@0.3.0`. The architecture-approved R01 E1 candidate selects
-`0.4.0` from frozen base `4b7ee02901f5313b8bd33e1e22de69b1b4e2d620`.
-The candidate is not published, and its exact operational commit remains
-pending final validation and review.
+version is the registry-verified `arcready@0.4.0`, published from merged E1
+commit `be945efd2fb6d6ec625d9aa28ebdfc3cae7e91af`.
 
 ## Current Package
 
-| Field                 | Value                      |
-| --------------------- | -------------------------- |
-| Package name          | `arcready`                 |
-| Published version     | `0.3.0`                    |
-| Selected next version | `0.4.0` (R01 E1 candidate) |
-| License               | MIT                        |
-| Node.js               | `>=22`                     |
-| CLI bin               | `arcready`                 |
+| Field                 | Value                       |
+| --------------------- | --------------------------- |
+| Package name          | `arcready`                  |
+| Published version     | `0.4.0`                     |
+| Selected next version | none; R01 E2 changes Action |
+| License               | MIT                         |
+| Node.js               | `>=22`                      |
+| CLI bin               | `arcready`                  |
 
 The npm package should include only:
 
@@ -50,9 +48,9 @@ cd packages/arcready
 npm publish --dry-run
 ```
 
-Inspect the output before release. The dry run must show the separately approved,
-unpublished candidate version and only the expected package files. Do not try to
-publish `arcready@0.3.0` again.
+Inspect the output before any future release. It must show a separately approved,
+unpublished version and only the expected package files. Do not try to republish
+the immutable `arcready@0.4.0` version.
 
 Use the versioned
 [v0.4.0 npm checklist](releases/v0.4.0-npm-checklist.md) for E1 evidence. Record
@@ -72,9 +70,9 @@ Confirm the package name is still available or owned by the project:
 npm view arcready
 ```
 
-## Do Not Run This Until Release Approval
+## Do Not Run This Without Release Approval
 
-The real publish command is not part of this task:
+The real publish command is never implied by Action or documentation work:
 
 ```bash
 npm publish

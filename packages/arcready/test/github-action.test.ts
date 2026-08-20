@@ -12,7 +12,7 @@ describe("GitHub Action wrapper", () => {
     expect(existsSync(actionPath)).toBe(true);
     expect(action).toContain("using: composite");
     expect(action).toContain("arcready-version:");
-    expect(action).toContain('default: "0.3.0"');
+    expect(action).toContain('default: "0.4.0"');
     expect(action).toContain("working-directory:");
     expect(action).toContain("fail-on:");
     expect(action).toContain("output-dir:");
@@ -85,6 +85,15 @@ describe("GitHub Action wrapper", () => {
     expect(workflow).toContain("uses: ./actions/github");
     expect(workflow).toContain("fail-on: critical");
     expect(workflow).toContain("upload-artifact: true");
+  });
+
+  it("pins the current public external example to the published package", () => {
+    const workflowPath = join(repoRoot, "examples", "github-action.yml");
+    const workflow = readFileSync(workflowPath, "utf8");
+
+    expect(existsSync(workflowPath)).toBe(true);
+    expect(workflow).toContain("uses: tanka420/arcready@v0.3.0");
+    expect(workflow).toContain('arcready-version: "0.4.0"');
   });
 
   it("defines the external action smoke workflow", () => {
