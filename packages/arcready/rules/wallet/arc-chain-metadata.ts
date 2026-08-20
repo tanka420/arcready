@@ -16,7 +16,7 @@ import { WALLET_DOCS, createWalletFinding } from "./helpers.js";
 type Issue = "missing" | "incorrect" | "rpc" | "explorer";
 
 const CHAIN_FIX =
-  'Set this object\'s id or chainId to 5042002; use "0x4CF4B2" for EIP-3085 string metadata.';
+  'Set this object\'s id or chainId to 5042002; use "0x4CEF52" for EIP-3085 string metadata.';
 const TEXT: Record<Issue, readonly [string, string]> = {
   missing: [
     "Arc-owned chain metadata is missing a direct literal Arc Testnet chain ID.",

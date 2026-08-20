@@ -249,6 +249,25 @@ not implement a version-operation rule or keep hardening the deprecated generic
 capability guard without a concrete repository/user case and a separately
 reviewed ownership contract.
 
+### C11 — Ready for publication: Arc chain hexadecimal identity correction
+
+The real-repository adoption audit exposed one exact false negative and bad
+remediation in `wallet/ARC_CHAIN_METADATA`: `0x4CF4B2` is decimal `5043378`,
+not Arc Testnet chain ID `5042002`. The bounded C11 correction removes that
+alias, uses the live hexadecimal value `0x4CEF52`, and preserves fail-closed
+shared-scanner behavior across the metadata and native-display consumers.
+
+The candidate passed focused tests, controlled CLI probes, independent review
+with `0 blocker / 0 major / 0 minor`, and the full repository gate. It changes
+no rule ID, severity, preset, inventory, canonical boundary, scoring, schema,
+or reporter contract. Commit, push, and PR publication remain subject to
+explicit authorization.
+
+The same adoption audit found concrete `wallet/NO_ETH_GAS_LABEL` false
+positives. That evidence triggers a separate R3 default/severity/public-contract
+migration for the backlog's existing Advice-only decision; C11 deliberately
+does not patch the rule.
+
 ## Adoption and developer-experience track
 
 With C07C integration complete, prioritize product usefulness before expanding
@@ -315,5 +334,7 @@ The following remain outside the near-term roadmap:
    evidence.
 4. Reopen deferred C06B2, C07C, C08, C09A, or C10 families only from concrete
    usage evidence or a separately approved milestone.
+5. Implement the existing `wallet/NO_ETH_GAS_LABEL` Advice-only decision through
+   a separate R3 product and architecture review before further regex changes.
 
 The private canonical runtime remained exactly four rules throughout C07C.

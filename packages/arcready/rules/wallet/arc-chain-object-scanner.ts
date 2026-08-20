@@ -107,7 +107,6 @@ function idValue(
     const text = source.slice(...span).trim();
     const value = stringValue(text) ?? text;
     if (!/^(?:\d+|0x[\da-f]+)$/i.test(value)) return undefined;
-    if (/^0x4cf4b2$/i.test(value)) return 5042002n;
     try {
       return BigInt(value);
     } catch {

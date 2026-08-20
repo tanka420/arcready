@@ -48,7 +48,7 @@ ArcReady does not perform live Arc RPC checks, Circle API checks, on-chain trans
   };
   ```
 
-- Suggested fix: Set the object's `id` or `chainId` to `5042002` (or EIP-3085 string `"0x4CF4B2"`) and replace explicit Ethereum endpoints with Arc-serving RPC or `https://testnet.arcscan.app` explorer metadata. Managed and custom Arc RPC providers are valid.
+- Suggested fix: Set the object's `id` or `chainId` to `5042002` (or EIP-3085 string `"0x4CEF52"`) and replace explicit Ethereum endpoints with Arc-serving RPC or `https://testnet.arcscan.app` explorer metadata. Managed and custom Arc RPC providers are valid.
 - Static-analysis limitation: The bounded detector supports plain `.js` and `.ts` configuration files and isolates direct multichain siblings, but declines JSX/TSX, imports, computed metadata, standalone JSON, arrays, deep wrappers, spreads, duplicate or conflicting fields, and malformed candidates. Its bounded explicit-Ethereum endpoint list leaves unknown custom endpoints silent and does not call RPC endpoints.
 
 ### WALLET_NATIVE_USDC_DISPLAY

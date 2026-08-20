@@ -286,12 +286,18 @@ C08A   Complete: default-excluded deprecated attestation advice
 C09-D  Complete: bounded Build disposition selected
 C09A   Complete: bounded analyzer and compatibility-shell migration
 C10    Complete: Research / Defer; no versioned App Kit rule authorized
+C11    Ready: exact Arc chain hexadecimal identity correction
 ```
 
 C09-R1, C09-R2, C09-R3-A, C09-R3-B, C09-D, C09A, and C10 are complete. C10
 selected Research / Defer because product evidence did not justify a
-version-operation rule. No next analyzer milestone is approved; adoption
-evidence, real repository scans, and user reports should set the next priority.
+version-operation rule. C11 is ready for publication after correcting the exact
+Arc hexadecimal identity defect with no analyzer expansion. No next analyzer
+milestone is approved; adoption evidence, real repository scans, and user
+reports should set the next priority. The measured
+`wallet/NO_ETH_GAS_LABEL` false positives trigger a separately reviewed R3
+implementation of its existing Advice-only decision, not another unreviewed
+regex patch.
 The compatibility inventory remains `19 known / 16 default / 7 wallet / 4
 canonical`. C09A grammar, artifact, or shell expansion requires real user or
 repository evidence and a separately reviewed milestone.

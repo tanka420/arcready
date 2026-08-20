@@ -10,6 +10,7 @@ import {
   noEthGasLabelRule,
   oneConfirmationFinalRule,
   prevrandaoNotSupportedRule,
+  runCli,
   runRules,
   walletNativeUsdcDisplayRule
 } from "../src/index.js";
@@ -82,6 +83,16 @@ describe("wallet rules", () => {
     [
       "I03 wrong quoted hexadecimal literal",
       "const arcTestnet = { chainId: '0x1', name: 'Arc Testnet' };",
+      "incorrect"
+    ],
+    [
+      "I04 former wrong quoted Arc hex",
+      "const arcTestnet = { chainId: '0x4CF4B2', name: 'Arc Testnet' };",
+      "incorrect"
+    ],
+    [
+      "I05 former wrong numeric Arc hex",
+      "const arcTestnet = { id: 0x4cf4b2, name: 'Arc Testnet' };",
       "incorrect"
     ],
     [
@@ -197,11 +208,11 @@ describe("wallet rules", () => {
     ],
     [
       "N02 EIP-3085 hex string",
-      "const arcTestnet = { chainId: '0x4CF4B2', chainName: 'Arc Testnet', rpcUrls: ['https://rpc.testnet.arc.network'] };"
+      "const arcTestnet = { chainId: '0x4CEF52', chainName: 'Arc Testnet', rpcUrls: ['https://rpc.testnet.arc.network'] };"
     ],
     [
       "N03 numeric hex",
-      "const arcTestnet = { id: 0x4cf4b2, name: 'Arc Testnet' };"
+      "const arcTestnet = { id: 0x4cef52, name: 'Arc Testnet' };"
     ],
     [
       "V01 direct quoted decimal chain ID",
@@ -557,11 +568,15 @@ describe("wallet rules", () => {
     ],
     [
       "P16 numeric hexadecimal Arc ID",
-      'const chain = { id: 0x4cf4b2, nativeCurrency: { symbol: "ETH" } };'
+      'const chain = { id: 0x4cef52, nativeCurrency: { symbol: "ETH" } };'
     ],
     [
       "P16 quoted hexadecimal Arc ID",
-      'const chain = { chainId: "0x4CF4B2", nativeCurrency: { symbol: "ETH" } };'
+      'const chain = { chainId: "0x4CEF52", nativeCurrency: { symbol: "ETH" } };'
+    ],
+    [
+      "strong Arc owner preserves native contradiction with former wrong hex",
+      'const arcTestnet = { id: 0x4cf4b2, nativeCurrency: { symbol: "ETH" } };'
     ],
     [
       "P17 unresolved name with direct bad symbol",
@@ -733,6 +748,14 @@ describe("wallet rules", () => {
     [
       "N33 terminal continuation",
       'const arcChain = { id: 5042002, nativeCurrency: { symbol: "ETH" } }.extend;'
+    ],
+    [
+      "generic former wrong numeric hex does not establish Arc ownership",
+      'const chain = { id: 0x4cf4b2, nativeCurrency: { symbol: "ETH" } };'
+    ],
+    [
+      "generic former wrong quoted hex does not establish Arc ownership",
+      'const chain = { chainId: "0x4CF4B2", nativeCurrency: { symbol: "ETH" } };'
     ],
     [
       "non-segment arcadia owner",
@@ -985,6 +1008,57 @@ signer.sendTransaction({ type: 3 });`
       }
     });
     expect(report.findings[0]?.ruleId).toBe("wallet/ARC_CHAIN_METADATA");
+  });
+
+  it("keeps shared-scanner finding order, score, status, and exit behavior for strongly Arc-owned wrong hex", async () => {
+    const projectRoot = createTempProject();
+    writeFixture(
+      projectRoot,
+      "package.json",
+      JSON.stringify({ name: "wrong-arc-hex-fixture" })
+    );
+    writeFixture(
+      projectRoot,
+      "src/chain.ts",
+      'export const arcTestnet = { id: 0x4cf4b2, nativeCurrency: { symbol: "ETH" } };'
+    );
+
+    const report = await createStubReport(projectRoot);
+    const output: string[] = [];
+    const exitCode = await runCli(["scan", "--format", "json"], {
+      cwd: projectRoot,
+      stdout: {
+        write: (chunk: string | Uint8Array) => {
+          output.push(String(chunk));
+          return true;
+        }
+      },
+      stderr: {
+        write: (chunk: string | Uint8Array) => {
+          output.push(String(chunk));
+          return true;
+        }
+      }
+    });
+
+    expect(report).toMatchObject({
+      status: "fail",
+      score: 50,
+      summary: {
+        critical: 2,
+        warning: 0,
+        info: 0
+      }
+    });
+    expect(report.findings.map((finding) => finding.ruleId)).toEqual([
+      "wallet/ARC_CHAIN_METADATA",
+      "wallet/WALLET_NATIVE_USDC_DISPLAY"
+    ]);
+    expect(exitCode).toBe(1);
+    expect(JSON.parse(output.join(""))).toMatchObject({
+      status: "fail",
+      score: 50
+    });
   });
 });
 

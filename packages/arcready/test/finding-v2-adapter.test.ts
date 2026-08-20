@@ -137,7 +137,7 @@ const cases = [
     confidenceReason:
       "Bounded object-local scanning finds a missing or incorrect direct literal Arc Testnet chain ID, or an explicit Ethereum RPC or Etherscan URL, in an Arc-owned plain JavaScript or TypeScript chain object. It does not resolve imports, computed metadata, array-wrapped chain objects, deep wrappers, ambiguous fields, malformed syntax, or runtime endpoint behavior.",
     remediation:
-      "Set the Arc chain object's id or chainId to Arc Testnet 5042002, using 0x4CF4B2 where EIP-3085 requires a hexadecimal string; use Arc-serving RPC metadata; and use https://testnet.arcscan.app for the Arc Testnet explorer. Managed and custom Arc RPC providers remain valid.",
+      "Set the Arc chain object's id or chainId to Arc Testnet 5042002, using 0x4CEF52 where EIP-3085 requires a hexadecimal string; use Arc-serving RPC metadata; and use https://testnet.arcscan.app for the Arc Testnet explorer. Managed and custom Arc RPC providers remain valid.",
     documentation: {
       title: "How to: Add Arc to a Wallet",
       url: "https://docs.arc.io/integrate/wallets"
@@ -1112,7 +1112,7 @@ describe("adapter invariant failures", () => {
       confidence: { level: "medium", basis: "adapter" },
       remediation: {
         summary:
-          "Set the Arc chain object's id or chainId to Arc Testnet 5042002, using 0x4CF4B2 where EIP-3085 requires a hexadecimal string; use Arc-serving RPC metadata; and use https://testnet.arcscan.app for the Arc Testnet explorer. Managed and custom Arc RPC providers remain valid."
+          "Set the Arc chain object's id or chainId to Arc Testnet 5042002, using 0x4CEF52 where EIP-3085 requires a hexadecimal string; use Arc-serving RPC metadata; and use https://testnet.arcscan.app for the Arc Testnet explorer. Managed and custom Arc RPC providers remain valid."
       },
       documentation: [
         {
