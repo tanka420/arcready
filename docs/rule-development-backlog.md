@@ -218,10 +218,12 @@ It must not be used as an implementation base.
 
 ### `app-kit/APPKIT_CHAIN_IDENTIFIER_VALID`
 
-- Decision: Build.
+- Decision: Preserve; research precision hardening separately.
 - Priority: P2.
 - Impact: Blocker.
-- Requires version-aware App Kit argument or configuration ownership.
+- Requires real invalid-identifier evidence plus App Kit argument or
+  configuration ownership. Do not use invalid spelling as evidence for a
+  version-operation rule.
 
 ### `app-kit/UB_DELEGATE_REQUIRED`
 
@@ -232,9 +234,12 @@ It must not be used as an implementation base.
 
 ### `app-kit/APPKIT_CAPABILITY_SUPPORTED`
 
-- Decision: Replace.
+- Decision: Deprecated / default-excluded; replacement deferred.
 - Priority: P2.
-- Design a versioned compatibility rule from official support tables.
+- C10 corrected the Arc Testnet Swap floor to App Kit `1.3.0` but found no real
+  pre-floor violation that justifies a new default critical replacement.
+- Reopen only from a concrete repository/user case and proven effective-version
+  plus operation ownership.
 
 ### `app-kit/APPKIT_CUSTOM_RPC_RECOMMENDED`
 
@@ -280,11 +285,13 @@ C08-D  Complete: Advice-only disposition selected
 C08A   Complete: default-excluded deprecated attestation advice
 C09-D  Complete: bounded Build disposition selected
 C09A   Complete: bounded analyzer and compatibility-shell migration
-C10    Next: add versioned App Kit compatibility analysis
+C10    Complete: Research / Defer; no versioned App Kit rule authorized
 ```
 
-C09-R1, C09-R2, C09-R3-A, C09-R3-B, C09-D, and C09A are complete. C10 is the
-next approved sequencing target unless new product evidence changes priority.
+C09-R1, C09-R2, C09-R3-A, C09-R3-B, C09-D, C09A, and C10 are complete. C10
+selected Research / Defer because product evidence did not justify a
+version-operation rule. No next analyzer milestone is approved; adoption
+evidence, real repository scans, and user reports should set the next priority.
 The compatibility inventory remains `19 known / 16 default / 7 wallet / 4
 canonical`. C09A grammar, artifact, or shell expansion requires real user or
 repository evidence and a separately reviewed milestone.

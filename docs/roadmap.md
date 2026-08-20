@@ -239,10 +239,15 @@ artifact families, and live deployment/runtime verification remain outside the
 supported boundary. Later expansion or shell consolidation requires real
 adoption evidence and a separately reviewed decision.
 
-### C10 — Research/build: versioned App Kit compatibility
+### C10 — Research outcome: versioned App Kit compatibility deferred
 
-Model official versioned chain identifiers, operations, tokens, adapters, and
-support tables. Do not keep hardening the deprecated generic capability guard.
+C10 corrected the official Arc Testnet Swap support floor to App Kit `1.3.0`
+and rejected the initial build candidate. The research did not find a real
+pre-floor integration failure that justifies a new default critical rule, and a
+root manifest declaration does not prove the effective installed version. Do
+not implement a version-operation rule or keep hardening the deprecated generic
+capability guard without a concrete repository/user case and a separately
+reviewed ownership contract.
 
 ## Adoption and developer-experience track
 
@@ -303,11 +308,12 @@ The following remain outside the near-term roadmap:
 
 ## Current recommended next step
 
-1. Continue C10 unless new user evidence changes priority.
+1. Prioritize adoption, real repository scans, and user-reported compatibility
+   failures before selecting another analyzer milestone.
 2. Keep native write analysis blocked pending first-party premise clarification.
 3. Continue gathering real unsupported-pattern and false-positive/negative
    evidence.
-4. Reopen deferred C06B2, C07C, C08, or C09A families only from concrete usage
-   evidence or a separately approved milestone.
+4. Reopen deferred C06B2, C07C, C08, C09A, or C10 families only from concrete
+   usage evidence or a separately approved milestone.
 
 The private canonical runtime remained exactly four rules throughout C07C.
