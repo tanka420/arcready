@@ -1,8 +1,11 @@
-# Final npm Publish Checklist
+# Historical v0.3.0 npm Publish Checklist
 
-ArcReady is prepared for the next npm publish as `arcready@0.3.0`.
+Status: Completed historical record
 
-Do not run the real publish command until the maintainer explicitly approves.
+ArcReady v0.3.0 was published on 2026-06-13. This document records that release
+candidate and must not be reused to publish the same immutable version. Prepare
+a new versioned checklist after a separately approved release selects the next
+candidate.
 
 ## Package
 
@@ -16,16 +19,16 @@ Do not run the real publish command until the maintainer explicitly approves.
 
 ## Gate Results
 
-| Check              | Status                                                                           |
-| ------------------ | -------------------------------------------------------------------------------- |
-| npm package status | `arcready@0.2.0` is already published; `0.3.0` is the next npm release candidate |
-| npm login          | `npm whoami` returned `ENEEDAUTH`; npm login is required before real publish     |
-| Build              | Passed                                                                           |
-| Test               | Passed                                                                           |
-| Lint               | Passed                                                                           |
-| Fixture validation | Passed                                                                           |
-| Package smoke test | Passed                                                                           |
-| Publish dry-run    | Passed                                                                           |
+| Check              | Status                                                                       |
+| ------------------ | ---------------------------------------------------------------------------- |
+| npm package status | `arcready@0.3.0` was published on 2026-06-13                                 |
+| npm login          | `npm whoami` returned `ENEEDAUTH`; npm login is required before real publish |
+| Build              | Passed                                                                       |
+| Test               | Passed                                                                       |
+| Lint               | Passed                                                                       |
+| Fixture validation | Passed                                                                       |
+| Package smoke test | Passed                                                                       |
+| Publish dry-run    | Passed                                                                       |
 
 ## Package Contents
 
@@ -41,7 +44,7 @@ dist/index.js
 package.json
 ```
 
-## Required Pre-Publish Commands
+## Commands Used for the Historical Candidate
 
 Run from the repository root:
 
@@ -60,16 +63,18 @@ cd packages/arcready
 npm publish --dry-run
 ```
 
-## Do Not Run Until Release Approval
+## Historical Publish Command
 
-The real publish command has not been run yet. Use it only after explicit maintainer approval:
+The following command belonged to the completed v0.3.0 release and must not be
+run again for that version:
 
 ```powershell
 cd packages/arcready
 npm publish --access public
 ```
 
-Before running the real publish, verify npm login:
+For any future release, first select a new version and create a new checklist.
+Before an explicitly approved publish, verify npm login:
 
 ```powershell
 npm whoami
