@@ -136,7 +136,7 @@ The private canonical runtime remains exactly four rules.
 
 ### `wallet/NO_ETH_GAS_LABEL`
 
-- Decision: Advice-only migration implementing under C12.
+- Decision: Complete as Advice-only migration under C12; published in PR #73.
 - Priority: P2.
 - Impact: Recommendation.
 - The retained low-confidence heuristic is deprecated and default-excluded;
@@ -290,6 +290,7 @@ C09-D  Complete: bounded Build disposition selected
 C09A   Complete: bounded analyzer and compatibility-shell migration
 C10    Complete: Research / Defer; no versioned App Kit rule authorized
 C11    Complete: exact Arc chain hexadecimal identity correction
+C12    Complete: default-excluded deprecated gas-label advice
 ```
 
 C09-R1, C09-R2, C09-R3-A, C09-R3-B, C09-D, C09A, and C10 are complete. C10
@@ -299,8 +300,8 @@ with no analyzer expansion and was published in PR #72. No next analyzer
 milestone is approved; adoption evidence, real repository scans, and user
 reports should set the next priority. The measured
 `wallet/NO_ETH_GAS_LABEL` false positives triggered the separately reviewed C12
-R3 implementation candidate for its existing Advice-only decision, not another
-unreviewed regex patch.
+R3 implementation of its existing Advice-only decision, published in PR #73,
+not another unreviewed regex patch.
 The compatibility inventory is `19 known / 15 default / 7 known wallet / 6
 default wallet / 4 canonical`. C09A grammar, artifact, or shell expansion requires real user or
 repository evidence and a separately reviewed milestone.
