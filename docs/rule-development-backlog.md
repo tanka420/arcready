@@ -136,10 +136,13 @@ The private canonical runtime remains exactly four rules.
 
 ### `wallet/NO_ETH_GAS_LABEL`
 
-- Decision: Advice-only.
+- Decision: Advice-only migration implementing under C12.
 - Priority: P2.
-- Impact: Required change.
-- Revisit when rendered UI labels can be separated from internal terminology.
+- Impact: Recommendation.
+- The retained low-confidence heuristic is deprecated and default-excluded;
+  explicit configuration remains available for human review.
+- Revisit only when rendered UI labels can be separated from internal
+  terminology within a bounded, evidence-backed detector contract.
 
 ### `wallet/ONE_CONFIRMATION_FINAL`
 
@@ -295,11 +298,11 @@ version-operation rule. C11 corrected the exact Arc hexadecimal identity defect
 with no analyzer expansion and was published in PR #72. No next analyzer
 milestone is approved; adoption evidence, real repository scans, and user
 reports should set the next priority. The measured
-`wallet/NO_ETH_GAS_LABEL` false positives trigger a separately reviewed R3
-implementation of its existing Advice-only decision, not another unreviewed
-regex patch.
-The compatibility inventory remains `19 known / 16 default / 7 wallet / 4
-canonical`. C09A grammar, artifact, or shell expansion requires real user or
+`wallet/NO_ETH_GAS_LABEL` false positives triggered the separately reviewed C12
+R3 implementation candidate for its existing Advice-only decision, not another
+unreviewed regex patch.
+The compatibility inventory is `19 known / 15 default / 7 known wallet / 6
+default wallet / 4 canonical`. C09A grammar, artifact, or shell expansion requires real user or
 repository evidence and a separately reviewed milestone.
 
 ## Expansion triggers

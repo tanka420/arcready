@@ -14,7 +14,7 @@ import {
   attestation404NotFatalRule,
   bridgeRules
 } from "../rules/bridge/index.js";
-import { walletRules } from "../rules/wallet/index.js";
+import { noEthGasLabelRule, walletRules } from "../rules/wallet/index.js";
 
 export type PresetRuleMap = Record<ArcReadyPreset, Rule[]>;
 
@@ -42,9 +42,19 @@ const bridgeDefaultPresetRules: Rule[] = bridgeRules.filter(
   (rule) => rule.id !== attestation404NotFatalRule.id
 );
 
+// `walletRules` remains the all-known public inventory. Default wallet scans
+// exclude the low-confidence fee-label heuristic while explicit rule-level
+// configuration retains a compatibility path.
+const walletDefaultPresetRules: Rule[] = walletRules.filter(
+  (rule) => rule.id !== noEthGasLabelRule.id
+);
+
 // Built-in default-excluded rules may be selected only through the top-level
 // default helper. Custom PresetRegistry instances never receive this registry.
-const defaultExcludedRules: Rule[] = [attestation404NotFatalRule];
+const defaultExcludedRules: Rule[] = [
+  attestation404NotFatalRule,
+  noEthGasLabelRule
+];
 
 export function createPresetRegistry(
   initialRules: Partial<Record<ArcReadyPreset, Rule[]>> = {}
@@ -74,7 +84,7 @@ export function createPresetRegistry(
 }
 
 export const defaultPresetRegistry = createPresetRegistry({
-  wallet: walletRules,
+  wallet: walletDefaultPresetRules,
   "app-kit": appKitDefaultPresetRules,
   bridge: bridgeDefaultPresetRules
 });

@@ -44,8 +44,8 @@ describe("internal rule taxonomy catalog", () => {
 
     expect(totals).toEqual({
       "stable-compatibility": 0,
-      "experimental-compatibility": 12,
-      advice: 5,
+      "experimental-compatibility": 11,
+      advice: 6,
       "needs-research": 0,
       "remove-or-replace": 2
     });
@@ -203,6 +203,17 @@ describe("internal rule taxonomy catalog", () => {
     expect(attestation.rulePacks).toEqual(
       expect.arrayContaining(["bridge-cctp", "indexer-infrastructure"])
     );
+  });
+  it("locks the reviewed deprecated-advice gas-label classification", () => {
+    expect(findMetadata("wallet/NO_ETH_GAS_LABEL")).toMatchObject({
+      taxonomy: "advice",
+      impact: "recommendation",
+      defaultConfidence: "low",
+      maturity: "deprecated",
+      recommendedDefaultEnabled: false,
+      recommendedCiFailureEligible: false,
+      deprecated: true
+    });
   });
   it("locks the bounded C09A PREVRANDAO metadata", () => {
     for (const id of [

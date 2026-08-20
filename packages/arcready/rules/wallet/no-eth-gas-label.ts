@@ -10,14 +10,15 @@ import {
 } from "./helpers.js";
 
 const SUGGESTED_FIX =
-  "Update user-facing gas and network fee labels to show USDC, and verify no Arc fee UI still references ETH or gwei.";
+  "If this text is rendered to Arc wallet users, display the fee in USDC or USD. Gwei remains valid for internal gas-price units and calculations; correct contrasts, documentation, and non-Arc content may not require changes.";
 
 export const noEthGasLabelRule: Rule = {
   id: "wallet/NO_ETH_GAS_LABEL",
   name: "No ETH gas label",
-  description: "Detects ETH or gwei labels in Arc gas and fee UI.",
+  description:
+    "Provides low-confidence advice when a file with Arc evidence also contains a gas or fee line mentioning ETH or Gwei.",
   preset: "wallet",
-  defaultSeverity: "critical",
+  defaultSeverity: "info",
   docs: [WALLET_DOCS.usdcGas],
   async run(context) {
     const findings = [];
@@ -41,7 +42,7 @@ export const noEthGasLabelRule: Rule = {
           createWalletFinding(
             noEthGasLabelRule,
             filePath,
-            "Arc wallet fee UI appears to label gas or network fees as ETH/gwei.",
+            "Gas or fee text mentioning ETH/Gwei is co-located in a file with Arc evidence; review whether the text is a user-facing Arc fee label.",
             SUGGESTED_FIX,
             WALLET_DOCS.usdcGas
           )

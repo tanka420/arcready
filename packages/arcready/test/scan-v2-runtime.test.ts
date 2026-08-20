@@ -1145,7 +1145,7 @@ describe("runtime boundaries and diagnostic ordering", () => {
       .filter(({ ruleId }) => ruleId.includes("PREVRANDAO"))
       .map(({ ruleId }) => ruleId);
 
-    expect(broken.report.findings).toHaveLength(14);
+    expect(broken.report.findings).toHaveLength(13);
     expect(prevrandaoRuleIds).toEqual([
       "wallet/PREVRANDAO_NOT_SUPPORTED",
       "bridge/NO_PREVRANDAO_RELAY_SELECTION"

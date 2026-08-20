@@ -532,11 +532,11 @@ export const ruleTaxonomyCatalog = [
     id: "wallet/NO_ETH_GAS_LABEL",
     category: "wallet",
     rulePacks: ["wallet"],
-    taxonomy: "experimental-compatibility",
-    impact: "required-change",
+    taxonomy: "advice",
+    impact: "recommendation",
     defaultConfidence: "low",
-    maturity: "prototype",
-    recommendedDefaultEnabled: true,
+    maturity: "deprecated",
+    recommendedDefaultEnabled: false,
     recommendedCiFailureEligible: false,
     appliesTo: ["wallet-ui"],
     documentation: [
@@ -553,12 +553,12 @@ export const ruleTaxonomyCatalog = [
       }
     ],
     rationale:
-      "ETH or Gwei user-facing labels misrepresent Arc fees, but those terms remain valid in internal EVM units and non-Arc contexts.",
+      "Rendered Arc wallet fee labels should use USDC or USD, but the retained file-level heuristic proves only co-location with Arc evidence and cannot distinguish UI copy from valid internal units, documentation, contrasts, or non-Arc content.",
     detectorLimitations: [
       "Line-level matching cannot distinguish rendered UI from internal calculations.",
       "Multichain labels and documentation can be flagged."
     ],
-    deprecated: false
+    deprecated: true
   },
   {
     id: "wallet/ONE_CONFIRMATION_FINAL",
