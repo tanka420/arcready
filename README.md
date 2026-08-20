@@ -13,6 +13,14 @@ ArcReady helps developers catch common Arc integration mistakes before release. 
 
 > ArcReady is an independent open-source project. It is not an official Circle or Arc product.
 
+> Release boundary: the install and Action examples below deliberately run the
+> published `arcready@0.3.0` release. The main branch contains later, unreleased
+> rule and runtime changes. In particular, v0.3.0 still runs
+> `wallet/NO_ETH_GAS_LABEL` as a default critical rule, while current main
+> exposes it only as default-excluded, deprecated `info` advice. Use the
+> versioned release notes for v0.3.0 behavior and the current rule catalog for
+> main-branch behavior.
+
 ## What It Is
 
 ArcReady scans source files for common Arc-specific integration assumptions across three presets:
@@ -113,6 +121,9 @@ jobs:
 ```
 
 The action runs the published npm CLI and defaults to `arcready@0.3.0`. You can pin or override the CLI package version:
+
+The `v0.3.0` Action tag therefore runs v0.3.0 package behavior, not unreleased
+main-branch behavior.
 
 ```yaml
 with:

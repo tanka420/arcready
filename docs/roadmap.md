@@ -285,6 +285,15 @@ six. Focused tests, the full test suite, fixture validation, built-CLI probes,
 the pinned ArcLens adoption probe, final independent review, and the full
 repository gate pass. The PR owns the final exact-head CI and merge record.
 
+### A02 — Complete: post-C12 adoption audit, No Build
+
+The [A02 adoption record](research/A02.md) reran the merged C12 package against
+the eight pinned clean repositories and manually reviewed representative
+high-impact pattern families. It found no new default noise or proven supported
+violation, while documenting HTML/path, JSX/TSX, cross-file, and runtime coverage
+limits. Those limits do not yet provide a narrow detector contract or repeated
+real violation, so no C13 analyzer milestone is authorized.
+
 ## Adoption and developer-experience track
 
 With C07C integration complete, prioritize product usefulness before expanding
@@ -305,6 +314,20 @@ The v0.3 package and GitHub Action are already released. Distribution work may
 proceed independently of engineering milestones after verifying package
 contents, CLI installation, Action references, release notes, and CI on the
 selected release commit.
+
+The [A03 distribution audit](research/A03.md) confirms that npm `latest` and the
+`v0.3.0` Action still run v0.3.0 while main documents later behavior, including
+the C12 default exclusion. Current documentation must disclose that boundary.
+A separately authorized R3 release milestone must select and verify the next
+version before changing the package manifest, Action default, tag, or release;
+A03 performs none of those distribution mutations.
+
+The [R01 release plan](exec-plans/active/R01.md) selects a staged v0.4.0
+candidate: npm package first, then the Action default, exact-SHA external proof,
+immutable tag, tagged external smoke, and finally the GitHub Release. Its
+architecture review passed with `0 blocker / 0 major / 0 minor`; E1 has not
+started, and explicit approval remains required at every merge, publish, tag,
+and GitHub Release checkpoint.
 
 Core milestones must not silently change an already selected release commit.
 

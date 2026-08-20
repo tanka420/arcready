@@ -1,16 +1,19 @@
 # npm Publishing
 
-ArcReady is being prepared for npm publishing as an installable CLI package.
+ArcReady is published on npm as an installable CLI package. The current public
+version is `arcready@0.3.0`. The architecture-approved R01 plan selects `0.4.0`,
+but E1 implementation has not started and no publishable candidate exists yet.
 
 ## Current Package
 
-| Field        | Value      |
-| ------------ | ---------- |
-| Package name | `arcready` |
-| Version      | `0.3.0`    |
-| License      | MIT        |
-| Node.js      | `>=22`     |
-| CLI bin      | `arcready` |
+| Field                 | Value                         |
+| --------------------- | ----------------------------- |
+| Package name          | `arcready`                    |
+| Published version     | `0.3.0`                       |
+| Selected next version | `0.4.0` (R01; E1 not started) |
+| License               | MIT                           |
+| Node.js               | `>=22`                        |
+| CLI bin               | `arcready`                    |
 
 The npm package should include only:
 
@@ -45,7 +48,13 @@ cd packages/arcready
 npm publish --dry-run
 ```
 
-Inspect the output before release. The dry run should show `arcready@0.3.0` and only the expected package files.
+Inspect the output before release. The dry run must show the separately approved,
+unpublished candidate version and only the expected package files. Do not try to
+publish `arcready@0.3.0` again.
+
+During E1, after the exact operational candidate and selected release SHA exist,
+replace the pre-implementation language in this guide before any publish command
+is authorized.
 
 ## Before Real Publish
 
