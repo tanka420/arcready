@@ -16,5 +16,6 @@ jobs:
 
       - uses: tanka420/arcready@v0.3.0
         with:
+          arcready-version: "0.4.0"
           fail-on: critical
           upload-artifact: true
