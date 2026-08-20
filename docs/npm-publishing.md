@@ -1,19 +1,21 @@
 # npm Publishing
 
 ArcReady is published on npm as an installable CLI package. The current public
-version is `arcready@0.3.0`. The architecture-approved R01 plan selects `0.4.0`,
-but E1 implementation has not started and no publishable candidate exists yet.
+version is `arcready@0.3.0`. The architecture-approved R01 E1 candidate selects
+`0.4.0` from frozen base `4b7ee02901f5313b8bd33e1e22de69b1b4e2d620`.
+The candidate is not published, and its exact operational commit remains
+pending final validation and review.
 
 ## Current Package
 
-| Field                 | Value                         |
-| --------------------- | ----------------------------- |
-| Package name          | `arcready`                    |
-| Published version     | `0.3.0`                       |
-| Selected next version | `0.4.0` (R01; E1 not started) |
-| License               | MIT                           |
-| Node.js               | `>=22`                        |
-| CLI bin               | `arcready`                    |
+| Field                 | Value                      |
+| --------------------- | -------------------------- |
+| Package name          | `arcready`                 |
+| Published version     | `0.3.0`                    |
+| Selected next version | `0.4.0` (R01 E1 candidate) |
+| License               | MIT                        |
+| Node.js               | `>=22`                     |
+| CLI bin               | `arcready`                 |
 
 The npm package should include only:
 
@@ -52,9 +54,9 @@ Inspect the output before release. The dry run must show the separately approved
 unpublished candidate version and only the expected package files. Do not try to
 publish `arcready@0.3.0` again.
 
-During E1, after the exact operational candidate and selected release SHA exist,
-replace the pre-implementation language in this guide before any publish command
-is authorized.
+Use the versioned
+[v0.4.0 npm checklist](releases/v0.4.0-npm-checklist.md) for E1 evidence. Record
+the exact merged package commit there before any publish command is authorized.
 
 ## Before Real Publish
 

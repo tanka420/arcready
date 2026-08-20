@@ -472,7 +472,7 @@ describe("legacy CLI regression", () => {
     const { report } = await runScan(legacyJson.cwd);
 
     expect(terminal.code).toBe(0);
-    expect(terminal.stdout).toContain("ArcReady v0.3.0");
+    expect(terminal.stdout).toContain(`ArcReady v${publicApi.PACKAGE_VERSION}`);
     expect(terminal.stdout).not.toContain('"contractVersion"');
     expect(terminal.stdout).not.toContain('"selectedOccurrences"');
     expect(legacyJson.stdout).toBe(jsonReporter.render(report));
