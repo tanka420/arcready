@@ -4,6 +4,27 @@ ArcReady is an Arc-specific CI quality gate and integration validator for wallet
 
 > ArcReady is an independent open-source project. It is not an official Circle or Arc product.
 
+## v0.4.0 package boundary
+
+The `arcready@0.4.0` npm package publishes the precision and compatibility work
+already reviewed on the selected release base. It contains 19 known rules, 15
+rules in the default scan, six default wallet rules, and four rules in the
+opt-in canonical JSON runtime. Four deprecated rules remain public and
+default-excluded: the attestation and gas-label advice rules support explicit
+non-off configuration, while the two legacy App Kit rule objects remain
+available only for direct API compatibility.
+
+This package also includes the additive `arcUsdcAmountConversionRule` library
+export, the experimental opt-in `scan --json-v2` command, and the pinned
+`@solidity-parser/parser@0.20.2` and `typescript@5.9.3` runtime dependencies.
+Legacy reports, configuration, scoring, and normal CLI exit behavior remain
+available. ArcReady still performs local static analysis only; it does not make
+live RPC, API, simulation, deployment, or compatibility-certification claims.
+
+The coordinated GitHub Action `v0.4.0` is a later release checkpoint. Until
+that checkpoint is completed, `tanka420/arcready@v0.3.0` continues to select
+the published v0.3 Action and CLI by default.
+
 ## Install
 
 Run without installing:
