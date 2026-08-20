@@ -58,6 +58,28 @@ describe("createReviewBundle", () => {
     expect(firstManifest).not.toContain("generatedAt");
   });
 
+  it("preserves trailing blank context in an applicable patch", () => {
+    const root = createRepository();
+    writeFileSync(join(root, "file.txt"), "base\n\n");
+    git(root, ["add", "file.txt"]);
+    git(root, ["commit", "-qm", "blank context base"]);
+    git(root, ["switch", "-qc", "feature"]);
+    writeFileSync(join(root, "file.txt"), "feature\n\n");
+    git(root, ["add", "file.txt"]);
+    git(root, ["commit", "-qm", "feature"]);
+
+    const result = createReviewBundle(root, {
+      milestone: "C09A-E5",
+      candidate: "blank-context",
+      baseRef: "main"
+    });
+    const patchPath = join(result.bundleRoot, "changes.patch");
+
+    expect(() =>
+      git(root, ["apply", "--check", "--reverse", patchPath])
+    ).not.toThrow();
+  });
+
   it("rejects committed and staged changes in the same candidate", () => {
     const root = createRepository();
     git(root, ["switch", "-qc", "feature"]);

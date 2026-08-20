@@ -1,7 +1,7 @@
 # ArcReady Roadmap
 
-**Status:** Active roadmap after C09-D Build selection
-**Last reviewed:** 2026-08-06
+**Status:** Active roadmap after C09A completion
+**Last reviewed:** 2026-08-17
 
 ArcReady is an Arc-specific, repository-level static compatibility analyzer for
 projects being ported from Ethereum or other EVM environments to Arc.
@@ -221,21 +221,23 @@ Inventory is now 19 known / 16 default / 7 wallet / 4 canonical. The R3
 prototype remains research-only. Revisit Retire after one compatibility period
 or earlier if usage evidence shows no material value.
 
-### C09 — Build selected: bounded PREVRANDAO dependency analyzer
+### C09 — Complete: bounded PREVRANDAO dependency analyzer
 
 C09-R1 through R3-B are complete. The reviewed research established bounded
 Solidity source/value feasibility and one exact Foundry contract-to-Arc
 association family.
 
-C09-D selects Build: one private analyzer with two temporary public compatibility
-shells. Both old keyword detectors must be removed. A critical finding requires
-both a supported same-function behavior dependency and exact Foundry Arc
-deployment ownership for the same concrete contract.
+C09-D selected Build and C09A completed it through PRs #63, #65, #68, and #67.
+The two public rule IDs now act as thin compatibility shells over one private
+analyzer. A finding requires both a supported same-function behavior dependency
+and exact retained Foundry Arc association for the same concrete contract.
 
-C09A is the next implementation milestone. It must retain the two public IDs,
-prevent duplicate findings, add no `solidity` preset or category, preserve
-inventory `19 / 16 / 7 / 4`, and keep the rules non-canonical. Production remains
-blocked until the decision and implementation plan are approved and merged.
+The migration removed the old keyword and blanket `mixHash` detectors, prevents
+cross-shell duplication, adds no `solidity` preset or category, and keeps the
+rules non-canonical. Unsupported grammar, imports, ambiguous evidence, other
+artifact families, and live deployment/runtime verification remain outside the
+supported boundary. Later expansion or shell consolidation requires real
+adoption evidence and a separately reviewed decision.
 
 ### C10 — Research/build: versioned App Kit compatibility
 
@@ -301,13 +303,11 @@ The following remain outside the near-term roadmap:
 
 ## Current recommended next step
 
-1. Review and implement C09A as a bounded analyzer and compatibility-shell
-   migration.
-2. Continue C10 after C09A closeout unless new user evidence changes priority.
-3. Keep native write analysis blocked pending first-party premise clarification.
-4. Continue gathering real unsupported-pattern and false-positive/negative
+1. Continue C10 unless new user evidence changes priority.
+2. Keep native write analysis blocked pending first-party premise clarification.
+3. Continue gathering real unsupported-pattern and false-positive/negative
    evidence.
-5. Reopen deferred C06B2, C07C, or C08 families only from concrete usage
+4. Reopen deferred C06B2, C07C, C08, or C09A families only from concrete usage
    evidence or a separately approved milestone.
 
 The private canonical runtime remained exactly four rules throughout C07C.
