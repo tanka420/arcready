@@ -1,6 +1,6 @@
 # ArcReady Roadmap
 
-**Status:** Active roadmap after C09A completion
+**Status:** Active roadmap after C12 completion
 **Last reviewed:** 2026-08-20
 
 ArcReady is an Arc-specific, repository-level static compatibility analyzer for
@@ -72,7 +72,8 @@ The private canonical runtime remains exactly four rules in stable order:
 3. `bridge/RELAYER_USES_USDC_FOR_GAS`
 4. `wallet/ARC_CHAIN_METADATA`
 
-Inventory is 19 known / 16 default / 7 wallet / 4 canonical.
+Inventory is 19 known / 15 default / 7 known wallet / 6 default wallet / 4
+canonical.
 
 `json-v2` remains observational. It does not change legacy scoring, reporters,
 presets, `failOn`, or process exit behavior.
@@ -269,6 +270,21 @@ positives. That evidence triggers a separate R3 default/severity/public-contract
 migration for the backlog's existing Advice-only decision; C11 deliberately
 does not patch the rule.
 
+### C12 — Complete: NO_ETH_GAS_LABEL Advice-only migration
+
+C12 removes the low-confidence file-level heuristic from default wallet scans,
+changes its direct severity and policy to deprecated `info` advice, and keeps
+the public rule available through explicit non-off configuration. The detector
+itself is unchanged: opted-in findings state only text co-location and require
+human review rather than claiming rendered Arc UI ownership.
+
+The implementation was committed as `74e4e4a` and published in PR #73. It
+preserves 19 known rules, seven known wallet rules, and four canonical rules
+while reducing default execution to 15 rules and the default wallet subset to
+six. Focused tests, the full test suite, fixture validation, built-CLI probes,
+the pinned ArcLens adoption probe, final independent review, and the full
+repository gate pass. The PR owns the final exact-head CI and merge record.
+
 ## Adoption and developer-experience track
 
 With C07C integration complete, prioritize product usefulness before expanding
@@ -335,7 +351,7 @@ The following remain outside the near-term roadmap:
    evidence.
 4. Reopen deferred C06B2, C07C, C08, C09A, or C10 families only from concrete
    usage evidence or a separately approved milestone.
-5. Implement the existing `wallet/NO_ETH_GAS_LABEL` Advice-only decision through
-   a separate R3 product and architecture review before further regex changes.
+5. Gather adoption and user evidence before reopening the deprecated
+   `wallet/NO_ETH_GAS_LABEL` heuristic or attempting rendered-UI analysis.
 
 The private canonical runtime remained exactly four rules throughout C07C.

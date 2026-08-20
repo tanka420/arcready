@@ -722,7 +722,7 @@ signer.sendTransaction({ type: 3, blobs: [blob] });`
 
     it("F07 remains in wallet preset and absent from bridge-only preset", () => {
       const walletRules = getRulesForPresets(["wallet"]);
-      expect(walletRules).toHaveLength(7);
+      expect(walletRules).toHaveLength(6);
       expect(walletRules.map(({ id }) => id)).toContain(
         "wallet/NO_BLOB_TX_ON_ARC"
       );
@@ -730,7 +730,7 @@ signer.sendTransaction({ type: 3, blobs: [blob] });`
         "wallet/NO_BLOB_TX_ON_ARC"
       );
       expect(getRulesForPresets(["wallet", "bridge", "app-kit"])).toHaveLength(
-        16
+        15
       );
     });
 

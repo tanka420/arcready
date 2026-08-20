@@ -69,7 +69,7 @@ underlying requirement does not overstate confidence in a heuristic detector.
 | `wallet/ARC_CHAIN_METADATA`             | Experimental compatibility | Blocker                         | Yes                 | No                     | Core compatibility, wallet          |
 | `wallet/ARC_USDC_AMOUNT_CONVERSION`     | Experimental compatibility | Blocker                         | Yes                 | No                     | Core compatibility, wallet          |
 | `wallet/NO_BLOB_TX_ON_ARC`              | Experimental compatibility | Blocker                         | Yes                 | No                     | Core compatibility                  |
-| `wallet/NO_ETH_GAS_LABEL`               | Experimental compatibility | Required change                 | Yes                 | No                     | Wallet                              |
+| `wallet/NO_ETH_GAS_LABEL`               | Advice                     | Recommendation                  | No                  | No                     | Wallet                              |
 | `wallet/ONE_CONFIRMATION_FINAL`         | Advice                     | Recommendation                  | No                  | No                     | Wallet, indexer/infrastructure      |
 | `wallet/PREVRANDAO_NOT_SUPPORTED`       | Experimental compatibility | Required change                 | Yes                 | No                     | Solidity, core compatibility        |
 | `wallet/WALLET_NATIVE_USDC_DISPLAY`     | Experimental compatibility | Required change                 | Yes                 | No                     | Core compatibility, wallet          |
@@ -77,8 +77,8 @@ underlying requirement does not overstate confidence in a heuristic detector.
 Totals:
 
 - Stable compatibility: 0
-- Experimental compatibility: 13
-- Advice: 4
+- Experimental compatibility: 11
+- Advice: 6
 - Needs research: 0
 - Remove or replace: 2
 
@@ -113,6 +113,12 @@ transaction success.
 `UB_DELEGATE_REQUIRED` is conditional. Delegation is required when a delegate
 spends for an owner; owner-controlled spending does not establish the same
 requirement.
+
+`wallet/NO_ETH_GAS_LABEL` is deprecated Advice. Official guidance requires
+rendered Arc wallet fees to use USDC or USD, while Gwei remains valid for gas
+price units and calculations. The retained file-level heuristic proves only
+co-location with Arc evidence, so it is default-excluded and available only by
+explicit configuration for human review.
 
 ## Documentation provenance
 

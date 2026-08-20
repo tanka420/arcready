@@ -824,7 +824,7 @@ describe("wallet rules", () => {
     expect(first).toEqual(second);
   });
 
-  it("NO_ETH_GAS_LABEL flags ETH or gwei fee labels in Arc UI", async () => {
+  it("NO_ETH_GAS_LABEL advises on co-located ETH or gwei fee text", async () => {
     const findings = await runWalletRule(
       noEthGasLabelRule,
       "const chainId = 5042002;\nexport const label = 'Network fee: 0.01 ETH';"
@@ -832,10 +832,12 @@ describe("wallet rules", () => {
 
     expect(findings[0]).toMatchObject({
       ruleId: "wallet/NO_ETH_GAS_LABEL",
-      severity: "critical",
+      severity: "info",
       docs: "arc-usdc-gas",
-      message: expect.stringContaining("ETH/gwei"),
-      suggestedFix: expect.stringContaining("user-facing")
+      message: expect.stringContaining(
+        "co-located in a file with Arc evidence"
+      ),
+      suggestedFix: expect.stringContaining("rendered to Arc wallet users")
     });
   });
 

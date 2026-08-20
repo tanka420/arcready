@@ -13,7 +13,7 @@ ArcReady does not perform live Arc RPC checks, Circle API checks, on-chain trans
 | Wallet  | `wallet/ARC_CHAIN_METADATA`             | Critical | Checks bounded Arc-owned chain objects for literal chain ID errors and explicit Ethereum RPC/explorer endpoints.                    |
 | Wallet  | `wallet/WALLET_NATIVE_USDC_DISPLAY`     | Critical | Checks bounded Arc-owned chain objects for explicit ETH/Ethereum names or non-USDC native-currency symbols.                         |
 | Wallet  | `wallet/ARC_USDC_AMOUNT_CONVERSION`     | Critical | Checks proven Arc native and exact Arc USDC ERC-20 balance reads for direct 18-versus-6 decimal interpretation mismatches.          |
-| Wallet  | `wallet/NO_ETH_GAS_LABEL`               | Critical | Checks Arc wallet fee UI text for ETH or gwei gas labels.                                                                           |
+| Wallet  | `wallet/NO_ETH_GAS_LABEL`               | Info     | Deprecated, default-excluded low-confidence advice for ETH/Gwei fee text co-located with Arc evidence.                              |
 | Wallet  | `wallet/ONE_CONFIRMATION_FINAL`         | Critical | Checks Arc wallet transaction flows for Ethereum-style multi-confirmation waits.                                                    |
 | Wallet  | `wallet/PREVRANDAO_NOT_SUPPORTED`       | Critical | Checks bounded PREVRANDAO behavior dependencies in exact Foundry-associated Arc contracts owned by the wallet compatibility shell.  |
 | Wallet  | `wallet/NO_BLOB_TX_ON_ARC`              | Critical | Checks exact supported ethers and viem EIP-4844 transaction submissions in proven Arc flows.                                        |
@@ -83,9 +83,10 @@ ArcReady does not perform live Arc RPC checks, Circle API checks, on-chain trans
 ### NO_ETH_GAS_LABEL
 
 - Preset: Wallet
-- Severity: Critical
-- What it detects: Arc wallet fee UI text that appears to label gas or network fees as `ETH` or `gwei`.
-- Why it matters: User-facing fee labels should match Arc's USDC fee assumptions and avoid Ethereum-default language.
+- Severity: Info when invoked directly or explicitly selected; excluded from the default Wallet preset.
+- Runtime status: Deprecated low-confidence advice retained for explicit opt-in compatibility.
+- What it detects: A file with Arc evidence that also contains a gas or fee line mentioning `ETH` or `gwei`.
+- Why it matters: If that text is rendered in an Arc wallet UI, the label should express the fee in USDC or USD. Co-location alone does not prove that the matched line is Arc-owned or user-facing.
 - Example bad pattern:
 
   ```ts
@@ -93,8 +94,8 @@ ArcReady does not perform live Arc RPC checks, Circle API checks, on-chain trans
   const feeLabel = "Network fee: 0.01 ETH";
   ```
 
-- Suggested fix: Update user-facing gas and network fee labels to show USDC, and verify no Arc fee UI still references ETH or gwei.
-- Static-analysis limitation: ArcReady checks text patterns and skips obvious comments/guidance; it does not render or inspect a live UI.
+- Suggested fix: If the text is rendered to Arc wallet users, display the fee in USDC or USD. Gwei remains valid for internal gas-price units and calculations; correct contrasts, documentation, and non-Arc content may not require changes.
+- Static-analysis limitation: The retained detector is a file-level text heuristic. It skips some obvious comments and guidance but cannot prove rendered UI, Arc ownership of the matched line, value flow, or runtime behavior. Enable it explicitly only for human review; no supported rendered-UI analyzer exists.
 
 ### ONE_CONFIRMATION_FINAL
 
