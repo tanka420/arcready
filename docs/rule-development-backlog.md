@@ -1,7 +1,7 @@
 # ArcReady Rule Development Backlog
 
 **Status:** Active decision record
-**Last reviewed:** 2026-08-17
+**Last reviewed:** 2026-08-20
 **Applies to:** Active and proposed ArcReady static-analysis rules
 
 ## Purpose
@@ -286,13 +286,13 @@ C08A   Complete: default-excluded deprecated attestation advice
 C09-D  Complete: bounded Build disposition selected
 C09A   Complete: bounded analyzer and compatibility-shell migration
 C10    Complete: Research / Defer; no versioned App Kit rule authorized
-C11    Ready: exact Arc chain hexadecimal identity correction
+C11    Complete: exact Arc chain hexadecimal identity correction
 ```
 
 C09-R1, C09-R2, C09-R3-A, C09-R3-B, C09-D, C09A, and C10 are complete. C10
 selected Research / Defer because product evidence did not justify a
-version-operation rule. C11 is ready for publication after correcting the exact
-Arc hexadecimal identity defect with no analyzer expansion. No next analyzer
+version-operation rule. C11 corrected the exact Arc hexadecimal identity defect
+with no analyzer expansion and was published in PR #72. No next analyzer
 milestone is approved; adoption evidence, real repository scans, and user
 reports should set the next priority. The measured
 `wallet/NO_ETH_GAS_LABEL` false positives trigger a separately reviewed R3

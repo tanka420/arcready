@@ -1,7 +1,7 @@
 # ArcReady Roadmap
 
 **Status:** Active roadmap after C09A completion
-**Last reviewed:** 2026-08-17
+**Last reviewed:** 2026-08-20
 
 ArcReady is an Arc-specific, repository-level static compatibility analyzer for
 projects being ported from Ethereum or other EVM environments to Arc.
@@ -249,7 +249,7 @@ not implement a version-operation rule or keep hardening the deprecated generic
 capability guard without a concrete repository/user case and a separately
 reviewed ownership contract.
 
-### C11 — Ready for publication: Arc chain hexadecimal identity correction
+### C11 — Complete: Arc chain hexadecimal identity correction
 
 The real-repository adoption audit exposed one exact false negative and bad
 remediation in `wallet/ARC_CHAIN_METADATA`: `0x4CF4B2` is decimal `5043378`,
@@ -257,11 +257,12 @@ not Arc Testnet chain ID `5042002`. The bounded C11 correction removes that
 alias, uses the live hexadecimal value `0x4CEF52`, and preserves fail-closed
 shared-scanner behavior across the metadata and native-display consumers.
 
-The candidate passed focused tests, controlled CLI probes, independent review
-with `0 blocker / 0 major / 0 minor`, and the full repository gate. It changes
-no rule ID, severity, preset, inventory, canonical boundary, scoring, schema,
-or reporter contract. Commit, push, and PR publication remain subject to
-explicit authorization.
+The implementation was committed as `69d3fda782a249347e79fccfab72543bacba0170`
+and published in PR #72 after focused tests, controlled CLI probes, independent
+review with `0 blocker / 0 major / 0 minor`, and the full repository gate. It
+changes no rule ID, severity, preset, inventory, canonical boundary, scoring,
+schema, or reporter contract. The PR owns the final exact-head CI and merge
+record.
 
 The same adoption audit found concrete `wallet/NO_ETH_GAS_LABEL` false
 positives. That evidence triggers a separate R3 default/severity/public-contract
